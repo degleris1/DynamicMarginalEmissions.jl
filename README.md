@@ -4,10 +4,13 @@
 
 ## Data
 
+To generate datasets, run `python make_files.py` in `src/`.
+
 `branch_data.csv`
 - source_node
 - sink_node
-- capacity
+- max_exchanges
+- min_exchanges
 
 `node_data.csv`
 - id
@@ -22,7 +25,7 @@
 `resource_data.csv`
 - id
 - name
-- carbon_cost
+- emission_factor
 
 `case_X.csv`
 - node_id
