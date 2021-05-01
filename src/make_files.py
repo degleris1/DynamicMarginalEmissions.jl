@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import os
+from sklearn.linear_model import LinearRegression
 
 DATA_PATH = os.getenv('CARBON_NETWORKS_DATA')
 
@@ -43,6 +44,7 @@ def extract_BAs(df_co2):
     BAs = np.unique(BAs)
     return BAs
 
+
 def extract_resources(df_elec):
     # resources
     resources = []
@@ -83,9 +85,10 @@ def build_branch_data(df_elec):
 
 
 def build_node_data(df_co2, df_elec):
-    
+
     resources = extract_resources(df_elec)
-    columns_node = ['id', 'name', 'demand_mef', 'demand_mef_regression_score']
+    columns_node = ['id', 'name', 'demand_mef', 'demand_mef_r2', 'net_demand_mef', 'net_demand_mef_r2',
+                    'generation_mef', 'generation_mef_r2', 'net_generation_mef', 'net_generation_mef_r2']
     columns_res = [res+'_max' for res in resources]
 
     df_node = pd.DataFrame(columns=columns_node+columns_res)
@@ -97,6 +100,14 @@ def build_node_data(df_co2, df_elec):
             col = f'EBA.{ba}-ALL.NG.{res}.H'
             if col in df_elec.columns:
                 df_node.loc[ba, f'{res}_max'] = df_elec[col].max()
+
+    #compute all mefs
+    for ba in BAs:
+        for which in ['generation', 'net_generation', 'demand', 'net_demand']:
+            (ba_, ba_co2), _ = extract_cols(ba, df_elec, df_co2, which=which)
+            _, mef, r2 = compute_mef(ba_, ba_co2)
+            df_node.loc[ba, f'{which}_mef'] = mef
+            df_node.loc[ba, f'{which}_mef_r2'] = r2
 
     return df_node
 
@@ -128,6 +139,63 @@ def build_resource_data(df_elec):
                          'emission_factor'] = EMISSIONS_FACTORS['CO2'][res]
 
     return df_emissions
+
+
+def compute_mef(ba_, ba_co2):
+
+    X, y = ba_.values.reshape(-1, 1), ba_co2.values
+    reg = LinearRegression(fit_intercept=True).fit(X, y)
+
+    return reg.predict(X), reg.coef_[0], reg.score(X, y)
+
+
+def extract_cols(ba, df_elec, df_co2, which='generation'):
+
+    D_elec_col = f'EBA.{ba}-ALL.D.H'
+    D_co2_col = f'CO2_{ba}_D'
+    # TI_col = f'EBA.{ba}-ALL.TI.H'
+    NG_elec_col = f'EBA.{ba}-ALL.NG.H'
+    NG_co2_col = f'CO2_{ba}_NG'
+    WND_col = f'EBA.{ba}-ALL.NG.WND.H'
+    SUN_col = f'EBA.{ba}-ALL.NG.SUN.H'
+
+    if which == 'generation':
+        ba_ = df_elec[NG_elec_col]
+        ba_co2 = df_co2[NG_co2_col]
+        xlabel = 'Delta in Generation'
+    elif which == 'net_generation':
+        ba_ = df_elec[NG_elec_col]
+        ba_co2 = df_co2[NG_co2_col]
+        if WND_col in df_elec.columns:
+            ba_ = ba_-df_elec[WND_col]
+        if SUN_col in df_elec.columns:
+            ba_ = ba_-df_elec[SUN_col]
+        xlabel = 'Delta in Net Generation'
+    elif which == 'demand':
+        ba_ = df_elec[D_elec_col]
+        ba_co2 = df_co2[D_co2_col]
+        xlabel = 'Delta in Demand'
+    elif which == 'net_demand':
+        ba_ = df_elec[D_elec_col]
+        ba_co2 = df_co2[D_co2_col]
+        if WND_col in df_elec.columns:
+            ba_ = ba_-df_elec[WND_col]
+        if SUN_col in df_elec.columns:
+            ba_ = ba_-df_elec[SUN_col]
+        xlabel = 'Delta in Net Generation'
+
+    idx = ba_.index.intersection(ba_co2.index)
+
+    ba_ = ba_.loc[idx]
+    ba_co2 = ba_co2.loc[idx]
+    ba_ = ba_.diff()
+    ba_co2 = ba_co2.diff()
+
+    ba_ = ba_.loc[~ba_.isna()]
+    ba_co2 = ba_co2.loc[~ba_co2.isna()]
+
+    return (ba_, ba_co2), xlabel
+
 
 if __name__ == "__main__":
     main()
