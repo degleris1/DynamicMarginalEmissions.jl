@@ -26,6 +26,7 @@ To generate datasets, run `python make_files.py` in `src/`.
 - id
 - name
 - emission_factor
+- dollar_cost
 
 `case_X.csv`
 - node_id
