@@ -1,13 +1,8 @@
-using DataFrames, CSV
-using LightGraphs
-
-_DATA_PATH = ENV["CARBON_NETWORKS_DATA"]
-
-_get_data_path(f) = joinpath(_DATA_PATH, f)
+get_data_path(f) = joinpath(DATA_PATH, f)
 
 function parse_network_data()
     # Open dataframes
-    df_node, df_branch, df_resource = _open_datasets()
+    df_node, df_branch, df_resource = open_datasets()
     
     DEMAND = "DEMAND"
     num_resource = nrow(df_resource)
@@ -31,6 +26,8 @@ function parse_network_data()
         push!(f, 0.0)
 
         for r in eachrow(df_resource)
+            (r.id in ["WND", "SUN"]) && continue  # Skip wind and solar
+      
             i = length(nodes)+1
             push!(nodes, (i, iso.id, r.id))
             push!(gmax, iso[r.id * "_max"])
@@ -53,21 +50,21 @@ function parse_network_data()
     end
     
     # Construct graph
-    G = SimpleGraph()
-    add_vertices!(G, length(nodes))
-    for e in branches
-        add_edge!(G, e...)
+    G = SimpleWeightedGraph(length(nodes))
+    for ((i, j), w) in zip(branches, pmax)
+        add_edge!(G, i, j, w)
     end
     A = incidence_matrix(G, oriented=true)
+    pmax = [e.weight for e in edges(G)]
     
     return A, gmax, pmax, f, G, nodes
 end
 
-function _open_datasets()
-    df_node = DataFrame(CSV.File(_get_data_path("node_data.csv")))
-    df_branch = DataFrame(CSV.File(_get_data_path("branch_data.csv"), 
+function open_datasets()
+    df_node = DataFrame(CSV.File(get_data_path("node_data.csv")))
+    df_branch = DataFrame(CSV.File(get_data_path("branch_data.csv"), 
         drop=(i, name)->(i==1)))
-    df_resource = DataFrame(CSV.File(_get_data_path("resource_data.csv"), 
+    df_resource = DataFrame(CSV.File(get_data_path("resource_data.csv"), 
         header=[:id, :name, :emission_factor], datarow=2))
     return df_node, df_branch, df_resource
 end
