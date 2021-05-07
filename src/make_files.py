@@ -5,6 +5,15 @@ from sklearn.linear_model import LinearRegression
 
 DATA_PATH = os.getenv('CARBON_NETWORKS_DATA')
 
+CASES_DATES = [
+    '2020-01-30 12:00:00+0000',  # lowest sun/wnd generation in 2020
+    '2020-12-23 19:00:00+0000',  # highest sun/wnd generation in 2020
+    '2020-09-11 08:00:00+0000',  # lowest sun/wnd generation in summer 2020
+    '2020-09-26 21:00:00+0000',  # highest sun/wnd generation in summer 2020
+    '2020-09-20 10:00:00+0000',  # lowest total demand for 2020
+    '2020-08-24 22:00:00+0000',  # highest total demand for 2020
+]
+
 
 def main():
     # load
@@ -19,6 +28,11 @@ def main():
     df_branch.to_csv(os.path.join(DATA_PATH, 'branch_data.csv'))
     df_node.to_csv(os.path.join(DATA_PATH, 'node_data.csv'))
     df_emissions.to_csv(os.path.join(DATA_PATH, 'resource_data.csv'))
+
+    # build cases:
+    for i, date in enumerate(CASES_DATES):
+        df_case = build_case(df_elec, df_co2, date)
+        df_case.to_csv(os.path.join(DATA_PATH, f'case_{i}.csv'))
     return
 
 
@@ -101,7 +115,7 @@ def build_node_data(df_co2, df_elec):
             if col in df_elec.columns:
                 df_node.loc[ba, f'{res}_max'] = df_elec[col].max()
 
-    #compute all mefs
+    # compute all mefs
     for ba in BAs:
         for which in ['generation', 'net_generation', 'demand', 'net_demand']:
             (ba_, ba_co2), _ = extract_cols(ba, df_elec, df_co2, which=which)
@@ -195,6 +209,41 @@ def extract_cols(ba, df_elec, df_co2, which='generation'):
     ba_co2 = ba_co2.loc[~ba_co2.isna()]
 
     return (ba_, ba_co2), xlabel
+
+
+def build_case(df_elec, df_co2, date, save=False):
+
+    resources = extract_resources(df_elec)
+    BAs = extract_BAs(df_co2)
+    df_case = pd.DataFrame(
+        columns=['demand', 'net_demand'] + resources.tolist(), index=BAs)
+
+    df_crt = df_elec.loc[date].copy()
+
+    for ba in BAs:
+
+        D_elec_col = f'EBA.{ba}-ALL.D.H'
+        WND_col = f'EBA.{ba}-ALL.NG.WND.H'
+        SUN_col = f'EBA.{ba}-ALL.NG.SUN.H'
+
+        df_case.loc[ba, 'demand'] = df_crt[D_elec_col]
+        ND = df_crt[D_elec_col]
+        if WND_col in df_elec.columns:
+            ND -= df_crt[WND_col]
+        if SUN_col in df_elec.columns:
+            ND -= df_crt[SUN_col]
+
+        df_case.loc[ba, 'net_demand'] = ND
+
+        for res in resources:
+            res_col = f'EBA.{ba}-ALL.NG.{res}.H'
+            if res_col in df_elec.columns:
+                df_case.loc[ba, res] = df_crt[res_col]
+
+    if save:
+        df_case.to_csv()
+
+    return df_case
 
 
 if __name__ == "__main__":
