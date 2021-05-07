@@ -2,6 +2,17 @@ import matplotlib.pyplot as plt
 from sklearn.linear_model import LinearRegression
 import numpy as np
 
+from matplotlib import rc
+
+rc('font',**{'family':'sans-serif','sans-serif':['Times New Roman'], 'size':10})
+rc('text', usetex=True)
+
+FIGSIZE = (3.5, 2.5)
+
+props = dict( facecolor='white', alpha=1)
+
+
+
 def plot_mef(ba, df_elec, df_co2, which='generation'):
 
     (ba_, ba_co2), xlabel = extract_cols(ba, df_elec, df_co2, which=which)    
@@ -10,12 +21,16 @@ def plot_mef(ba, df_elec, df_co2, which='generation'):
     preds, mef, r2 = compute_mef(ba_, ba_co2)
 
     #plot
-    _, ax = plt.subplots()
-    plt.scatter(ba_, ba_co2, s=1)
-    plt.plot(ba_.values, preds, color='darkorange')
-    plt.xlabel(xlabel)
-    plt.ylabel('Delta in Emissions')
-    plt.title(f'R2: {np.around(r2, 2)} - MEF: {np.around(mef, 2)}')
+    _, ax = plt.subplots(figsize=FIGSIZE, tight_layout=True)
+    ax.scatter(ba_, ba_co2, s=1)
+    ax.plot(ba_.values, preds, color='darkorange')
+    ax.set_xlabel(r'$\Delta$'+f'{xlabel} [MWh/h]')
+    ax.set_ylabel(r'$\Delta\ CO_2$ [kg/h]')
+    # place a text box in upper left in axes coords
+    x_text = ba_.quantile(.0)
+    y_text = ba_co2.quantile(.99)
+    textstr=rf'$R^2$: {np.around(r2, 2)}' +'\n' +rf'MEF: {np.around(mef, 2)} kg/MWh'
+    ax.text(x_text, y_text, textstr, bbox=props, fontsize=8)
     plt.grid()
 
     return (ba_, ba_co2)
@@ -40,7 +55,7 @@ def extract_cols(ba, df_elec, df_co2, which='generation'):
     if which=='generation':
         ba_ = df_elec[NG_elec_col]
         ba_co2 = df_co2[NG_co2_col]
-        xlabel='Delta in Generation'
+        xlabel='Generation'
     elif which=='net_generation':
         ba_ = df_elec[NG_elec_col]
         ba_co2 = df_co2[NG_co2_col]
@@ -48,11 +63,11 @@ def extract_cols(ba, df_elec, df_co2, which='generation'):
             ba_ = ba_-df_elec[WND_col]
         if SUN_col in df_elec.columns:
             ba_ = ba_-df_elec[SUN_col]
-        xlabel='Delta in Net Generation'
+        xlabel='Net Generation'
     elif which=='demand':
         ba_ = df_elec[D_elec_col]
         ba_co2 = df_co2[D_co2_col]
-        xlabel = 'Delta in Demand'
+        xlabel = 'Demand'
     elif which=='net_demand':
         ba_ = df_elec[D_elec_col]
         ba_co2 = df_co2[D_co2_col]
@@ -60,7 +75,7 @@ def extract_cols(ba, df_elec, df_co2, which='generation'):
             ba_ = ba_-df_elec[WND_col]
         if SUN_col in df_elec.columns:
             ba_ = ba_-df_elec[SUN_col]
-        xlabel='Delta in Net Generation'
+        xlabel='Net Demand'
 
     idx = ba_.index.intersection(ba_co2.index)
 
