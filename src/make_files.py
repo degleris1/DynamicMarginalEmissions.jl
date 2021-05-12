@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import os
 from sklearn.linear_model import LinearRegression
+from open_evil_pickle import open_evil_pickle, build_cost_df
 
 DATA_PATH = os.getenv('CARBON_NETWORKS_DATA')
 
@@ -23,11 +24,13 @@ def main():
     df_branch = build_branch_data(df_elec)
     df_node = build_node_data(df_co2, df_elec)
     df_emissions = build_resource_data(df_elec)
+    df_cost = build_cost_df(open_evil_pickle())
 
     # write datasets
     df_branch.to_csv(os.path.join(DATA_PATH, 'branch_data.csv'))
     df_node.to_csv(os.path.join(DATA_PATH, 'node_data.csv'))
     df_emissions.to_csv(os.path.join(DATA_PATH, 'resource_data.csv'))
+    df_cost.to_csv(os.path.join(DATA_PATH, 'monetary_costs.csv'))
 
     # build cases:
     for i, date in enumerate(CASES_DATES):
