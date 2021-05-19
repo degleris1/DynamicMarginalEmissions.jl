@@ -1,8 +1,8 @@
-get_data_path(f) = joinpath(DATA_PATH, f)
+get_data_path(datapath, f) = joinpath(datapath, f)
 
-function parse_network_data()
+function parse_network_data(datapath)
     # Open dataframes
-    df_node, df_branch, df_resource = open_datasets()
+    df_node, df_branch, df_resource = open_datasets(datapath)
     
     DEMAND = "DEMAND"
     num_resource = nrow(df_resource)
@@ -60,11 +60,11 @@ function parse_network_data()
     return A, gmax, pmax, f, G, nodes
 end
 
-function open_datasets()
-    df_node = DataFrame(CSV.File(get_data_path("node_data.csv")))
-    df_branch = DataFrame(CSV.File(get_data_path("branch_data.csv"), 
+function open_datasets(datapath)
+    df_node = DataFrame(CSV.File(get_data_path(datapath, "node_data.csv")))
+    df_branch = DataFrame(CSV.File(get_data_path(datapath, "branch_data.csv"), 
         drop=(i, name)->(i==1)))
-    df_resource = DataFrame(CSV.File(get_data_path("resource_data.csv"), 
+    df_resource = DataFrame(CSV.File(get_data_path(datapath, "resource_data.csv"), 
         header=[:id, :name, :emission_factor], datarow=2))
     return df_node, df_branch, df_resource
 end
