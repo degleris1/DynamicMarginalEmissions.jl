@@ -32,7 +32,8 @@ function PowerManagementProblem(f, d, pmax, gmax, A; τ=1e-5)
     return PowerManagementProblem(problem, p, g)
 end
 
-Convex.solve!(prob::PowerManagementProblem, opt) = solve!(prob.problem, opt)
+Convex.solve!(prob::PowerManagementProblem, opt; verbose=false) = 
+    solve!(prob.problem, opt; verbose=verbose)
 
 get_lmps(P::PowerManagementProblem) = -P.problem.constraints[5].dual[:, 1]
 
@@ -120,4 +121,31 @@ function unflatten_variables(x, n, m)
     ν = x[i+1:i+n]
     
     return g, p, λpl, λpu, λgl, λgu, ν
+end
+
+function loss_and_grad(f̂, B, case_list, pmax, gmax, A)
+    n, m = size(A)
+    L = 0.0
+    df = zeros(n)
+    
+    T = length(case_list)
+    _∇L = zeros(kkt_dims(n, m))
+
+    for case in case_list
+        params = (f̂, case.d, pmax, gmax, A)
+        opf = PowerManagementProblem(params...)
+        solve!(opf, () -> ECOS.Optimizer(verbose=false), verbose=false)
+        ĝ = evaluate(opf.g)
+        
+        L += (1/2) * norm(B*ĝ - case.g)^2 / T
+        
+        _∇L[1:n] .+= B' * (B*ĝ - case.g)
+        df += sensitivity_price(opf, _∇L, params) / T
+    end
+    
+    return L, df
+end
+
+function stochastic_loss_and_grad(f̂, B, case_list, pmax, gmax, A, sample)
+    return loss_and_grad(f̂, B, case_list[sample], pmax, gmax, A)
 end
