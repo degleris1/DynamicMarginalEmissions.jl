@@ -15,7 +15,7 @@ def main():
 
     df_co2, df_elec = load_datasets()
 
-    DATES = np.random.choice(df_elec.index, n)
+    DATES = np.random.choice(df_elec.index, n, replace=False)
 
     # create repository
     TRAIN_PATH = os.path.join(
