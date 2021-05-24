@@ -1,6 +1,8 @@
 get_data_path(datapath, f) = joinpath(datapath, f)
 
-function parse_network_data(datapath)
+SKIP_RESOURCES = ["WND", "SUN", "BIO", "GEO", "OTH", "WAT"]
+
+function parse_network_data(datapath; num_generators=1)
     # Open dataframes
     df_node, df_branch, df_resource = open_datasets(datapath)
     
@@ -26,15 +28,18 @@ function parse_network_data(datapath)
         push!(f, 0.0)
 
         for r in eachrow(df_resource)
-            (r.id in ["WND", "SUN"]) && continue  # Skip wind and solar
-      
-            i = length(nodes)+1
-            push!(nodes, (i, iso.id, r.id))
-            push!(gmax, iso[r.id * "_max"])
-            push!(f, r.emission_factor)
+            for _ in 1:num_generators
+                (r.id in SKIP_RESOURCES) && continue  # Skip some resources
+        
+                i = length(nodes)+1
+                capacity = iso[r.id * "_max"] / num_generators
+                push!(nodes, (i, iso.id, r.id))
+                push!(gmax, capacity)
+                push!(f, r.emission_factor)
 
-            push!(branches, (i, k))
-            push!(pmax, Inf)
+                push!(branches, (i, k))
+                push!(pmax, Inf)
+            end
         end
     end
     

@@ -36,38 +36,45 @@ Convex.solve!(prob::PowerManagementProblem, opt) = solve!(prob.problem, opt)
 
 get_lmps(P::PowerManagementProblem) = -P.problem.constraints[5].dual[:, 1]
 
-function sensitivity_demand(P::PowerManagementProblem, c, params)
-    n = length(c)
-    d = params[2]
+function sensitivity_demand(P::PowerManagementProblem, ∇C, params)
     x = flatten_variables(P)
+    f, d = params[1:2]
 
     # Get partial Jacobians of KKT operator
-    _, ∂K_xT = Zygote.forward_jacobian(x -> kkt(x, d, params), x)
-    _, ∂K_θT = Zygote.forward_jacobian(θ -> kkt(x, θ, params), d)
-
-    # Compute dC/dg (carbon derivative wrt generation)
-    ∇C = zeros(size(x))
-    ∇C[1:n] .= c
+    _, ∂K_xT = Zygote.forward_jacobian(x -> kkt(x, f, d, params), x)
+    _, ∂K_θT = Zygote.forward_jacobian(d -> kkt(x, f, d, params), d)
 
     # Now compute ∇C(g*(θ)) = -∂K_θ' * (∂K_x' * v)
     v = ∂K_xT \ ∇C
-    ∇C_θ = -∂K_θT * v;
+    ∇C_θ = -∂K_θT * v
 
     return ∇C_θ
 end
 
+function sensitivity_price(P::PowerManagementProblem, ∇C, params)
+    x = flatten_variables(P)
+    f, d = params[1:2]
 
+    # Get partial Jacobians of KKT operator
+    _, ∂K_xT = Zygote.forward_jacobian(x -> kkt(x, f, d, params), x)
+    _, ∂K_θT = Zygote.forward_jacobian(f -> kkt(x, f, d, params), f)
+
+    # Now compute ∇C(g*(θ)) = -∂K_θ' * (∂K_x' * v)
+    v = ∂K_xT \ ∇C
+    ∇C_θ = -∂K_θT * v
+
+    return ∇C_θ
+end
 
 
 # ===
 # DIFFERENTIATION UTILS
 # ===
 
-function kkt(x, θ, params; τ=1e-5)
-    (f, d, pmax, gmax, A) = params
+function kkt(x, f, d, params; τ=1e-5)
+    (_, _, pmax, gmax, A) = params
     n, m = size(A)
 
-    d = θ
     g, p, λpl, λpu, λgl, λgu, ν = unflatten_variables(x, n, m)
 
     return [
@@ -79,6 +86,10 @@ function kkt(x, θ, params; τ=1e-5)
         λgu .* (g - gmax);
         A*p - g + d;
     ]
+end
+
+function kkt_dims(n, m)
+    return 4n + 3m
 end
 
 function flatten_variables(P::PowerManagementProblem)

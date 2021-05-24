@@ -11,7 +11,9 @@ using Zygote
 
 # Exports
 export open_datasets, parse_network_data
-export PowerManagementProblem, solve!, sensitivity_demand, get_lmps
+export PowerManagementProblem, solve!
+export get_lmps, kkt_dims
+export sensitivity_price, sensitivity_demand
 
 # Files
 include("./parse_data.jl")
