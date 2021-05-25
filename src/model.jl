@@ -1,3 +1,4 @@
+using LinearAlgebra
 
 mutable struct PowerManagementProblem
     problem::Problem
@@ -67,6 +68,54 @@ function sensitivity_price(P::PowerManagementProblem, ∇C, params)
     return ∇C_θ
 end
 
+function compute_jacobian(params, x)
+    """
+    A few questions about the structure of the Jacobian: 
+    - the central block is not diagonal? 
+    - the corner blocks are anti-symmetric?
+    - what is the order in which the derivatives are computed? (i.e. the ordering in the blocks?)
+    - in K21, why does it output diagonal lambda pl and not - diag(0)
+    """
+    (_, _, pmax, gmax, A) = params
+    n, m = size(A)
+
+    g, p, λpl, λpu, λgl, λgu, _ = unflatten_variables(x, n, m)
+
+    K11 = zeros(m+n, m+n);
+    K22 = Diagonal(vcat(-p-pmax, p-pmax, -g, g-gmax));     
+   
+    #not sure which one comes first here
+    K12 = vcat(
+        hcat(zeros(n, 2*m), -Matrix(I, n, n), Matrix(I, n, n)),
+        hcat(-Matrix(I, m, m), Matrix(I, m, m), zeros(m, 2*n)) 
+        );
+
+
+    K13 = vcat(Matrix(I, n, n), -A');
+
+    #why does it output diagonal(lambda pl) and not - diag(...)?
+    K21 = hcat(
+        vcat(zeros(2*m, n), Diagonal(λgu), -Diagonal(λgl)),
+        vcat(Diagonal(λpu), -Diagonal(λpl), zeros(2n, m)) 
+        );
+
+    K = vcat(
+        hcat(K11, K12, K13), 
+        hcat(K21, K22, zeros(2*(m+n), n)), 
+        hcat(K13', zeros(n, 2*(m+n)+n))
+        );
+
+    return K
+end
+
+function compare_jacobians(P::PowerManagementProblem, params)
+    x = flatten_variables(P)
+    f, d = params[1:2]
+    _, J1 = Zygote.forward_jacobian(x -> kkt(x, f, d, params), x)
+    J2 = compute_jacobian(params, x)
+
+    return J1, J2
+end
 
 # ===
 # DIFFERENTIATION UTILS
@@ -79,7 +128,7 @@ function kkt(x, f, d, params; τ=1e-5)
     g, p, λpl, λpu, λgl, λgu, ν = unflatten_variables(x, n, m)
 
     return [
-        f + ν - λgl + λgu
+        f + ν - λgl + λgu; 
         -A'ν + λpu - λpl + 2τ*p;
         λpu .* (p - pmax);
         -λpl .* (-p - pmax);
