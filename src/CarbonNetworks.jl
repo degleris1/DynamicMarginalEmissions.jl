@@ -6,6 +6,7 @@ using Convex
 using DataFrames
 using ECOS
 using LightGraphs
+using LinearAlgebra
 using SimpleWeightedGraphs
 using Zygote
 
