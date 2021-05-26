@@ -70,6 +70,26 @@ function sensitivity_price(P::PowerManagementProblem, ∇C, params)
     return ∇C_θ
 end
 
+function compute_jacobian_price(params, x)
+    g, p, λpl, λpu, λgl, λgu, ν = unflatten_variables(x, n, m)
+    (f, g, pmax, gmax, A) = params
+
+    return [
+        diagm(g);
+        zeros(m);
+    ]
+end
+
+# return [
+#         diagm(f)*g - ν - λgl + λgu; 
+#         A'ν + λpu - λpl + τ*p;
+#         λpl .* (-p - pmax);
+#         λpu .* (p - pmax);
+#         -λgl .* g;
+#         λgu .* (g - gmax);
+#         A*p - g + d;
+#     ]
+
 function compute_jacobian(params, x; τ=1e-5)
     """
     A few questions about the structure of the Jacobian: 
