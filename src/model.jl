@@ -61,22 +61,27 @@ function sensitivity_price(P::PowerManagementProblem, ∇C, params)
     ∂K_x = compute_jacobian(params, x)
     ∂K_xT = ∂K_x'
 
-    _, ∂K_θT = Zygote.forward_jacobian(f -> kkt(x, f, d, params), f)
+    # _, ∂K_θT = Zygote.forward_jacobian(f -> kkt(x, f, d, params), f)
+    ∂K_θ = compute_jacobian_price(params, x)
+    ∂K_θT = ∂K_θ'
 
     # Now compute ∇C(g*(θ)) = -∂K_θ' * (∂K_x' * v)
     v = ∂K_xT \ ∇C
     ∇C_θ = -∂K_θT * v
 
+
     return ∇C_θ
 end
 
 function compute_jacobian_price(params, x)
-    g, p, λpl, λpu, λgl, λgu, ν = unflatten_variables(x, n, m)
-    (f, g, pmax, gmax, A) = params
+    (_, _, _, _, A) = params
+    n, m = size(A)
+
+    g, _, _, _, _, _, _ = unflatten_variables(x, n, m)
 
     return [
         diagm(g);
-        zeros(m);
+        spzeros(3m + 3n, n);
     ]
 end
 
@@ -91,38 +96,47 @@ end
 #     ]
 
 function compute_jacobian(params, x; τ=1e-5)
-
     (f, _, pmax, gmax, A) = params
     n, m = size(A)
 
     g, p, λpl, λpu, λgl, λgu, _ = unflatten_variables(x, n, m)
 
     K11 = [
-        diagm(f)     zeros(n, m);
-        zeros(m, n)  τ * I(m)
+        Diagonal(f)     spzeros(n, m);
+        spzeros(m, n)  τ * I(m)
     ]
-    K22 = diagm([-p-pmax; p-pmax; -g; g-gmax]);     
-   
-    K12 = vcat(
-        hcat(zeros(n, 2*m), -Matrix(I, n, n), Matrix(I, n, n)),
-        hcat(-Matrix(I, m, m), Matrix(I, m, m), zeros(m, 2*n)) 
-    );
 
-    K13 = [-I(n); A'];
+    K22 = Diagonal([-p-pmax; p-pmax; -g; g-gmax])
+   
+    # K12 = vcat(
+    #     hcat(zeros(n, 2*m), -Matrix(I, n, n), Matrix(I, n, n)),
+    #     hcat(-Matrix(I, m, m), Matrix(I, m, m), zeros(m, 2*n)) 
+    # );
+    K12 = [
+        spzeros(n, 2*m)   -I(n)       I(n);
+        -I(m)             I(m)        spzeros(m, 2n)
+    ]
+
+    K13 = [-I(n); A']
 
     K21 = [
-        zeros(m, n) -diagm(λpl);
-        zeros(m, n) diagm(λpu);
-        diagm(λgu) zeros(n, m);
-        -diagm(λgl) zeros(n, m)
+        spzeros(m, n) -Diagonal(λpl);
+        spzeros(m, n) Diagonal(λpu);
+        Diagonal(λgu) spzeros(n, m);
+        -Diagonal(λgl) spzeros(n, m)
     ]
     
 
-    K = vcat(
-        hcat(K11, K12, K13), 
-        hcat(K21, K22, zeros(2*(m+n), n)), 
-        hcat(K13', zeros(n, 2*(m+n)+n))
-    );
+    # K = vcat(
+    #     hcat(K11, K12, K13), 
+    #     hcat(K21, K22, zeros(2*(m+n), n)), 
+    #     hcat(K13', zeros(n, 2*(m+n)+n))
+    # )
+    K = [
+        K11 K12 K13;
+        K21 K22 spzeros(2*(m+n), n);
+        K13' spzeros(n, 2*(m+n)+n)
+    ]
 
     return K
 end
@@ -172,7 +186,7 @@ end
 function unflatten_variables(x, n, m)
     i = 0
     
-    g = x[i+1:i+n]
+    g =  x[i+1:i+n]
     i += n
     
     p = x[i+1:i+m]
