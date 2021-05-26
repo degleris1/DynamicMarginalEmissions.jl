@@ -91,13 +91,7 @@ end
 #     ]
 
 function compute_jacobian(params, x; τ=1e-5)
-    """
-    A few questions about the structure of the Jacobian: 
-    - the central block is not diagonal? 
-    - the corner blocks are anti-symmetric?
-    - what is the order in which the derivatives are computed? (i.e. the ordering in the blocks?)
-    - in K21, why does it output diagonal lambda pl and not - diag(0)
-    """
+
     (f, _, pmax, gmax, A) = params
     n, m = size(A)
 
@@ -109,7 +103,6 @@ function compute_jacobian(params, x; τ=1e-5)
     ]
     K22 = diagm([-p-pmax; p-pmax; -g; g-gmax]);     
    
-    #not sure which one comes first here
     K12 = vcat(
         hcat(zeros(n, 2*m), -Matrix(I, n, n), Matrix(I, n, n)),
         hcat(-Matrix(I, m, m), Matrix(I, m, m), zeros(m, 2*n)) 
@@ -117,7 +110,6 @@ function compute_jacobian(params, x; τ=1e-5)
 
     K13 = [-I(n); A'];
 
-    #why does it output diagonal(lambda pl) and not - diag(...)?
     K21 = [
         zeros(m, n) -diagm(λpl);
         zeros(m, n) diagm(λpu);
@@ -210,12 +202,13 @@ function loss_and_grad(f̂, B, case_list, pmax, gmax, A)
     _∇L = zeros(kkt_dims(n, m))
 
     for case in case_list
-        params = (f̂, case.d, pmax, gmax, A)
-        opf = PowerManagementProblem(params...)
-        solve!(opf, () -> ECOS.Optimizer(verbose=false), verbose=false)
-        ĝ = evaluate(opf.g)
-        
-        L += (1/2) * norm(B*ĝ - case.g)^2 / T
+
+        ĝ, opf, params = solvePMP(f̂, case, pmax, gmax, A) 
+
+        #Loss is averaged over cases AND generators, in order
+        #to have a rough sense of error per generator
+
+        L += (1/2) * norm(B*ĝ - case.g)^2 / (T*n)
         
         _∇L[1:n] .+= B' * (B*ĝ - case.g)
         df += sensitivity_price(opf, _∇L, params) / T
@@ -224,6 +217,49 @@ function loss_and_grad(f̂, B, case_list, pmax, gmax, A)
     return L, df
 end
 
+function solvePMP(f̂, case, pmax, gmax, A)
+        params = (f̂, case.d, pmax, gmax, A)
+        opf = PowerManagementProblem(params...)
+        solve!(opf, () -> ECOS.Optimizer(verbose=false), verbose=false)
+        ĝ = evaluate(opf.g)
+        return ĝ, opf, params
+end
+
 function stochastic_loss_and_grad(f̂, B, case_list, pmax, gmax, A, sample)
     return loss_and_grad(f̂, B, case_list[sample], pmax, gmax, A)
+end
+
+function run_gradient_descent(
+    f̂, train_cases, test_cases, pmax, gmax, A, B, 
+    step_size, max_iter, batch_size, test_batch_size, 
+    α
+    )
+
+    train_loss_hist = []
+    test_loss_hist = []
+    grad_hist = []
+
+    @time for iter in 1:max_iter
+        print(".")
+        # Evaluate loss and gradient
+        sample = rand(1:length(train_cases), batch_size)
+        L, df = stochastic_loss_and_grad(f̂, B, train_cases, pmax, gmax, A, sample)
+        
+        push!(train_loss_hist, L)
+        push!(grad_hist, df)
+        
+        # Compute test loss
+        sample = rand(1:length(test_cases), test_batch_size)
+        L_test, _ = stochastic_loss_and_grad(f̂, B, test_cases, pmax, gmax, A, sample)
+        
+        push!(test_loss_hist, L_test)
+        
+        # Take projected gradient step
+        η = step_size
+        Δ = df #+ λ*f
+        step_length = min(norm(Δ), α)
+        f̂ = max.(f̂ - step_length*Δ/norm(Δ), 0)
+    end
+    println("Completed $(max_iter) iterations.")
+    return train_loss_hist, test_loss_hist, grad_hist, f̂
 end
