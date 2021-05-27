@@ -5,6 +5,8 @@ mutable struct PowerManagementProblem
     g
 end
 
+TAU = 1e-5
+
 """
     PowerManagementProblem(f, d, pmax, gmax, A; τ=1e-5)
 
@@ -15,7 +17,7 @@ incidence matrix `A`.
 The parameter `τ` is a regularization weight used to make the problem
 strongly convex by adding τ ∑ᵢ pᵢ² to the objective.
 """
-function PowerManagementProblem(f, d, pmax, gmax, A; τ=1e-5)
+function PowerManagementProblem(f, d, pmax, gmax, A; τ=TAU)
     n, m = size(A)
     g = Variable(n)
     p = Variable(m)
@@ -95,7 +97,7 @@ end
 #         A*p - g + d;
 #     ]
 
-function compute_jacobian(params, x; τ=1e-5)
+function compute_jacobian(params, x; τ=TAU)
     (f, _, pmax, gmax, A) = params
     n, m = size(A)
 
@@ -154,7 +156,7 @@ end
 # DIFFERENTIATION UTILS
 # ===
 
-function kkt(x, f, d, params; τ=1e-5)
+function kkt(x, f, d, params; τ=TAU)
     (_, _, pmax, gmax, A) = params
     n, m = size(A)
 
@@ -272,6 +274,7 @@ function run_gradient_descent(
         η = step_size
         Δ = df #+ λ*f
         step_length = min(norm(Δ), α)
+        # step_length = 1000
         f̂ = max.(f̂ - step_length*Δ/norm(Δ), 0)
     end
     println("Completed $(max_iter) iterations.")
