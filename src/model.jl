@@ -247,7 +247,7 @@ function run_gradient_descent(
     f̂, train_cases, test_cases, pmax, gmax, A, B, 
     step_size, max_iter, batch_size, test_batch_size, 
     α
-    )
+)
 
     train_loss_hist = []
     test_loss_hist = []
