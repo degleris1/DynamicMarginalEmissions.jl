@@ -61,7 +61,7 @@ already been solved). The LMPs are the dual variables of the power
 conservation constraint.
 """
 get_lmps(P::PowerManagementProblem) = 
-    -P.problem.constraints[5].dual[:, 1]
+    P.problem.constraints[5].dual[:, 1]
 
 
 

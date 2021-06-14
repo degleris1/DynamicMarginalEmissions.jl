@@ -10,7 +10,7 @@ function loss_and_grad(case_list, f̂q, f̂l, B, pmax, gmax, A)
     ∇L = zeros(kkt_dims(n, m))
 
     for case in case_list
-        ĝ, opf, params = solve_pmp(f̂q, f̂l, case, pmax, gmax, A) 
+        ĝ, opf, params = solve_pmp(f̂q, f̂l, case.d, pmax, gmax, A) 
 
         # Loss is averaged over cases AND generators, in order
         # to have a rough sense of error per generator
@@ -29,8 +29,8 @@ function stochastic_loss_and_grad(sample, case_list, f̂q, f̂l, B, pmax, gmax, 
     return loss_and_grad(case_list[sample], f̂q, f̂l, B, pmax, gmax, A)
 end
 
-function solve_pmp(f̂q, f̂l, case, pmax, gmax, A)
-        params = (f̂q, f̂l, case.d, pmax, gmax, A)
+function solve_pmp(f̂q, f̂l, d, pmax, gmax, A)
+        params = (f̂q, f̂l, d, pmax, gmax, A)
         opf = PowerManagementProblem(params...)
         solve!(opf, () -> ECOS.Optimizer(verbose=false), verbose=false)
         ĝ = evaluate(opf.g)

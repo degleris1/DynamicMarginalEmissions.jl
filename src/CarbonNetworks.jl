@@ -25,7 +25,7 @@ export loss_and_grad, stochastic_loss_and_grad
 # Files
 include("parse_data.jl")
 include("model.jl")
-inlcude("sensitivity.jl")
+include("sensitivity.jl")
 include("descent.jl")
 
 
