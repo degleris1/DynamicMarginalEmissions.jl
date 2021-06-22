@@ -11,6 +11,7 @@ mutable struct PowerManagementProblem
     problem::Problem
     p
     g
+    s
     params
 end
 
@@ -57,7 +58,8 @@ function PowerManagementProblem(fq, fl, d, pmax, gmax, A, ds; τ=TAU)
 
     params = (fq=fq, fl=fl, d=d, pmax=pmax, gmax=gmax, A=A, τ=τ)
 
-    return PowerManagementProblem(problem, p, g, params)
+    # individual PMPs do not have s assigned
+    return PowerManagementProblem(problem, p, g, nothing, params)
 end
 
 # ===
@@ -69,10 +71,13 @@ Wrapper and PowerManagementProblem to build a sequence of these.
 The arguments to DynPowerManagementProblem are the same as for PowerManagementProblem
 except they are arrays, with dimension equal to the time horizon (i.e. number of timesteps) T. 
 
+P is the maximum charge/discharge power. 
+C is the maximum SOC of the batteries.
+
 TODO: parameterize the management of initial and terminal constraints
 """
 function DynPowerManagementProblem(
-    fq, fl, d, pmax, gmax, A, P; τ=TAU
+    fq, fl, d, pmax, gmax, A, P, C; τ=TAU
 )
     T = length(fq)
     n, _ = size(A)
@@ -104,6 +109,10 @@ function DynPowerManagementProblem(
     dynProblem = minimize(
         objective
     )
+
+    params = (fq=fq, fl=fl, d=d, pmax=pmax, gmax=gmax, A=A, P=P, C=C, τ=τ)
+
+    return PowerManagementProblem(dynProblem, p_T, g_T, s, params)
 end
 
 # ===
