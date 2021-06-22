@@ -7,12 +7,12 @@
 # SENSITIVITIES
 # ===
 
-function sensitivity_demand(P::PowerManagementProblem, ∇C, fq, fl, d, pmax, gmax, A)
+function sensitivity_demand(P::PowerManagementProblem, ∇C, fq, fl, d, pmax, gmax, A, B)
     x = flatten_variables(P)
 
     # Get partial Jacobians of KKT operator
-    _, ∂K_xT = Zygote.forward_jacobian(x -> kkt(x, fq, fl, d, pmax, gmax, A), x)
-    _, ∂K_θT = Zygote.forward_jacobian(d -> kkt(x, fq, fl, d, pmax, gmax, A), d)
+    _, ∂K_xT = Zygote.forward_jacobian(x -> kkt(x, fq, fl, d, pmax, gmax, A, B), x)
+    _, ∂K_θT = Zygote.forward_jacobian(d -> kkt(x, fq, fl, d, pmax, gmax, A, B), d)
 
     # Now compute ∇C(g*(θ)) = -∂K_θ' * (∂K_x' * v)
     v = ∂K_xT \ ∇C
@@ -21,6 +21,9 @@ function sensitivity_demand(P::PowerManagementProblem, ∇C, fq, fl, d, pmax, gm
     return ∇C_θ
 end
 
+sensitivity_demand(P::PowerManagementProblem, ∇C, net::PowerNetwork, d) = 
+    sensitivity_demand(P::PowerManagementProblem, ∇C, net.fq, net.fl, d, net.pmax, net.gmax, net.A, net.B)
+
 """
     sensitivity_price(P::PowerManagementProblem, ∇C, fq, fl, d, pmax, gmax, A)
 
@@ -28,19 +31,19 @@ Returns `∇C_θq` and `∇C_θl`, the sensitivity of `∇C` with respect to
 the quadratic generation cost coefficients `fq` and the linear cost
 coefficients `fl`, respectively. 
 """
-function sensitivity_price(P::PowerManagementProblem, ∇C, fq, fl, d, pmax, gmax, A)
+function sensitivity_price(P::PowerManagementProblem, ∇C, fq, fl, d, pmax, gmax, A, B)
     x = flatten_variables(P)
 
     # Get partial Jacobians of KKT operator
     # _, ∂K_xT = Zygote.forward_jacobian(x -> kkt(x, f, d, params), x)
-    ∂K_x = compute_jacobian_kkt(fq, fl, d, pmax, gmax, A, x)
+    ∂K_x = compute_jacobian_kkt(fq, fl, d, pmax, gmax, A, B, x)
     ∂K_xT = ∂K_x'
 
     # _, ∂K_θT = Zygote.forward_jacobian(f -> kkt(x, f, d, params), f)
-    ∂K_θq = compute_jacobian_quad_price(A, x)
+    ∂K_θq = compute_jacobian_quad_price(A, B, x)
     ∂K_θqT = ∂K_θq'
 
-    ∂K_θl = compute_jacobian_lin_price(A)
+    ∂K_θl = compute_jacobian_lin_price(A, B)
     ∂K_θlT = ∂K_θl'
 
     # Now compute ∇C(g*(θ)) = -∂K_θ' * (∂K_x' * v)
@@ -51,6 +54,8 @@ function sensitivity_price(P::PowerManagementProblem, ∇C, fq, fl, d, pmax, gma
     return ∇C_θq, ∇C_θl
 end
 
+sensitivity_price(P::PowerManagementProblem, ∇C, net::PowerNetwork, d) = 
+    sensitivity_price(P::PowerManagementProblem, ∇C, net.fq, net.fl, d, net.pmax, net.gmax, net.A, net.B)
 
 
 
@@ -64,11 +69,12 @@ end
 Compute the Jacobian of the KKT operator with respect to the quadratic
 generation cost coefficients.
 """
-function compute_jacobian_quad_price(A, x)
+function compute_jacobian_quad_price(A, B, x)
     n, m = size(A)
-    g, _, _, _, _, _, _ = unflatten_variables(x, n, m)
+    n, l = size(B)
+    g, _, _, _, _, _, _ = unflatten_variables(x, n, m, l)
 
-    return [diagm(g); spzeros(3m + 3n, n)]
+    return [diagm(g); spzeros(3m + 2l + n, l)]
 end
 
 """
@@ -77,10 +83,11 @@ end
 Compute the Jacobian of the KKT operator with respect to the linear
 generation cost coefficients.
 """
-function compute_jacobian_lin_price(A)
+function compute_jacobian_lin_price(A, B)
     n, m = size(A)
+    n, l = size(B)
 
-    return [I(n); spzeros(3m + 3n, n)]
+    return [I(l); spzeros(3m + 2l + n, l)]
 end
 
 """
@@ -88,35 +95,36 @@ end
 
 Compute the Jacobian of the KKT operator.
 """
-function compute_jacobian_kkt(fq, fl, d, pmax, gmax, A, x; τ=TAU)
+function compute_jacobian_kkt(fq, fl, d, pmax, gmax, A, B, x; τ=TAU)
     n, m = size(A)
+    n, l = size(B)
 
-    g, p, λpl, λpu, λgl, λgu, _ = unflatten_variables(x, n, m)
+    g, p, λpl, λpu, λgl, λgu, _ = unflatten_variables(x, n, m, l)
 
     K11 = [
-        Diagonal(fq)     spzeros(n, m);
-        spzeros(m, n)    τ * I(m)
+        Diagonal(fq)     spzeros(l, m);
+        spzeros(m, l)    τ * I(m)
     ]
    
     K12 = [
-        spzeros(n, 2*m)   -I(n)       I(n);
-        -I(m)             I(m)        spzeros(m, 2n)
+        spzeros(l, 2*m)   -I(l)       I(l);
+        -I(m)             I(m)        spzeros(m, 2l)
     ]
 
-    K13 = [-I(n); A']
+    K13 = [-B'; A']
 
     K21 = [
-        spzeros(m, n) -Diagonal(λpl);
-        spzeros(m, n) Diagonal(λpu);
-        Diagonal(λgu) spzeros(n, m);
-        -Diagonal(λgl) spzeros(n, m)
+        spzeros(m, l) -Diagonal(λpl);
+        spzeros(m, l) Diagonal(λpu);
+        Diagonal(λgu) spzeros(l, m);
+        -Diagonal(λgl) spzeros(l, m)
     ]
 
     K22 = Diagonal([-p-pmax; p-pmax; -g; g-gmax])
     
     return [
         K11 K12 K13;
-        K21 K22 spzeros(2*(m+n), n);
-        K13' spzeros(n, 2*(m+n)+n)
+        K21 K22 spzeros(2*(m+l), n);
+        K13' spzeros(n, 2*(m+l)+n)
     ]
 end
