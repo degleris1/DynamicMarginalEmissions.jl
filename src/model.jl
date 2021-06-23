@@ -24,6 +24,7 @@ mutable struct PowerManagementProblem
     problem::Problem
     p
     g
+    s
     params
 end
 
@@ -37,7 +38,7 @@ incidence matrix `A`.
 The parameter `τ` is a regularization weight used to make the problem
 strongly convex by adding τ ∑ᵢ pᵢ² to the objective.
 """
-function PowerManagementProblem(fq, fl, d, pmax, gmax, A, B; τ=TAU)
+function PowerManagementProblem(fq, fl, d, pmax, gmax, A, B; τ=TAU, ds=0)
     n, m = size(A)
     n, l = size(B)
     g = Variable(l)
@@ -53,12 +54,12 @@ function PowerManagementProblem(fq, fl, d, pmax, gmax, A, B; τ=TAU)
         p <= pmax,
         -g <= 0, 
         g <= gmax,
-        0 == A*p - B*g + d,
+        0 == A*p - B*g + d + ds,
     ])
 
     params = (fq=fq, fl=fl, d=d, pmax=pmax, gmax=gmax, A=A, B=B, τ=τ)
 
-    return PowerManagementProblem(problem, p, g, params)
+    return PowerManagementProblem(problem, p, g, nothing, params)
 end
 
 PowerManagementProblem(net::PowerNetwork, d) =
