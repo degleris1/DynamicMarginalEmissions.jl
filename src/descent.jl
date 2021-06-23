@@ -1,6 +1,6 @@
 # Code for training gradient based algorithms
 
-function loss_and_grad(case_list, f̂q, f̂l, B, pmax, gmax, A)
+function loss_and_grad(case_list, f̂q, f̂l, M, pmax, gmax, A, B)
     n, m = size(A)
 
     L = 0.0
@@ -10,13 +10,13 @@ function loss_and_grad(case_list, f̂q, f̂l, B, pmax, gmax, A)
     ∇L = zeros(kkt_dims(n, m))
 
     for case in case_list
-        ĝ, opf, params = solve_pmp(f̂q, f̂l, case.d, pmax, gmax, A) 
+        ĝ, opf, params = solve_pmp(f̂q, f̂l, case.d, pmax, gmax, A, B) 
 
         # Loss is averaged over cases AND generators, in order
         # to have a rough sense of error per generator
-        L += (1/2) * norm(B*ĝ - case.g)^2 / (T*n)
+        L += (1/2) * norm(M*ĝ - case.g)^2 / (T*n)
         
-        ∇L[1:n] .= B' * (B*ĝ - case.g)
+        ∇L[1:n] .= M' * (M*ĝ - case.g)
         dfq_case, dfl_case = sensitivity_price(opf, ∇L, params...)
         dfq .+= dfq_case / T
         dfl .+= dfl_case / T
@@ -25,12 +25,12 @@ function loss_and_grad(case_list, f̂q, f̂l, B, pmax, gmax, A)
     return L, dfq, dfl
 end
 
-function stochastic_loss_and_grad(sample, case_list, f̂q, f̂l, B, pmax, gmax, A)
-    return loss_and_grad(case_list[sample], f̂q, f̂l, B, pmax, gmax, A)
+function stochastic_loss_and_grad(sample, case_list, f̂q, f̂l, M, pmax, gmax, A, B)
+    return loss_and_grad(case_list[sample], f̂q, f̂l, M, pmax, gmax, A, B)
 end
 
-function solve_pmp(f̂q, f̂l, d, pmax, gmax, A)
-        params = (f̂q, f̂l, d, pmax, gmax, A)
+function solve_pmp(f̂q, f̂l, d, pmax, gmax, A, B)
+        params = (f̂q, f̂l, d, pmax, gmax, A, B)
         opf = PowerManagementProblem(params...)
         solve!(opf, () -> ECOS.Optimizer(verbose=false), verbose=false)
         ĝ = evaluate(opf.g)
@@ -38,7 +38,7 @@ function solve_pmp(f̂q, f̂l, d, pmax, gmax, A)
 end
 
 function run_gradient_descent(
-    f̂, train_cases, test_cases, pmax, gmax, A, B, 
+    f̂, train_cases, test_cases, pmax, gmax, A, B, M, 
     max_iter, batch_size, test_batch_size, α
 )
     train_loss_hist = []
@@ -50,11 +50,11 @@ function run_gradient_descent(
 
         # Evaluate loss and gradient
         sample = rand(1:length(train_cases), batch_size)
-        L, df = stochastic_loss_and_grad(sample, train_cases, f̂q, f̂l, B, pmax, gmax, A)
+        L, df = stochastic_loss_and_grad(sample, train_cases, f̂q, f̂l, M, pmax, gmax, A, B)
         
         # Compute test loss
         sample = rand(1:length(test_cases), test_batch_size)
-        L_test, _ = stochastic_loss_and_grad(sample, test_cases, f̂q, f̂l, B, pmax, gmax, A)
+        L_test, _ = stochastic_loss_and_grad(sample, test_cases, f̂q, f̂l, M, pmax, gmax, A, B)
         
         push!(train_loss_hist, L)
         push!(grad_hist, df)
