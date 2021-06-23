@@ -16,7 +16,7 @@ using SparseArrays
 # Exports
 export open_datasets, parse_network_data, load_case, create_generation_map
 
-export PowerManagementProblem, solve!
+export PowerNetwork, PowerManagementProblem, solve!
 export get_lmps, kkt_dims
 
 export sensitivity_price, sensitivity_demand
