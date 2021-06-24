@@ -59,7 +59,7 @@ function PowerManagementProblem(fq, fl, d, pmax, gmax, A, B; τ=TAU, ds=0)
 
     params = (fq=fq, fl=fl, d=d, pmax=pmax, gmax=gmax, A=A, B=B, τ=τ)
 
-    return PowerManagementProblem(problem, p, g, nothing, params)
+    return PowerManagementProblem(problem, p, g, zeros(n), params)
 end
 
 PowerManagementProblem(net::PowerNetwork, d) =
