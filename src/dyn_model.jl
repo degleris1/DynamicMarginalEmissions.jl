@@ -61,27 +61,29 @@ function DynamicPowerManagementProblem(
     # TODO: for now the edge constraints are neglected
     s = [Variable(n) for t in 1:T]
 
-    subproblems = vcat([
+    subproblems = vcat(
         # first treating the initial constraint explicitly to avoid having to
         # specify another variable for s_0
-        PowerManagementProblem(
+        [PowerManagementProblem(
             fq[1], fl[1], d[1], pmax[1], gmax[1], A, B; ds=0 #s[1] - INIT_COND
-            )
-    ], [
+        )]
+        ,
         # then iterating over all the timesteps 
-        PowerManagementProblem(
+        [PowerManagementProblem(
             fq[t], fl[t], d[t], pmax[t], gmax[t], A, B; ds=s[t] - s[t-1]
-            ) for t in 2:T
-        ]
+        ) for t in 2:T]
     )
+
+    @show length(subproblems)
 
     objective = sum([sub.problem.objective for sub in subproblems])
     g_T = [sub.g for sub in subproblems]
     p_T = [sub.p for sub in subproblems]
 
-    dynProblem = minimize(
-        objective
-    )
+    dynProblem = minimize(objective)
+    for sub in subproblems
+        add_constraints!(dynProblem, sub.problem.constraints)
+    end
 
     # storage constraints
     # initial conditions
