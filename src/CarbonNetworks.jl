@@ -1,6 +1,7 @@
 module CarbonNetworks
 
 # Module Imports
+using Zygote: length
 using CSV
 using Convex
 using DataFrames
@@ -20,7 +21,8 @@ export PowerNetwork, PowerManagementProblem, solve!
 export get_lmps, kkt_dims
 
 export DynamicPowerNetwork, DynamicPowerManagementProblem
-export flatten_variables_dyn
+export flatten_variables_dyn, unflatten_variables_dyn
+export kkt_dyn
 
 export sensitivity_price, sensitivity_demand
 export loss_and_grad, stochastic_loss_and_grad

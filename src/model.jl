@@ -93,8 +93,10 @@ get_lmps(P::PowerManagementProblem) =
 
 Compute the dimensions of the input / output of the KKT operator for
 a network with `n` nodes and `m` edges.
+
+TODO: add `l` in docs
 """
-kkt_dims(n, m, l) = 3m + 3l + n
+kkt_dims(n, m) = 3m + 3l + n
 
 """
     kkt(x, fq, fl, d, pmax, gmax, A; τ=TAU)
