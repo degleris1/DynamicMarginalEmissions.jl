@@ -87,10 +87,10 @@ function DynamicPowerManagementProblem(
     # storage constraints
     # initial conditions
     add_constraints!(dynProblem, [
-        s[1] - INIT_COND <= P,
-        -(s[1] - INIT_COND) <= P, 
+        0 <= s[1],
         s[1] <= C, 
-        0 <= s[1]
+        s[1] - INIT_COND <= P,
+        -(s[1] - INIT_COND) <= P
     ])
     # running condition
     for t in 2:T
@@ -183,9 +183,28 @@ end
 add doc
 """
 function flatten_variables_dyn(P::PowerManagementProblem)
-    x = [evaluate(P.g); evaluate(P.p)]
+
+    T = length(P.g)
+    # extracting primal variables
+    g = vcat([P.g[t].value[:] for t in 1:T]...)
+    p = vcat([P.p[t].value[:] for t in 1:T]...)
+    s = vcat([P.s[t].value[:] for t in 1:T]...)
+    x = [g; p; s]
+
+    # extracting dual variables
+    # a. from the subproblems: 5 constraints - first 5T elements of 
+    #    λ are for the static constraints
+    # b. from storage: 4 constraints - last 4T elements of λ are for
+    #    the storage coupling between timesteps
     λ = vcat([c.dual for c in P.problem.constraints]...)
-    return [x; λ][:, 1]
+
+    vars = [x; λ][:, 1]
+    n, m = size(P.params.A)
+
+    # checking that the size is consistent with expectations
+    @assert length(vars) == kkt_dims_dyn(n, m, T)
+
+    return vars
 end
 
 """
