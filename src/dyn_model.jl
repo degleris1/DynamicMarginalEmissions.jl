@@ -125,13 +125,12 @@ Compute the dimensions of the input / output of the KKT operator for
 a network with `n` nodes and `m` edges for `T` timesteps
 
 Details: 
-- size of variables: T*(2n+m)
-- static subproblem constraints: (3n + 2m)*T
+- size of variables: T*(l + m + n)
+- static subproblem constraints: (n + 2l + 2m)*T
 - storage constraints: T*(4n)
 
-TODO: change this to include `l`
 """
-kkt_dims_dyn(n, m, T) = T*(9n+3m)
+kkt_dims_dyn(n, m, l, T) = T*(6n+3m+3l)
 
 """
     kkt(x, fq, fl, d, pmax, gmax, A; τ=TAU)
@@ -150,13 +149,14 @@ The steps should be:
 function kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, P, C; τ=TAU)
 
     n, m = size(A)
+    _, l = size(B)
     T = length(fq)
 
     # Assume that it is giving back what we want for now
     # the format we assume is that each variable (both primal and dual)
     # is returned as an array of T elements
     # λdsi is the dual for charge/discharge of the battery, with i being 1 or 2
-    g, p, s, λpl, λpu, λgl, λgu, ν, λsl, λsu, λdsl, λdsu = unflatten_variables_dyn(x, n, m, T)
+    g, p, s, λpl, λpu, λgl, λgu, ν, λsl, λsu, λdsl, λdsu = unflatten_variables_dyn(x, n, m, l, T)
 
     # compute the KKTs for individual problems
     KKT_tot = []
@@ -184,7 +184,7 @@ function kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, P, C; τ=TAU)
         KKT_tot = vcat(KKT_tot, KKT, KKT_s) # append the subproblem kkt matrix to the total KKT matrix
     end
 
-    @assert length(KKT_tot) == kkt_dims_dyn(n, m, T)
+    @assert length(KKT_tot) == kkt_dims_dyn(n, m, l, T)
 
     return KKT_tot
 end
@@ -209,7 +209,10 @@ end
 function extract_vars_t(P::PowerManagementProblem, t)
 
     n, m = size(P.params(A))
+    _, l = size(P.params(B))
+
     T = length(P.g)
+
     g = P.g[t].value[:]
     p = P.p[t].value[:]
     s = P.s[t].value[:]
@@ -275,9 +278,10 @@ function flatten_variables_dyn(P::PowerManagementProblem)
 
     vars = [x; λ][:, 1]
     n, m = size(P.params.A)
+    _, l = size(P.params.B)
 
     # checking that the size is consistent with expectations
-    @assert length(vars) == kkt_dims_dyn(n, m, T)
+    @assert length(vars) == kkt_dims_dyn(n, m, l, T)
 
     return vars
 end
@@ -285,20 +289,20 @@ end
 """
 add doc
 """
-function unflatten_variables_dyn(x, n, m, T)
+function unflatten_variables_dyn(x, n, m, l, T)
 
     # retrieving primal variables
-    g = x[1:n*T]
-    p = x[n*T+1: n*T+m*T]
-    s = x[n*T+m*T+1: n*T+m*T+n*T]
+    g = x[1:l*T]
+    p = x[l*T+1: l*T+m*T]
+    s = x[l*T+m*T+1: l*T+m*T+n*T]
 
-    g = [g[(t-1)*n+1:t*n] for t in 1:T]
+    g = [g[(t-1)*l+1:t*l] for t in 1:T]
     p = [p[(t-1)*m+1:t*m] for t in 1:T]
     s = [s[(t-1)*n+1:t*n] for t in 1:T]
 
     # retrieving dual variables
-    dual_start_index = 2n*T+m*T
-    size_dual_static = (3n+2m)#(7n+2m)
+    dual_start_index = n*T+m*T+l*T
+    size_dual_static = (n+2m+2l)#(7n+2m)
     size_dual_storage = 4n
 
     λpl, λpu, λgl, λgu, ν, λdsl, λdsu, λsl, λsu = [], [], [], [], [], [], [], [] ,[]
@@ -323,6 +327,9 @@ function unflatten_variables_dyn(x, n, m, T)
 
     # sanity check for the sizes
     for t in 1:T
+        @assert length(g[t]) == l
+        @assert length(p[t]) == m
+        @assert length(s[t]) == n
         @assert length(λpl[t]) == m
         @assert length(λpu[t]) == m
         @assert length(λgl[t]) == n
