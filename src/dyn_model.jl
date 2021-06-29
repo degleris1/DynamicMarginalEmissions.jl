@@ -169,14 +169,18 @@ function kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, P, C; τ=TAU)
         # add the KKts for the storage
         if t == 1
             ds = s[t] .- INIT_COND
+            ν_prev = zeros(n)
+            λdsl_prev = zeros(n)
+            λdsu_prev = zeros(n)
         else
             ds = s[t] - s[t-1]
+            ν_prev = ν[t-1]
+            λdsl_prev = λdsl[t-1]
+            λdsu_prev = λdsu[t-1]
         end
-        KKT_s = kkt_storage(λsl[t], λsu[t], λdsl[t], λdsu[t], ds, s[t], P, C) 
-        println("size of kkt:")
-        println(size(KKT))
-        println("size of storage kkt:")
-        println(size(KKT_s))
+        KKT_s = kkt_storage(
+            ν_prev, ν[t], λsl[t], λsu[t], λdsl_prev, λdsl[t], λdsu_prev, λdsu[t], ds, s[t], P, C
+            ) 
         KKT_tot = vcat(KKT_tot, KKT, KKT_s) # append the subproblem kkt matrix to the total KKT matrix
     end
 
@@ -191,14 +195,14 @@ kkt_dyn(x, net::DynamicPowerNetwork, d) =
 """
 Compute the terms kkt matrix that are only related to the storage
 """
-function kkt_storage(λsl, λsu, λdsl, λdsu, ds, s, P, C)
+function kkt_storage(ν_prev, ν_t, λsl, λsu, λdsl_prev, λdsl_t, λdsu_prev, λdsu_t, ds, s, P, C)
     
     return [
-        
+        λsu - λsl + (λdsu_t-λdsl_t) - (λdsu_prev-λdsl_prev) + ν_t - ν_prev;
         λsl .* (-s);
         λsu .* (s - C);
-        λdsl .* (ds - P);
-        λdsu .* (-ds - P);
+        λdsl_t .* (-ds - P);
+        λdsu_t .* (ds - P);
     ]
 end
 
