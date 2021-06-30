@@ -7,6 +7,13 @@
 # SENSITIVITIES
 # ===
 
+"""
+    sensitivity_demand(P::PowerManagementProblem, ∇C, fq, fl, d, pmax, gmax, A, B)
+
+Compute `∇_d C( x_opt(d) )`, where `x_opt(d)` is the optimal solution (primal
+and dual variables) of the power management problem `P` with parameters 
+`(fq, fl, d, pmax, gmax, A, B)` and `∇C` is the gradient `∇_x C(x)`.
+"""
 function sensitivity_demand(P::PowerManagementProblem, ∇C, fq, fl, d, pmax, gmax, A, B)
     x = flatten_variables(P)
 
