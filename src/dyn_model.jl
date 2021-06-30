@@ -156,7 +156,7 @@ function kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, P, C; τ=TAU)
     # the format we assume is that each variable (both primal and dual)
     # is returned as an array of T elements
     # λdsi is the dual for charge/discharge of the battery, with i being 1 or 2
-    g, p, s, λpl, λpu, λgl, λgu, ν, λsl, λsu, λdsl, λdsu = unflatten_variables_dyn(x, n, m, l, T)
+    g, p, s, λpl, λpu, λgl, λgu, ν, λdsl, λdsu, λsl, λsu = unflatten_variables_dyn(x, n, m, l, T)
 
     # compute the KKTs for individual problems
     KKT_tot = []
@@ -164,23 +164,32 @@ function kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, P, C; τ=TAU)
         # extract primal/dual variables for the constraints of instance at time t
         # g, p, s, λpl, λpu, λgl, λgu, ν, λdsl, λdsu, λsl, λsu = extract_vars_t(P, t)
         x = [g[t]; p[t]; λpl[t]; λpu[t]; λgl[t]; λgu[t]; ν[t]]
-        # compute the KKTs for the static subproblem
-        KKT = kkt(x, fq[t], fl[t], d[t], pmax[t], gmax[t], A, B; τ=TAU)
-        # add the KKts for the storage
         if t == 1
             ds = s[t] .- INIT_COND
-            ν_prev = zeros(n)
-            λdsl_prev = zeros(n)
-            λdsu_prev = zeros(n)
         else
             ds = s[t] - s[t-1]
-            ν_prev = ν[t-1]
-            λdsl_prev = λdsl[t-1]
-            λdsu_prev = λdsu[t-1]
         end
+        if t < T
+            ν_next = ν[t+1]
+            λdsl_next = λdsl[t+1]
+            λdsu_next = λdsu[t+1]
+        else
+            ν_next = zeros(n)
+            λdsl_next = zeros(n)
+            λdsu_next = zeros(n)
+        end
+
+        # compute the KKTs for the static subproblem
+        KKT = kkt(x, fq[t], fl[t], d[t], pmax[t], gmax[t], A, B; τ=TAU, ds=ds)
+        # add the KKts for the storage
         KKT_s = kkt_storage(
-            ν_prev, ν[t], λsl[t], λsu[t], λdsl_prev, λdsl[t], λdsu_prev, λdsu[t], ds, s[t], P, C
+            ν_next, ν[t], λsl[t], λsu[t], λdsl_next, λdsl[t], λdsu_next, λdsu[t], ds, s[t], P, C
             ) 
+
+        # check the sizes of both matrices computed above
+        @assert length(KKT) == 3l + 3m + n
+        @assert length(KKT_s) == 5n 
+
         KKT_tot = vcat(KKT_tot, KKT, KKT_s) # append the subproblem kkt matrix to the total KKT matrix
     end
 
@@ -193,12 +202,12 @@ kkt_dyn(x, net::DynamicPowerNetwork, d) =
     kkt_dyn(x, net.fq, net.fl, d, net.pmax, net.gmax, net.A, net.B, net.P, net.C; τ=net.τ)
 
 """
-Compute the terms kkt matrix that are only related to the storage
+Compute the terms in the kkt matrix that are only related to the storage
 """
-function kkt_storage(ν_prev, ν_t, λsl, λsu, λdsl_prev, λdsl_t, λdsu_prev, λdsu_t, ds, s, P, C)
+function kkt_storage(ν_next, ν_t, λsl, λsu, λdsl_next, λdsl_t, λdsu_next, λdsu_t, ds, s, P, C)
     
     return [
-        λsu - λsl + (λdsu_t-λdsl_t) - (λdsu_prev-λdsl_prev) + ν_t - ν_prev;
+        (λsu - λsl) + (λdsu_t-λdsl_t) - (λdsu_next-λdsl_next) + (ν_t - ν_next);
         λsl .* (-s);
         λsu .* (s - C);
         λdsl_t .* (-ds - P);
@@ -309,19 +318,21 @@ function unflatten_variables_dyn(x, n, m, l, T)
 
     for t in 1:T
 
+        # Note: order is defined by the order in which constraints are added to the problem
+
         crt_index = dual_start_index + (t-1)*size_dual_static
         # retrieving dual variables of the static problems
         λpl = vcat(λpl, [x[crt_index+1:crt_index+m]])
         λpu = vcat(λpu, [x[crt_index+m+1:crt_index+2m]])
-        λgl = vcat(λgl, [x[crt_index+2m+1:crt_index+2m+n]])
-        λgu = vcat(λgu, [x[crt_index+2m+n+1:crt_index+2m+2n]])
-        ν = vcat(ν, [x[crt_index+2m+2n+1: crt_index + 2m+3n]])
+        λgl = vcat(λgl, [x[crt_index+2m+1:crt_index+2m+l]])
+        λgu = vcat(λgu, [x[crt_index+2m+l+1:crt_index+2m+2l]])
+        ν = vcat(ν, [x[crt_index+2m+2l+1: crt_index + 2m+2l+n]])
 
         crt_index = dual_start_index + T*size_dual_static + (t-1) * size_dual_storage
         λsl = vcat(λsl, [x[crt_index+1: crt_index+n]])
         λsu = vcat(λsu, [x[crt_index+n+1: crt_index+2n]])
-        λdsl = vcat(λdsl, [x[crt_index+2n+1: crt_index+3n]])
-        λdsu = vcat(λdsu, [x[crt_index+3n+1: crt_index+4n]])
+        λdsu = vcat(λdsu, [x[crt_index+2n+1: crt_index+3n]])
+        λdsl = vcat(λdsl, [x[crt_index+3n+1: crt_index+4n]])
 
     end
 
@@ -332,8 +343,8 @@ function unflatten_variables_dyn(x, n, m, l, T)
         @assert length(s[t]) == n
         @assert length(λpl[t]) == m
         @assert length(λpu[t]) == m
-        @assert length(λgl[t]) == n
-        @assert length(λgu[t]) == n
+        @assert length(λgl[t]) == l
+        @assert length(λgu[t]) == l
         @assert length(ν[t]) == n
         @assert length(λsl[t]) == n
         @assert length(λsu[t]) == n
