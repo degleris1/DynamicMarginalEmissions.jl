@@ -1,8 +1,5 @@
 # Code for building and running a dynamic power management problem
 
-
-# TODO: correct to include the proper size of `B` (and therefore of `g`)
-
 # ===
 # POWER MANAGEMENT PROBLEM
 # ===
@@ -10,6 +7,8 @@
 INIT_COND = 0
 
 """
+A dynamic power network
+
 Here elements are assumed to be arrays of length equal to the time
 horizon of the problem (T)
 
@@ -36,6 +35,7 @@ mutable struct DynamicPowerNetwork
     C
     τ
 end
+
 DynamicPowerNetwork(fq, fl, pmax, gmax, A, B, P, C; τ=TAU) = 
     DynamicPowerNetwork(fq, fl, pmax, gmax, A, B, P, C, τ)
 
@@ -43,13 +43,14 @@ DynamicPowerNetwork(fq, fl, pmax, gmax, A, B, P, C; τ=TAU) =
 # Dynamic PowerManagementProblem
 # ===
 """
-Wrapper and PowerManagementProblem to build a sequence of these. 
+    DynamicPowerManagementProblem(fq, fl, d, pmax, gmax, A, B, P, C; τ=TAU)
 
-The arguments to DynPowerManagementProblem are the same as for PowerManagementProblem
+The arguments to DynamicPowerManagementProblem are the same as for PowerManagementProblem
 except they are arrays, with dimension equal to the time horizon (i.e. number of timesteps) T. 
 
-P is the maximum charge/discharge power. 
-C is the maximum SOC of the batteries.
+Additional arguments are:
+- `P`: the maximum charge/discharge power. 
+- `C`: the maximum SOC of the batteries.
 
 TODO: parameterize the management of initial and terminal constraints
 """
@@ -119,12 +120,13 @@ DynamicPowerManagementProblem(net::DynamicPowerNetwork, d) =
 # ===
 
 """
-    kkt_dims_dyn(n, m,T)
+    kkt_dims_dyn(n, m, l, T)
 
 Compute the dimensions of the input / output of the KKT operator for
-a network with `n` nodes and `m` edges for `T` timesteps
+a network with `n` nodes, `m` edges, `l` generators for `T` timesteps
 
 Details: 
+--------
 - size of variables: T*(l + m + n)
 - static subproblem constraints: (n + 2l + 2m)*T
 - storage constraints: T*(4n)
@@ -133,18 +135,10 @@ Details:
 kkt_dims_dyn(n, m, l, T) = T*(6n+3m+3l)
 
 """
-    kkt(x, fq, fl, d, pmax, gmax, A; τ=TAU)
+    kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, P, C; τ=TAU)
 
 Compute the KKT operator applied to `x`, with parameters given by `fq`,
-`fl`, `d`, `pmax`, `gmax`, `A`, and `τ`.
-
-
-WIP/TODO:
----------
-The steps should be:
-- compute the KKTs for individual problems
-- include the KKTs linked to S_t
-- include the KKTs linked to the coupling between different timesteps
+`fl`, `d`, `pmax`, `gmax`, `A`, `B`, `P`, `C`, and `τ`.
 """
 function kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, P, C; τ=TAU)
 
@@ -152,18 +146,17 @@ function kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, P, C; τ=TAU)
     _, l = size(B)
     T = length(fq)
 
-    # Assume that it is giving back what we want for now
-    # the format we assume is that each variable (both primal and dual)
-    # is returned as an array of T elements
-    # λdsi is the dual for charge/discharge of the battery, with i being 1 or 2
+    # decompose `x` in arrays of T variables
     g, p, s, λpl, λpu, λgl, λgu, ν, λdsl, λdsu, λsl, λsu = unflatten_variables_dyn(x, n, m, l, T)
 
     # compute the KKTs for individual problems
     KKT_tot = []
     for t in 1:T
+
         # extract primal/dual variables for the constraints of instance at time t
-        # g, p, s, λpl, λpu, λgl, λgu, ν, λdsl, λdsu, λsl, λsu = extract_vars_t(P, t)
         x = [g[t]; p[t]; λpl[t]; λpu[t]; λgl[t]; λgu[t]; ν[t]]
+
+        # handle edge cases
         if t == 1
             ds = s[t] .- INIT_COND
         else
@@ -190,7 +183,8 @@ function kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, P, C; τ=TAU)
         @assert length(KKT) == 3l + 3m + n
         @assert length(KKT_s) == 5n 
 
-        KKT_tot = vcat(KKT_tot, KKT, KKT_s) # append the subproblem kkt matrix to the total KKT matrix
+        # append both matrices to the general KKT operator
+        KKT_tot = vcat(KKT_tot, KKT, KKT_s) 
     end
 
     @assert length(KKT_tot) == kkt_dims_dyn(n, m, l, T)
@@ -215,6 +209,10 @@ function kkt_storage(ν_next, ν_t, λsl, λsu, λdsl_next, λdsl_t, λdsu_next,
     ]
 end
 
+"""
+An equivalent to unpack_variables_dyn, except that it acts on a `PowerManagementProblem` rather
+than on flattened variables.
+"""
 function extract_vars_t(P::PowerManagementProblem, t)
 
     n, m = size(P.params(A))
@@ -261,13 +259,17 @@ end
 """
     flatten_variables_dyn(P)
 
-flattens the variables from a PMP
+flattens the variables from a `PowerManagementProblem`, i.e.
+all variables over all timsteps are condensed into one array
 
-The structure of the resulting array should be:
-- 
-- 
-- 
-TODO: fill in above
+Details:
+--------
+The variables are laid out in the following order:
+- g[t], consecutively
+- p[t], consecutively 
+- s[t], consecutively
+- all dual variables for a given timestep in the following order: 
+λpl, λpu, λgl, λgu, ν, λsl, λsu, λdsu, λdsl
 """
 function flatten_variables_dyn(P::PowerManagementProblem)
 
@@ -296,7 +298,9 @@ function flatten_variables_dyn(P::PowerManagementProblem)
 end
 
 """
-add doc
+    unflatten_variables_dyn(x, n, m, l, T)
+
+Extract the primal and dual variables from `x`, an array containing them all. 
 """
 function unflatten_variables_dyn(x, n, m, l, T)
 
