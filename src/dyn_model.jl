@@ -90,18 +90,18 @@ function DynamicPowerManagementProblem(
     # storage constraints
     # initial conditions
     add_constraints!(dynProblem, [
-        0 <= s[1],
-        s[1] <= C, 
-        s[1] - INIT_COND <= P,
-        -(s[1] - INIT_COND) <= P
+        0 <= s[1], # λsl
+        s[1] <= C, # λsu
+        s[1] - INIT_COND <= P, # λdsu
+        -(s[1] - INIT_COND) <= P # λdsl
     ])
     # running condition
     for t in 2:T
         add_constraints!(dynProblem,[
-            0 <= s[t], 
-            s[t] <= C, 
-            s[t] - s[t-1] <= P,
-            s[t-1] - s[t] <= P
+            0 <= s[t], # λsl
+            s[t] <= C, # λsu
+            s[t] - s[t-1] <= P, #λdsu, as ds = s[t]-s[t-1]
+            s[t-1] - s[t] <= P # λdsl
         ])
     end
 
@@ -207,8 +207,8 @@ function kkt_storage(ν_next, ν_t, λsl, λsu, λdsl_next, λdsl_t, λdsu_next,
         (λsu - λsl) + (λdsu_t-λdsl_t) - (λdsu_next-λdsl_next) + (ν_t - ν_next);
         λsl .* (-s);
         λsu .* (s - C);
-        λdsl_t .* (-ds - P);
         λdsu_t .* (ds - P);
+        λdsl_t .* (-ds - P);
     ]
 end
 
@@ -232,12 +232,14 @@ function extract_vars_t(P::PowerManagementProblem, t)
     # pl, pu, gl, gu, equality
     # ...
     # dsl, dsu, sl, su 
-    start_index = (t-1)*5+1
-    λpl = P.problem.constraints[start_index].dual  
-    λpu = P.problem.constraints[start_index+1].dual 
-    λgl = P.problem.constraints[start_index+2].dual
-    λgu = P.problem.constraints[start_index+3].dual 
-    ν = P.problem.constraints[start_index+4].dual  
+    n_constraints_static = 5
+    n_constraints_storage = 4
+    start_index = (t-1)*n_constraints_static
+    λpl = P.problem.constraints[start_index+1].dual  
+    λpu = P.problem.constraints[start_index+2].dual 
+    λgl = P.problem.constraints[start_index+3].dual
+    λgu = P.problem.constraints[start_index+4].dual 
+    ν = P.problem.constraints[start_index+5].dual  
 
     # checking size consistency of primal variables
     @assert length(λpl) == m
@@ -246,11 +248,11 @@ function extract_vars_t(P::PowerManagementProblem, t)
     @assert length(λgu) == l
     @assert length(ν) == n
 
-    storage_index = 5*T + 1
-    λsl = P.problem.constraints[storage_index].dual 
-    λsu = P.problem.constraints[storage_index+1].dual 
-    λdsl = P.problem.constraints[storage_index+2].dual
+    storage_index = n_constraints_static*T + (t-1)*n_constraints_storage
+    λsl = P.problem.constraints[storage_index+1].dual 
+    λsu = P.problem.constraints[storage_index+2].dual 
     λdsu = P.problem.constraints[storage_index+3].dual
+    λdsl = P.problem.constraints[storage_index+4].dual
 
     # checking size consistency of dual variables
     @assert length(λdsl) == n
@@ -267,7 +269,7 @@ end
 flattens the variables from a `PowerManagementProblem`, i.e.
 all variables over all timsteps are condensed into one array
 
-Details:
+Details: TODO: update
 --------
 The variables are laid out in the following order:
 - g[t], consecutively
@@ -284,15 +286,17 @@ function flatten_variables_dyn(P::PowerManagementProblem)
 
     x_static = Array{Float64}(undef, 0)
     x_storage = Array{Float64}(undef, 0)
+
     # extract the variables at each timestep
     for t in 1:T
         g, p, s, λpl, λpu, λgl, λgu, ν, λdsl, λdsu, λsl, λsu = extract_vars_t(P, t)
         x_static = vcat(x_static, g, p, λpl, λpu, λgl, λgu, ν)
-        x_storage = vcat(x_storage, s, λsl, λsu, λdsl, λdsu)
+        x_storage = vcat(x_storage, s, λsl, λsu, λdsu, λdsl)
     end
-
     vars = vcat(x_static, x_storage)
 
+    @assert length(x_storage) == 5*n*T
+    @assert length(x_static) == T * (3l + 3m + n) 
 
     # TO DEPRECATE -- previous version
     # # extracting primal variables
@@ -326,40 +330,63 @@ Extract the primal and dual variables from `x`, an array containing them all.
 function unflatten_variables_dyn(x, n, m, l, T)
 
     # retrieving primal variables
-    g = x[1:l*T]
-    p = x[l*T+1: l*T+m*T]
-    s = x[l*T+m*T+1: l*T+m*T+n*T]
-
-    g = [g[(t-1)*l+1:t*l] for t in 1:T]
-    p = [p[(t-1)*m+1:t*m] for t in 1:T]
-    s = [s[(t-1)*n+1:t*n] for t in 1:T]
 
     # retrieving dual variables
-    dual_start_index = n*T+m*T+l*T
-    size_dual_static = (n+2m+2l)#(7n+2m)
-    size_dual_storage = 4n
+    # dual_start_index = n*T+m*T+l*T
+    # size_dual_static = (n+2m+2l)#(7n+2m)
+    # size_dual_storage = 4n
 
+    static_length = 3l + 3m + n
+    storage_length = 5n
+    # timestep_length = static_length + storage_length
+
+    g, p, s = [], [], []
     λpl, λpu, λgl, λgu, ν, λdsl, λdsu, λsl, λsu = [], [], [], [], [], [], [], [] ,[]
 
+    # loop through timesteps, and retrieve variables in the order that 
+    # x is constructed in flatten_variables_dyn()
+    # Step 1: going through the static variables
+    crt_idx, i = 0, 0
     for t in 1:T
-
-        # Note: order is defined by the order in which constraints are added to the problem
-
-        crt_index = dual_start_index + (t-1)*size_dual_static
-        # retrieving dual variables of the static problems
-        λpl = vcat(λpl, [x[crt_index+1:crt_index+m]])
-        λpu = vcat(λpu, [x[crt_index+m+1:crt_index+2m]])
-        λgl = vcat(λgl, [x[crt_index+2m+1:crt_index+2m+l]])
-        λgu = vcat(λgu, [x[crt_index+2m+l+1:crt_index+2m+2l]])
-        ν = vcat(ν, [x[crt_index+2m+2l+1: crt_index + 2m+2l+n]])
-
-        crt_index = dual_start_index + T*size_dual_static + (t-1) * size_dual_storage
-        λsl = vcat(λsl, [x[crt_index+1: crt_index+n]])
-        λsu = vcat(λsu, [x[crt_index+n+1: crt_index+2n]])
-        λdsu = vcat(λdsu, [x[crt_index+2n+1: crt_index+3n]])
-        λdsl = vcat(λdsl, [x[crt_index+3n+1: crt_index+4n]])
-
+        crt_idx = static_length * (t-1)
+        i = 0
+        g = vcat(g,[x[crt_idx+i+1:crt_idx+i+l]])
+        i += l
+        p = vcat(p, [x[crt_idx+i+1:crt_idx+i+m]])
+        i += m
+        λpl = vcat(λpl, [x[crt_idx+i+1:crt_idx+i+m]])
+        i += m
+        λpu = vcat(λpu, [x[crt_idx+i+1:crt_idx+i+m]])
+        i +=m
+        λgl = vcat(λgl, [x[crt_idx+i+1:crt_idx+i+l]])
+        i += l
+        λgu = vcat(λgu, [x[crt_idx+i+1:crt_idx+i+l]])
+        i += l
+        ν = vcat(ν, [x[crt_idx+i+1: crt_idx + i + n]])
+        i += n
     end
+    # check that we have gone through all the static subproblems
+    @assert crt_idx + i == T*static_length
+    # Step 2: going throught the storage variables
+    for t in 1:T
+        # crt_index = dual_start_index + (t-1)*size_dual_static
+        # crt_idx += i # beginning of the storage index
+        crt_idx = T*static_length + (t-1)*storage_length
+        i = 0
+        # s = x[l*T+m*T+1: l*T+m*T+n*T]
+        s = vcat(s, [x[crt_idx+i+1:crt_idx+i+n]])
+        i += n
+        # crt_index = dual_start_index + T*size_dual_static + (t-1) * size_dual_storage
+        λsl = vcat(λsl, [x[crt_idx+i+1: crt_idx+i+n]])
+        i += n
+        λsu = vcat(λsu, [x[crt_idx+i+1: crt_idx+i+n]])
+        i += n
+        λdsu = vcat(λdsu, [x[crt_idx+i+1: crt_idx+i+n]])
+        i += n
+        λdsl = vcat(λdsl, [x[crt_idx+i+1: crt_idx+i+n]])
+        i += n
+    end
+    @assert crt_idx + i == T*(static_length+storage_length)
 
     # sanity check for the sizes
     for t in 1:T

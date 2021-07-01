@@ -18,7 +18,7 @@ using SparseArrays
 export open_datasets, parse_network_data, load_case, create_generation_map
 
 export PowerNetwork, PowerManagementProblem, solve!
-export get_lmps, kkt_dims
+export get_lmps, kkt_dims, flatten_variables, unflatten_variables
 
 export DynamicPowerNetwork, DynamicPowerManagementProblem
 export flatten_variables_dyn, unflatten_variables_dyn
