@@ -215,11 +215,13 @@ end
 """
 An equivalent to unpack_variables_dyn, except that it acts on a `PowerManagementProblem` rather
 than on flattened variables.
+
+TODO: check the ordering
 """
 function extract_vars_t(P::PowerManagementProblem, t)
 
-    n, m = size(P.params(A))
-    _, l = size(P.params(B))
+    n, m = size(P.params.A)
+    _, l = size(P.params.B)
 
     T = length(P.g)
 
@@ -245,10 +247,10 @@ function extract_vars_t(P::PowerManagementProblem, t)
     @assert length(ν) == n
 
     storage_index = 5*T + 1
-    λdsl = P.problem.constraints[storage_index].dual
-    λdsu = P.problem.constraints[storage_index+1].dual
-    λsl = P.problem.constraints[storage_index+2].dual 
-    λsu = P.problem.constraints[storage_index+3].dual 
+    λsl = P.problem.constraints[storage_index].dual 
+    λsu = P.problem.constraints[storage_index+1].dual 
+    λdsl = P.problem.constraints[storage_index+2].dual
+    λdsu = P.problem.constraints[storage_index+3].dual
 
     # checking size consistency of dual variables
     @assert length(λdsl) == n
@@ -277,22 +279,38 @@ The variables are laid out in the following order:
 function flatten_variables_dyn(P::PowerManagementProblem)
 
     T = length(P.g)
-    # extracting primal variables
-    g = vcat([P.g[t].value[:] for t in 1:T]...)
-    p = vcat([P.p[t].value[:] for t in 1:T]...)
-    s = vcat([P.s[t].value[:] for t in 1:T]...)
-    x = [g; p; s]
-
-    # extracting dual variables
-    # a. from the subproblems: 5 constraints - first 5T elements of 
-    #    λ are for the static constraints
-    # b. from storage: 4 constraints - last 4T elements of λ are for
-    #    the storage coupling between timesteps
-    λ = vcat([c.dual for c in P.problem.constraints]...)
-
-    vars = [x; λ][:, 1]
     n, m = size(P.params.A)
     _, l = size(P.params.B)
+
+    x_static = Array{Float64}(undef, 0)
+    x_storage = Array{Float64}(undef, 0)
+    # extract the variables at each timestep
+    for t in 1:T
+        g, p, s, λpl, λpu, λgl, λgu, ν, λdsl, λdsu, λsl, λsu = extract_vars_t(P, t)
+        x_static = vcat(x_static, g, p, λpl, λpu, λgl, λgu, ν)
+        x_storage = vcat(x_storage, s, λsl, λsu, λdsl, λdsu)
+    end
+
+    vars = vcat(x_static, x_storage)
+
+
+    # TO DEPRECATE -- previous version
+    # # extracting primal variables
+    # g = vcat([P.g[t].value[:] for t in 1:T]...)
+    # p = vcat([P.p[t].value[:] for t in 1:T]...)
+    # s = vcat([P.s[t].value[:] for t in 1:T]...)
+    # x = [g; p; s]
+
+    # # extracting dual variables
+    # # a. from the subproblems: 5 constraints - first 5T elements of 
+    # #    λ are for the static constraints
+    # # b. from storage: 4 constraints - last 4T elements of λ are for
+    # #    the storage coupling between timesteps
+    # λ = vcat([c.dual for c in P.problem.constraints]...)
+
+    # vars = [x; λ][:, 1]
+    # n, m = size(P.params.A)
+    # _, l = size(P.params.B)
 
     # checking that the size is consistent with expectations
     @assert length(vars) == kkt_dims_dyn(n, m, l, T)
