@@ -65,7 +65,6 @@ sensitivity_price(P::PowerManagementProblem, ∇C, net::PowerNetwork, d) =
     sensitivity_price(P::PowerManagementProblem, ∇C, net.fq, net.fl, d, net.pmax, net.gmax, net.A, net.B)
 
 
-
 # ===
 # JACOBIANS
 # ===
@@ -114,7 +113,7 @@ function compute_jacobian_kkt(fq, fl, d, pmax, gmax, A, B, x; τ=TAU)
     ]
    
     K12 = [
-        spzeros(l, 2*m)   -I(l)       I(l);
+        spzeros(l, 2 * m)   -I(l)       I(l);
         -I(m)             I(m)        spzeros(m, 2l)
     ]
 
@@ -127,11 +126,11 @@ function compute_jacobian_kkt(fq, fl, d, pmax, gmax, A, B, x; τ=TAU)
         -Diagonal(λgl) spzeros(l, m)
     ]
 
-    K22 = Diagonal([-p-pmax; p-pmax; -g; g-gmax])
+    K22 = Diagonal([-p - pmax; p - pmax; -g; g - gmax])
     
     return [
         K11 K12 K13;
-        K21 K22 spzeros(2*(m+l), n);
-        K13' spzeros(n, 2*(m+l)+n)
+        K21 K22 spzeros(2 * (m + l), n);
+        K13' spzeros(n, 2 * (m + l) + n)
     ]
 end
