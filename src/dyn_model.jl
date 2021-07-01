@@ -150,7 +150,8 @@ function kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, P, C; τ=TAU)
     g, p, s, λpl, λpu, λgl, λgu, ν, λdsl, λdsu, λsl, λsu = unflatten_variables_dyn(x, n, m, l, T)
 
     # compute the KKTs for individual problems
-    KKT_tot = Array{Float64}(undef, 0)
+    KKT_static_tot = Array{Float64}(undef, 0)
+    KKT_storage_tot = Array{Float64}(undef, 0)
     for t in 1:T
 
         # extract primal/dual variables for the constraints of instance at time t
@@ -184,9 +185,11 @@ function kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, P, C; τ=TAU)
         @assert length(KKT_s) == 5n 
 
         # append both matrices to the general KKT operator
-        KKT_tot = vcat(KKT_tot, KKT, KKT_s) 
+        KKT_static_tot = vcat(KKT_static_tot, KKT) 
+        KKT_storage_tot = vcat(KKT_storage_tot, KKT_s) 
     end
 
+    KKT_tot = vcat(KKT_static_tot, KKT_storage_tot)
     @assert length(KKT_tot) == kkt_dims_dyn(n, m, l, T)
 
     return KKT_tot
@@ -237,8 +240,8 @@ function extract_vars_t(P::PowerManagementProblem, t)
     # checking size consistency of primal variables
     @assert length(λpl) == m
     @assert length(λpu) == m
-    @assert length(λgl) == n
-    @assert length(λgu) == n
+    @assert length(λgl) == l
+    @assert length(λgu) == l
     @assert length(ν) == n
 
     storage_index = 5*T + 1
