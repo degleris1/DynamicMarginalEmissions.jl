@@ -96,7 +96,7 @@ a network with `n` nodes and `m` edges.
 
 TODO: add `l` in docs
 """
-kkt_dims(n, m) = 3m + 3l + n
+kkt_dims(n, m, l) = 3m + 3l + n
 
 """
     kkt(x, fq, fl, d, pmax, gmax, A; τ=TAU)
@@ -119,7 +119,7 @@ function kkt(x, fq, fl, d, pmax, gmax, A, B; τ=TAU, ds=0)
         λpu .* (p - pmax);
         -λgl .* g;
         λgu .* (g - gmax);
-        A*p - B*g + d + ds;
+        A*p - B*g + d .+ ds;
     ]
 end
 
