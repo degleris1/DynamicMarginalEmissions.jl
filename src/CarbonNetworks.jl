@@ -22,7 +22,7 @@ export get_lmps, kkt_dims
 
 export DynamicPowerNetwork, DynamicPowerManagementProblem
 export flatten_variables_dyn, unflatten_variables_dyn
-export kkt_dyn
+export kkt_dyn, sensitivity_demand_dyn
 
 export sensitivity_price, sensitivity_demand
 export loss_and_grad, stochastic_loss_and_grad
@@ -32,6 +32,7 @@ include("parse_data.jl")
 include("model.jl")
 include("dyn_model.jl")
 include("sensitivity.jl")
+include("dyn_sensitivity.jl")
 include("descent.jl")
 
 

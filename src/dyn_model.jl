@@ -150,7 +150,7 @@ function kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, P, C; τ=TAU)
     g, p, s, λpl, λpu, λgl, λgu, ν, λdsl, λdsu, λsl, λsu = unflatten_variables_dyn(x, n, m, l, T)
 
     # compute the KKTs for individual problems
-    KKT_tot = []
+    KKT_tot = Array{Float64}(undef, 0)
     for t in 1:T
 
         # extract primal/dual variables for the constraints of instance at time t
