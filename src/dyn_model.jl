@@ -8,6 +8,7 @@
 # - add edge constraints
 
 INIT_COND = 0
+FINAL_COND = 0
 
 """
 A dynamic power network
@@ -107,6 +108,9 @@ function DynamicPowerManagementProblem(
             s[t - 1] - s[t] <= P # λdsl
         ])
     end
+    add_constraints!(dynProblem, [
+        s[T] == FINAL_COND
+    ])
 
     params = (fq = fq, fl = fl, d = d, pmax = pmax, gmax = gmax, A = A, B = B, P = P, C = C, τ = τ)
 
@@ -133,9 +137,10 @@ Details:
 - size of variables: T*(l + m + n)
 - static subproblem constraints: (n + 2l + 2m)*T
 - storage constraints: T*(4n)
+- 1 final constraint
 
 """
-kkt_dims_dyn(n, m, l, T) = T * (6n + 3m + 3l)
+kkt_dims_dyn(n, m, l, T) = T * (6n + 3m + 3l) + 1*n
 
 """
     kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, P, C; τ=TAU)
@@ -150,7 +155,7 @@ function kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, P, C; τ=TAU)
     T = length(fq)
 
     # decompose `x` in arrays of T variables
-    g, p, s, λpl, λpu, λgl, λgu, ν, λdsl, λdsu, λsl, λsu = unflatten_variables_dyn(x, n, m, l, T)
+    g, p, s, λpl, λpu, λgl, λgu, ν, λdsl, λdsu, λsl, λsu, ν_f = unflatten_variables_dyn(x, n, m, l, T)
 
     # compute the KKTs for individual problems
     KKT_static_tot = Array{Float64}(undef, 0)
@@ -170,17 +175,19 @@ function kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, P, C; τ=TAU)
             ν_next = ν[t + 1]
             λdsl_next = λdsl[t + 1]
             λdsu_next = λdsu[t + 1]
+            ν_f_crt = zeros(n)
         else
             ν_next = zeros(n)
             λdsl_next = zeros(n)
             λdsu_next = zeros(n)
+            ν_f_crt = ν_f
         end
 
         # compute the KKTs for the static subproblem
         KKT = kkt(x, fq[t], fl[t], d[t], pmax[t], gmax[t], A, B; τ=TAU, ds=ds)
         # add the KKts for the storage
         KKT_s = kkt_storage(
-            ν_next, ν[t], λsl[t], λsu[t], λdsl_next, λdsl[t], λdsu_next, λdsu[t], ds, s[t], P, C
+            ν_next, ν[t], λsl[t], λsu[t], λdsl_next, λdsl[t], λdsu_next, λdsu[t], ds, s[t], ν_f_crt, P, C
             ) 
 
         # check the sizes of both matrices computed above
@@ -192,7 +199,10 @@ function kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, P, C; τ=TAU)
         KKT_storage_tot = vcat(KKT_storage_tot, KKT_s) 
     end
 
-    KKT_tot = vcat(KKT_static_tot, KKT_storage_tot)
+    # adding the final constraint for storage
+    KKT_final = ν_f .* (s[T] .- FINAL_COND)
+
+    KKT_tot = vcat(KKT_static_tot, KKT_storage_tot, KKT_final)
     @assert length(KKT_tot) == kkt_dims_dyn(n, m, l, T)
 
     return KKT_tot
@@ -204,10 +214,10 @@ kkt_dyn(x, net::DynamicPowerNetwork, d) =
 """
 Compute the terms in the kkt matrix that are only related to the storage
 """
-function kkt_storage(ν_next, ν_t, λsl, λsu, λdsl_next, λdsl_t, λdsu_next, λdsu_t, ds, s, P, C)
+function kkt_storage(ν_next, ν_t, λsl, λsu, λdsl_next, λdsl_t, λdsu_next, λdsu_t, ds, s, ν_f, P, C)
     
     return [
-        (λsu - λsl) + (λdsu_t - λdsl_t) - (λdsu_next - λdsl_next) + (ν_t - ν_next);
+        (λsu - λsl) + (λdsu_t - λdsl_t) - (λdsu_next - λdsl_next) + (ν_t - ν_next) - ν_f;
         λsl .* (-s);
         λsu .* (s - C);
         λdsu_t .* (ds - P);
@@ -259,7 +269,13 @@ function extract_vars_t(P::PowerManagementProblem, t)
     @assert length(λsl) == n
     @assert length(λsu) == n
 
-    return g, p, s, λpl, λpu, λgl, λgu, ν, λdsl, λdsu, λsl, λsu
+    if t == T
+        ν_f = P.problem.constraints[end].dual
+    else
+        ν_f = nothing
+    end
+
+    return g, p, s, λpl, λpu, λgl, λgu, ν, λdsl, λdsu, λsl, λsu, ν_f
 end
 
 """
@@ -286,17 +302,19 @@ function flatten_variables_dyn(P::PowerManagementProblem)
 
     x_static = Array{Float64}(undef, 0)
     x_storage = Array{Float64}(undef, 0)
+    ν_f = nothing
 
     # extract the variables at each timestep
     for t in 1:T
-        g, p, s, λpl, λpu, λgl, λgu, ν, λdsl, λdsu, λsl, λsu = extract_vars_t(P, t)
+        g, p, s, λpl, λpu, λgl, λgu, ν, λdsl, λdsu, λsl, λsu, ν_f = extract_vars_t(P, t)
         x_static = vcat(x_static, g, p, λpl, λpu, λgl, λgu, ν)
         x_storage = vcat(x_storage, s, λsl, λsu, λdsu, λdsl)
     end
-    vars = vcat(x_static, x_storage)
+    vars = vcat(x_static, x_storage, ν_f)
 
     @assert length(x_storage) == 5 * n * T
     @assert length(x_static) == T * (3l + 3m + n) 
+    @assert length(ν_f) == n
 
     # checking that the size is consistent with expectations
     @assert length(vars) == kkt_dims_dyn(n, m, l, T)
@@ -359,6 +377,8 @@ function unflatten_variables_dyn(x, n, m, l, T)
     end
     @assert crt_idx + i == T * (static_length + storage_length)
 
+    ν_f = x[end-n+1:end]
+
     # sanity check for the sizes
     for t in 1:T
         @assert length(g[t]) == l
@@ -374,7 +394,8 @@ function unflatten_variables_dyn(x, n, m, l, T)
         @assert length(λdsl[t]) == n
         @assert length(λdsu[t]) == n
     end
+    @assert length(ν_f) == n
 
-    return g, p, s, λpl, λpu, λgl, λgu, ν, λdsl, λdsu, λsl, λsu
+    return g, p, s, λpl, λpu, λgl, λgu, ν, λdsl, λdsu, λsl, λsu, ν_f
 end 
 
