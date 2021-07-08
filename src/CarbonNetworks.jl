@@ -26,11 +26,13 @@ export kkt_dyn, sensitivity_demand_dyn, kkt_dims_dyn
 
 export sensitivity_price, sensitivity_demand
 export loss_and_grad, stochastic_loss_and_grad
+export compute_mefs
 
 # Files
-include("parse_data.jl")
 include("model.jl")
 include("dyn_model.jl")
+
+include("parse_data.jl")
 include("sensitivity.jl")
 include("dyn_sensitivity.jl")
 include("descent.jl")

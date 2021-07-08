@@ -25,3 +25,28 @@ function sensitivity_demand_dyn(P::PowerManagementProblem, net::DynamicPowerNetw
 
     return ∇C_θ
 end
+
+
+"""
+    compute_mefs(P::PowerManagementProblem, net::DynamicPowerNetwork, d, c, t)
+
+Compute the marginal emission factors at time `t` given carbon costs `c`
+and demands `d`
+"""
+function compute_mefs(P::PowerManagementProblem, net::DynamicPowerNetwork, d, c, t)
+    # Extract dimensions
+    T = length(d)
+    n, m, l = get_problem_dims(net)
+    static_dim = kkt_dims(n, m, l)
+
+    # Construct ∇_x C(x)
+    ∇C_dyn = zeros(kkt_dims_dyn(n, m, l, T))
+    idx = 0
+    for _ in 1:T
+        ∇C_dyn[idx+1 : idx+l] .= c
+        idx += static_dim
+    end
+    
+    # Return sensitivity
+    return sensitivity_demand_dyn(P, net, d, ∇C_dyn, t)
+end

@@ -1,6 +1,20 @@
 # Code for computing sensitivities with respect to various parameters
 
 
+"""
+    get_problem_dims(net::Union{PowerNetwork, DynamicPowerNetwork})
+
+Return `(n, m, l)`, where `n` is the number of nodes in the network,
+`m` is the number of edges, and `l` is the number of generators.
+"""
+function get_problem_dims(net::Union{PowerNetwork, DynamicPowerNetwork})
+    n, m = size(net.A)
+    n, l = size(net.B)
+
+    return n, m, l
+end
+
+
 
 
 # ===
@@ -30,6 +44,23 @@ end
 
 sensitivity_demand(P::PowerManagementProblem, ∇C, net::PowerNetwork, d) = 
     sensitivity_demand(P::PowerManagementProblem, ∇C, net.fq, net.fl, d, net.pmax, net.gmax, net.A, net.B)
+
+"""
+    compute_mefs(P::PowerManagementProblem, net::PowerNetwork, d, c)
+
+Compute the marginal emission factors given carbon costs `c` and demand `d`.
+"""
+function compute_mefs(P::PowerManagementProblem, net::PowerNetwork, d, c)
+    # Extract dimensions
+    n, m, l = get_problem_dims(net)
+
+    # Construct ∇_x C(x)
+    ∇C = zeros(kkt_dims(n, m, l))
+	∇C[1:l] .= c
+
+    # Return sensitivity
+	return sensitivity_demand(P, ∇C, net, d)
+end
 
 """
     sensitivity_price(P::PowerManagementProblem, ∇C, fq, fl, d, pmax, gmax, A)

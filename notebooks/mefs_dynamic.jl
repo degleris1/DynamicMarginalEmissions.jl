@@ -93,10 +93,10 @@ md"
 net = PowerNetwork(fq, fl, pmax, gmax, A, B);
 
 # ╔═╡ f4ab0602-3954-4a5d-b770-3d9e455b500a
-opf_static = PowerManagementProblem(net, ds[1]);
-
-# ╔═╡ 3f7511e5-b34d-4dec-b337-bc691671895c
-solve!(opf_static, OPT, verbose=true)
+begin
+	opf_static = PowerManagementProblem(net, ds[1])
+	solve!(opf_static, OPT, verbose=true)
+end;
 
 # ╔═╡ c6e83723-ab3d-41e0-b323-07283ce72281
 begin
@@ -152,10 +152,10 @@ P = rand(Uniform(0.2, 0.3), n) #.* C
 net_dynamic = DynamicPowerNetwork(fqs, fls, pmaxs, gmaxs, A, B, P, C);
 
 # ╔═╡ bc9e7ae7-41b7-4eba-8e40-eedeb0ea47bd
-opf_dynamic = DynamicPowerManagementProblem(net_dynamic, ds);
-
-# ╔═╡ 6a30d189-0dca-4d88-aacb-5df1f1e0aa36
-solve!(opf_dynamic, ECOS.Optimizer, verbose=true)
+begin
+	opf_dynamic = DynamicPowerManagementProblem(net_dynamic, ds)
+	solve!(opf_dynamic, ECOS.Optimizer, verbose=true)
+end;
 
 # ╔═╡ f0d4f300-af94-4ed9-8e1d-e27d76f0de69
 begin
@@ -188,39 +188,21 @@ c = rand(Exponential(2), l) .+ 1
 
 # ╔═╡ 7214657b-270c-4387-89a9-3d4994f9212e
 # Static MEFs
-begin
-	static_dim = kkt_dims(n, m, l)
-	∇C = zeros(static_dim);
-	∇C[1:l] .= c
-	
-	mef_static = sensitivity_demand(opf_static, ∇C, net, ds[1]);
-end
+mef_static = compute_mefs(opf_static, net, ds[1], c);
 
 # ╔═╡ 09a5a187-7ec4-4e91-8dc8-619bc9f7653e
 t = 1
 
 # ╔═╡ a2a0f75c-9adc-4a63-9291-205d92036df2
-# Dynamic MEFs, without storage
-begin
-	∇C_dyn = zeros(kkt_dims_dyn(n, m, l, T))
-	
-	idx = 0
-	for t in 1:T
-		∇C_dyn[idx+1 : idx+l] .= c
-		idx += static_dim
-	end
-	
-	mef_no_cap = sensitivity_demand_dyn(opf_no_cap, net_no_cap, ds, ∇C_dyn, t)
-end
+# Dynamic MEFs, without storage	
+mef_no_cap = compute_mefs(opf_no_cap, net_no_cap, ds, c, t);
 
 # ╔═╡ f40d58fd-2790-4733-a660-81ec67603b5e
 @show norm(mef_static - mef_no_cap)
 
 # ╔═╡ 7edf8ad7-5371-4684-85fe-73df835492b2
 # Dynamic MEFs, with storage
-begin
-	mef_dynamic = sensitivity_demand_dyn(opf_dynamic, net_dynamic, ds, ∇C_dyn, t)
-end
+mef_dynamic = compute_mefs(opf_dynamic, net_dynamic, ds, c, t);
 
 # ╔═╡ 3739a541-1687-49b8-9c52-e08da51a3014
 begin
@@ -255,7 +237,7 @@ begin
 		println("Starting C=$C_rel")
 		
 		# Compute MEFs
-		mefs = [sensitivity_demand_dyn(opf_C, net_C, ds, ∇C_dyn, t) for t in 1:T]
+		mefs = [compute_mefs(opf_C, net_C, ds, c, t) for t in 1:T]
 		push!(results, mefs)
 		println("C=$C_rel done")
 	end
@@ -276,11 +258,8 @@ begin
 		# Plot
 		plot!(mef_temporal, lw=4, label="C=$C_rel")
 	end
-	plot!(ylim=(2.5, 4.5))
+	plot!() #ylim=(0, 6))
 end
-
-# ╔═╡ 114adc7b-b8e8-49ca-973e-7d2994def4b9
-
 
 # ╔═╡ Cell order:
 # ╠═26a4178a-de77-11eb-1fa3-5fc861d32904
@@ -293,7 +272,6 @@ end
 # ╟─eea80101-05d7-4f01-bab8-b89d0aef7911
 # ╠═ea6cb153-e45c-480b-a36d-4cf7711def62
 # ╠═f4ab0602-3954-4a5d-b770-3d9e455b500a
-# ╠═3f7511e5-b34d-4dec-b337-bc691671895c
 # ╠═c6e83723-ab3d-41e0-b323-07283ce72281
 # ╠═ae595fbf-f501-49e1-93f4-217646c29396
 # ╠═88490287-4f63-4c45-bf58-18df9fe711b6
@@ -307,7 +285,6 @@ end
 # ╠═fb2c65d0-62aa-4b14-92a7-951c1959030d
 # ╠═bd45770e-6f4e-4420-9818-628c1e521dd4
 # ╠═bc9e7ae7-41b7-4eba-8e40-eedeb0ea47bd
-# ╠═6a30d189-0dca-4d88-aacb-5df1f1e0aa36
 # ╠═f0d4f300-af94-4ed9-8e1d-e27d76f0de69
 # ╠═14cd88e7-fb7d-4844-b12c-1c452984acb5
 # ╠═8fdf7946-a939-496c-be3c-5d49fe755675
@@ -326,4 +303,3 @@ end
 # ╠═642c826c-6b2b-4626-95f4-cef256046784
 # ╠═74419b49-55ce-40d4-bce7-d6a1db40448a
 # ╠═b3b68d17-a83b-4aa7-93e8-b740855e58fd
-# ╠═114adc7b-b8e8-49ca-973e-7d2994def4b9

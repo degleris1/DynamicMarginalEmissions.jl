@@ -78,8 +78,7 @@ Return the locational marginal prices of `P` (assumes the problem has
 already been solved). The LMPs are the dual variables of the power
 conservation constraint.
 """
-get_lmps(P::PowerManagementProblem) = 
-    P.problem.constraints[end].dual[:, 1]
+get_lmps(P::PowerManagementProblem) = P.problem.constraints[end].dual[:, 1]
 
 
 
