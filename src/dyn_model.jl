@@ -49,13 +49,12 @@ DynamicPowerNetwork(fq, fl, pmax, gmax, A, B, P, C; τ=TAU) =
     DynamicPowerManagementProblem(fq, fl, d, pmax, gmax, A, B, P, C; τ=TAU)
 
 The arguments to DynamicPowerManagementProblem are the same as for PowerManagementProblem
-except they are arrays, with dimension equal to the time horizon (i.e. number of timesteps) T. 
+except `fq, fl, d, pmax, gmax` are arrays of dimension `T`, where `T` is
+the time horizon. 
 
 Additional arguments are:
 - `P`: the maximum charge/discharge power. 
 - `C`: the maximum SOC of the batteries.
-
-TODO: parameterize the management of initial and terminal constraints
 """
 function DynamicPowerManagementProblem(
     fq, fl, d, pmax, gmax, A, B, P, C; τ=TAU
@@ -72,8 +71,7 @@ function DynamicPowerManagementProblem(
         # specify another variable for s_0
         [PowerManagementProblem(
             fq[1], fl[1], d[1], pmax[1], gmax[1], A, B; ds=s[1] - INIT_COND
-        )]
-        ,
+        )],
         # then iterating over all the timesteps 
         [PowerManagementProblem(
             fq[t], fl[t], d[t], pmax[t], gmax[t], A, B; ds=s[t] - s[t - 1]
@@ -85,6 +83,7 @@ function DynamicPowerManagementProblem(
     p_T = [sub.p for sub in subproblems]
 
     dynProblem = minimize(objective)
+    
     # adding the constraints of individual subproblems
     for sub in subproblems
         add_constraints!(dynProblem, sub.problem.constraints)
@@ -108,7 +107,10 @@ function DynamicPowerManagementProblem(
         ])
     end
 
-    params = (fq = fq, fl = fl, d = d, pmax = pmax, gmax = gmax, A = A, B = B, P = P, C = C, τ = τ)
+    params = (
+        fq = fq, fl = fl, d = d, pmax = pmax, gmax = gmax, 
+        A = A, B = B, P = P, C = C, τ = τ
+    )
 
     return PowerManagementProblem(dynProblem, p_T, g_T, s, params)
 end
@@ -116,7 +118,7 @@ end
 DynamicPowerManagementProblem(net::DynamicPowerNetwork, d) =
     DynamicPowerManagementProblem(
         net.fq, net.fl, d, net.pmax, net.gmax, net.A, net.B, net.P, net.C; τ=net.τ
-        )
+    )
 
 # ===
 # KKT OPERATOR for the DynPMP
@@ -133,7 +135,6 @@ Details:
 - size of variables: T*(l + m + n)
 - static subproblem constraints: (n + 2l + 2m)*T
 - storage constraints: T*(4n)
-
 """
 kkt_dims_dyn(n, m, l, T) = T * (6n + 3m + 3l)
 
@@ -150,11 +151,12 @@ function kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, P, C; τ=TAU)
     T = length(fq)
 
     # decompose `x` in arrays of T variables
-    g, p, s, λpl, λpu, λgl, λgu, ν, λdsl, λdsu, λsl, λsu = unflatten_variables_dyn(x, n, m, l, T)
+    g, p, s, λpl, λpu, λgl, λgu, ν, λdsl, λdsu, λsl, λsu = 
+        unflatten_variables_dyn(x, n, m, l, T)
 
     # compute the KKTs for individual problems
-    KKT_static_tot = Array{Float64}(undef, 0)
-    KKT_storage_tot = Array{Float64}(undef, 0)
+    KKT_static_tot = Float64[]
+    KKT_storage_tot = Float64[]
     for t in 1:T
 
         # extract primal/dual variables for the constraints of instance at time t
@@ -180,8 +182,9 @@ function kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, P, C; τ=TAU)
         KKT = kkt(x, fq[t], fl[t], d[t], pmax[t], gmax[t], A, B; τ=TAU, ds=ds)
         # add the KKts for the storage
         KKT_s = kkt_storage(
-            ν_next, ν[t], λsl[t], λsu[t], λdsl_next, λdsl[t], λdsu_next, λdsu[t], ds, s[t], P, C
-            ) 
+            ν_next, ν[t], λsl[t], λsu[t], λdsl_next, λdsl[t], λdsu_next, 
+            λdsu[t], ds, s[t], P, C
+        ) 
 
         # check the sizes of both matrices computed above
         @assert length(KKT) == 3l + 3m + n
@@ -198,14 +201,14 @@ function kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, P, C; τ=TAU)
     return KKT_tot
 end
 
-kkt_dyn(x, net::DynamicPowerNetwork, d) =
-    kkt_dyn(x, net.fq, net.fl, d, net.pmax, net.gmax, net.A, net.B, net.P, net.C; τ=net.τ)
+kkt_dyn(x, net::DynamicPowerNetwork, d) = kkt_dyn(
+    x, net.fq, net.fl, d, net.pmax, net.gmax, net.A, net.B, net.P, net.C; τ=net.τ
+)
 
 """
 Compute the terms in the kkt matrix that are only related to the storage
 """
 function kkt_storage(ν_next, ν_t, λsl, λsu, λdsl_next, λdsl_t, λdsu_next, λdsu_t, ds, s, P, C)
-    
     return [
         (λsu - λsl) + (λdsu_t - λdsl_t) - (λdsu_next - λdsl_next) + (ν_t - ν_next);
         λsl .* (-s);

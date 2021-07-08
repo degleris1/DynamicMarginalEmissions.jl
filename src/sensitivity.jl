@@ -21,7 +21,7 @@ function sensitivity_demand(P::PowerManagementProblem, ∇C, fq, fl, d, pmax, gm
     _, ∂K_xT = Zygote.forward_jacobian(x -> kkt(x, fq, fl, d, pmax, gmax, A, B), x)
     _, ∂K_θT = Zygote.forward_jacobian(d -> kkt(x, fq, fl, d, pmax, gmax, A, B), d)
 
-    # Now compute ∇C(g*(θ)) = -∂K_θ' * (∂K_x' * v)
+    # Now compute ∇C(g*(θ)) = -∂K_θ' * inv(∂K_x') * v
     v = ∂K_xT \ ∇C
     ∇C_θ = -∂K_θT * v
 
