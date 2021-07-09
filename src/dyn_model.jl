@@ -48,13 +48,17 @@ DynamicPowerNetwork(fq, fl, pmax, gmax, A, B, P, C; τ=TAU) =
 """
     DynamicPowerManagementProblem(fq, fl, d, pmax, gmax, A, B, P, C; τ=TAU)
 
-The arguments to DynamicPowerManagementProblem are the same as for PowerManagementProblem
-except `fq, fl, d, pmax, gmax` are arrays of dimension `T`, where `T` is
-the time horizon. 
+Define a PowerManagementProblem over `T` timesteps, where timesteps can be coupled
+via the presence of nodal storage. Arguments are arrays of dimension `T`. `fq` and `fl`
+are the quadratic and linear components of the generator costs, respectively. `d` is the 
+nodal demand. `pmax`, `gmax` are the maximum transmission and generation power. 
+`A` is the incidence matrix, `B` is a generator-to-node mapping. `P` and `C` are the maximum
+charge/discharge power for batteries and the maximum SOC, respectively. 
 
-Additional arguments are:
-- `P`: the maximum charge/discharge power. 
-- `C`: the maximum SOC of the batteries.
+Note:
+-----
+- Nodal storage variables are constrained to start at a value given by INIT_COND. 
+- There is currently no final condition on the storage. 
 """
 function DynamicPowerManagementProblem(
     fq, fl, d, pmax, gmax, A, B, P, C; τ=TAU
@@ -63,7 +67,6 @@ function DynamicPowerManagementProblem(
     n, _ = size(A)
 
     # Define a storage variable for n nodes over T timesteps
-    # TODO: for now the edge constraints are neglected
     s = [Variable(n) for _ in 1:T]
 
     subproblems = vcat(
@@ -128,7 +131,7 @@ DynamicPowerManagementProblem(net::DynamicPowerNetwork, d) =
     kkt_dims_dyn(n, m, l, T)
 
 Compute the dimensions of the input / output of the KKT operator for
-a network with `n` nodes, `m` edges, `l` generators for `T` timesteps
+a network with `n` nodes, `m` edges, `l` generators for `T` timesteps.
 
 Details: 
 --------
