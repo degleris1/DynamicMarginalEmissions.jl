@@ -24,6 +24,7 @@ mutable struct PowerManagementProblem
     problem::Problem
     p
     g
+    s
     params
 end
 
@@ -37,7 +38,7 @@ incidence matrix `A`.
 The parameter `τ` is a regularization weight used to make the problem
 strongly convex by adding τ ∑ᵢ pᵢ² to the objective.
 """
-function PowerManagementProblem(fq, fl, d, pmax, gmax, A, B; τ=TAU)
+function PowerManagementProblem(fq, fl, d, pmax, gmax, A, B; τ=TAU, ds=0)
     n, m = size(A)
     n, l = size(B)
     g = Variable(l)
@@ -53,12 +54,12 @@ function PowerManagementProblem(fq, fl, d, pmax, gmax, A, B; τ=TAU)
         p <= pmax,
         -g <= 0, 
         g <= gmax,
-        0 == A*p - B*g + d,
+        0 == A*p - B*g + d + ds,
     ])
 
     params = (fq=fq, fl=fl, d=d, pmax=pmax, gmax=gmax, A=A, B=B, τ=τ)
 
-    return PowerManagementProblem(problem, p, g, params)
+    return PowerManagementProblem(problem, p, g, zeros(n), params)
 end
 
 PowerManagementProblem(net::PowerNetwork, d) =
@@ -77,8 +78,7 @@ Return the locational marginal prices of `P` (assumes the problem has
 already been solved). The LMPs are the dual variables of the power
 conservation constraint.
 """
-get_lmps(P::PowerManagementProblem) = 
-    P.problem.constraints[end].dual[:, 1]
+get_lmps(P::PowerManagementProblem) = P.problem.constraints[end].dual[:, 1]
 
 
 
@@ -92,6 +92,8 @@ get_lmps(P::PowerManagementProblem) =
 
 Compute the dimensions of the input / output of the KKT operator for
 a network with `n` nodes and `m` edges.
+
+TODO: add `l` in docs
 """
 kkt_dims(n, m, l) = 3m + 3l + n
 
@@ -101,7 +103,7 @@ kkt_dims(n, m, l) = 3m + 3l + n
 Compute the KKT operator applied to `x`, with parameters given by `fq`,
 `fl`, `d`, `pmax`, `gmax`, `A`, and `τ`.
 """
-function kkt(x, fq, fl, d, pmax, gmax, A, B; τ=TAU)
+function kkt(x, fq, fl, d, pmax, gmax, A, B; τ=TAU, ds=0)
     n, m = size(A)
     n, l = size(B)
 
@@ -116,12 +118,12 @@ function kkt(x, fq, fl, d, pmax, gmax, A, B; τ=TAU)
         λpu .* (p - pmax);
         -λgl .* g;
         λgu .* (g - gmax);
-        A*p - B*g + d;
+        A*p - B*g + d .+ ds;
     ]
 end
 
 kkt(x, net::PowerNetwork, d) =
-    kkt(x, net.fq, net.fl, d, net.pmax, net.gmax, net.A, net.B; τ=net.τ)
+    kkt(x, net.fq, net.fl, d, net.pmax, net.gmax, net.A, net.B; τ=net.τ, ds=zeros(size(net.A)[1]))
 
 function flatten_variables(P::PowerManagementProblem)
     x = [evaluate(P.g); evaluate(P.p)]
@@ -134,7 +136,6 @@ function unflatten_variables(x, n, m, l)
     
     g =  x[i+1:i+l]
     i += l
-    
     p = x[i+1:i+m]
     i += m
     
@@ -149,6 +150,5 @@ function unflatten_variables(x, n, m, l)
     i += l
     
     ν = x[i+1:i+n]
-    
     return g, p, λpl, λpu, λgl, λgu, ν
 end

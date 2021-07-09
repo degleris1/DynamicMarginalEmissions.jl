@@ -1,12 +1,33 @@
 # Code for computing sensitivities with respect to various parameters
 
 
+"""
+    get_problem_dims(net::Union{PowerNetwork, DynamicPowerNetwork})
+
+Return `(n, m, l)`, where `n` is the number of nodes in the network,
+`m` is the number of edges, and `l` is the number of generators.
+"""
+function get_problem_dims(net::Union{PowerNetwork, DynamicPowerNetwork})
+    n, m = size(net.A)
+    n, l = size(net.B)
+
+    return n, m, l
+end
+
+
 
 
 # ===
 # SENSITIVITIES
 # ===
 
+"""
+    sensitivity_demand(P::PowerManagementProblem, ∇C, fq, fl, d, pmax, gmax, A, B)
+
+Compute `∇_d C( x_opt(d) )`, where `x_opt(d)` is the optimal solution (primal
+and dual variables) of the power management problem `P` with parameters 
+`(fq, fl, d, pmax, gmax, A, B)` and `∇C` is the gradient `∇_x C(x)`.
+"""
 function sensitivity_demand(P::PowerManagementProblem, ∇C, fq, fl, d, pmax, gmax, A, B)
     x = flatten_variables(P)
 
@@ -14,7 +35,7 @@ function sensitivity_demand(P::PowerManagementProblem, ∇C, fq, fl, d, pmax, gm
     _, ∂K_xT = Zygote.forward_jacobian(x -> kkt(x, fq, fl, d, pmax, gmax, A, B), x)
     _, ∂K_θT = Zygote.forward_jacobian(d -> kkt(x, fq, fl, d, pmax, gmax, A, B), d)
 
-    # Now compute ∇C(g*(θ)) = -∂K_θ' * (∂K_x' * v)
+    # Now compute ∇C(g*(θ)) = -∂K_θ' * inv(∂K_x') * v
     v = ∂K_xT \ ∇C
     ∇C_θ = -∂K_θT * v
 
@@ -23,6 +44,23 @@ end
 
 sensitivity_demand(P::PowerManagementProblem, ∇C, net::PowerNetwork, d) = 
     sensitivity_demand(P::PowerManagementProblem, ∇C, net.fq, net.fl, d, net.pmax, net.gmax, net.A, net.B)
+
+"""
+    compute_mefs(P::PowerManagementProblem, net::PowerNetwork, d, c)
+
+Compute the marginal emission factors given carbon costs `c` and demand `d`.
+"""
+function compute_mefs(P::PowerManagementProblem, net::PowerNetwork, d, c)
+    # Extract dimensions
+    n, m, l = get_problem_dims(net)
+
+    # Construct ∇_x C(x)
+    ∇C = zeros(kkt_dims(n, m, l))
+	∇C[1:l] .= c
+
+    # Return sensitivity
+	return sensitivity_demand(P, ∇C, net, d)
+end
 
 """
     sensitivity_price(P::PowerManagementProblem, ∇C, fq, fl, d, pmax, gmax, A)
@@ -56,7 +94,6 @@ end
 
 sensitivity_price(P::PowerManagementProblem, ∇C, net::PowerNetwork, d) = 
     sensitivity_price(P::PowerManagementProblem, ∇C, net.fq, net.fl, d, net.pmax, net.gmax, net.A, net.B)
-
 
 
 # ===
@@ -107,7 +144,7 @@ function compute_jacobian_kkt(fq, fl, d, pmax, gmax, A, B, x; τ=TAU)
     ]
    
     K12 = [
-        spzeros(l, 2*m)   -I(l)       I(l);
+        spzeros(l, 2 * m)   -I(l)       I(l);
         -I(m)             I(m)        spzeros(m, 2l)
     ]
 
@@ -120,11 +157,11 @@ function compute_jacobian_kkt(fq, fl, d, pmax, gmax, A, B, x; τ=TAU)
         -Diagonal(λgl) spzeros(l, m)
     ]
 
-    K22 = Diagonal([-p-pmax; p-pmax; -g; g-gmax])
+    K22 = Diagonal([-p - pmax; p - pmax; -g; g - gmax])
     
     return [
         K11 K12 K13;
-        K21 K22 spzeros(2*(m+l), n);
-        K13' spzeros(n, 2*(m+l)+n)
+        K21 K22 spzeros(2 * (m + l), n);
+        K13' spzeros(n, 2 * (m + l) + n)
     ]
 end

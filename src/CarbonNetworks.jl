@@ -17,15 +17,23 @@ using SparseArrays
 export open_datasets, parse_network_data, load_case, create_generation_map
 
 export PowerNetwork, PowerManagementProblem, solve!
-export get_lmps, kkt_dims
+export get_lmps, kkt_dims, flatten_variables, unflatten_variables
+
+export DynamicPowerNetwork, DynamicPowerManagementProblem
+export flatten_variables_dyn, unflatten_variables_dyn
+export kkt_dyn, sensitivity_demand_dyn, kkt_dims_dyn
 
 export sensitivity_price, sensitivity_demand
 export loss_and_grad, stochastic_loss_and_grad
+export compute_mefs
 
 # Files
-include("parse_data.jl")
 include("model.jl")
+include("dyn_model.jl")
+
+include("parse_data.jl")
 include("sensitivity.jl")
+include("dyn_sensitivity.jl")
 include("descent.jl")
 
 
