@@ -1,7 +1,6 @@
 module CarbonNetworks
 
 # Module Imports
-using Zygote: length
 using CSV
 using Convex
 using DataFrames

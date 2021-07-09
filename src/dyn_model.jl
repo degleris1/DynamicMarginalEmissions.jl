@@ -290,8 +290,8 @@ function flatten_variables_dyn(P::PowerManagementProblem)
     n, m = size(P.params.A)
     _, l = size(P.params.B)
 
-    x_static = Array{Float64}(undef, 0)
-    x_storage = Array{Float64}(undef, 0)
+    x_static = Float64[]
+    x_storage = Float64[]
 
     # extract the variables at each timestep
     for t in 1:T
