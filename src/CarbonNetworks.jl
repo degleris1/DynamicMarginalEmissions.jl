@@ -1,6 +1,7 @@
 module CarbonNetworks
 
 # Module Imports
+using Base: num_bit_chunks
 using CSV
 using Convex
 using DataFrames

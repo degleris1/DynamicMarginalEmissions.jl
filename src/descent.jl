@@ -2,21 +2,23 @@
 
 function loss_and_grad(case_list, f̂q, f̂l, M, pmax, gmax, A, B)
     n, m = size(A)
+    n, l = size(B)
+    lp, l = size(M)
 
     L = 0.0
-    dfq, dfl = zeros(n), zeros(n)
+    dfq, dfl = zeros(l), zeros(l)
     
     T = length(case_list)
-    ∇L = zeros(kkt_dims(n, m))
+    ∇L = zeros(kkt_dims(n, m, l))
 
     for case in case_list
         ĝ, opf, params = solve_pmp(f̂q, f̂l, case.d, pmax, gmax, A, B) 
 
         # Loss is averaged over cases AND generators, in order
         # to have a rough sense of error per generator
-        L += (1/2) * norm(M*ĝ - case.g)^2 / (T*n)
+        L += (1/2) * norm(M*ĝ - case.g)^2 / (T*lp)
         
-        ∇L[1:n] .= M' * (M*ĝ - case.g)
+        ∇L[1:l] .= M' * (M*ĝ - case.g)
         dfq_case, dfl_case = sensitivity_price(opf, ∇L, params...)
         dfq .+= dfq_case / T
         dfl .+= dfl_case / T
