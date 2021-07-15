@@ -8,13 +8,17 @@ using ECOS
 using LightGraphs
 using LinearAlgebra
 using SimpleWeightedGraphs
+using SparseArrays
 using Zygote
 
 using Base.Iterators: product
-using SparseArrays
+using PowerModels: parse_file, make_basic_network, make_per_unit!,
+    calc_basic_incidence_matrix
+
 
 # Exports
 export open_datasets, parse_network_data, load_case, create_generation_map
+export load_synthetic_network
 
 export PowerNetwork, PowerManagementProblem, solve!
 export get_lmps, kkt_dims, flatten_variables, unflatten_variables
