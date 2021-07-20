@@ -9,6 +9,7 @@ using LightGraphs
 using LinearAlgebra
 using SimpleWeightedGraphs
 using Zygote
+using Plots
 
 using Base.Iterators: product
 using SparseArrays
@@ -26,6 +27,7 @@ export kkt_dyn, sensitivity_demand_dyn, kkt_dims_dyn
 export sensitivity_price, sensitivity_demand
 export loss_and_grad, stochastic_loss_and_grad
 export compute_mefs
+export plot_sensitivity_check
 
 # Files
 include("model.jl")

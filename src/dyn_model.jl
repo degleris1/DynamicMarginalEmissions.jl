@@ -142,6 +142,11 @@ Details:
 kkt_dims_dyn(n, m, l, T) = T * (6n + 3m + 3l)
 
 """
+add doc
+"""
+storage_kkt_dims(n) = 5n
+
+"""
     kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, P, C; τ=TAU)
 
 Compute the KKT operator applied to `x`, with parameters given by `fq`,
