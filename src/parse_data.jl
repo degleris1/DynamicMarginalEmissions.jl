@@ -127,6 +127,9 @@ function load_case(name, agg_nodes, B, nodes; resources=BASE_RESOURCES)
     return d, g, case
 end
 
+"""
+    load_synthetic_network(case_name)
+"""
 function load_synthetic_network(case_name)
     # Load network data
     network_data = parse_file(joinpath("../data", case_name));
@@ -163,6 +166,65 @@ function load_synthetic_network(case_name)
 	d = _make_d(load, n)
 
     return θ, d, net
+end
+
+"""
+    load_demand_data(case_name::String; source="caiso", normalize_rows=false)
+"""
+function load_demand_data(case_name::String; source="caiso", normalize_rows=false)
+    # Load dataframe
+    filename = join([source, "demand", case_name, ".csv"], "_", "") 
+    path = joinpath("../data/", filename)
+    df = DataFrame(CSV.File(path))
+
+    # Parse data
+    groups = unique(df.GROUP)
+    hours = unique(df.OPR_HR)
+
+    n, T = length(groups), length(hours)
+	
+	data = zeros(T, n)
+	for gr in groups
+		df_gr = filter(row -> row.GROUP == gr, df)
+		data[:, gr] = sort(df_gr, :OPR_HR).MW
+	end
+	
+	if normalize_rows
+		data ./= maximum(data, dims=1)
+	end
+
+    return data
+end
+
+"""
+    load_renewable_data(case_name::String; source="caiso", normalize_rows=false)
+"""
+function load_renewable_data(case_name::String; source="caiso", normalize_rows=false)
+    # Load dataframe
+    filename = join([source, "renewables", case_name, ".csv"], "_", "") 
+    path = joinpath("../data/", filename)
+    df = DataFrame(CSV.File(path))
+
+    # Parse data
+    groups = unique(df.GROUP)
+    hours = unique(df.OPR_HR)
+
+    n, T = length(groups), length(hours)
+	
+	data = zeros(T, n)
+    labels = []
+	for gr in groups
+		df_gr = filter(row -> row.GROUP == gr, df)
+		data[:, gr] = sort(df_gr, :OPR_HR).MW
+
+        push!(labels, lowercase(df_gr.RENEWABLE_TYPE[1]))
+	end
+	
+	if normalize_rows
+		data ./= maximum(data, dims=1)
+	end
+
+    return data, labels
 end
 
 

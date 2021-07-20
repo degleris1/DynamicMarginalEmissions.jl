@@ -18,7 +18,7 @@ using PowerModels: parse_file, make_basic_network, make_per_unit!,
 
 # Exports
 export open_datasets, parse_network_data, load_case, create_generation_map
-export load_synthetic_network
+export load_synthetic_network, load_demand_data, load_renewable_data
 
 export PowerNetwork, PowerManagementProblem, solve!
 export get_lmps, kkt_dims, flatten_variables, unflatten_variables
