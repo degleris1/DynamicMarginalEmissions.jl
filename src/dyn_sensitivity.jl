@@ -85,16 +85,17 @@ function compute_var_sensitivity(P::PowerManagementProblem, net::DynamicPowerNet
 
     id_vec = zeros(kkt_dims_dyn(n, m, l, T))
     ref_val = 0
-    if varName=='g'
+    if varName == 'g'
         idx = (t-1)*static_dim + unit
         ref_val = P.g[t].value[unit]
-    elseif varName=='p'
+    elseif varName == 'p'
         idx = (t-1)*static_dim + l + unit
         ref_val = P.p[t].value[unit]
-    elseif varName=='s'
+    elseif varName == 's'
         idx = T*static_dim + (t-1) * storage_kkt_dims(n) + unit
         ref_val = P.s[t].value[unit]
     end
+    id_vec[idx] = 1
 
     return sensitivity_demand_dyn(P, net, d, id_vec, t), ref_val
 end
@@ -205,12 +206,14 @@ Helper function for plotting sensitivity check
 """
 function _plot_check(values, values_est, rel_value)
 
-    plot(
+    plt = plot(
         rel_value, values, marker=4, ylabel="variable value", xlabel="relative parameter value", label="Real",
         linewidth = 2, ls=:solid
     )
     plot!(rel_value, values_est, label="Estimates from diff", lw=2, ls=:dash, color="orange")
     plot!(legend=:best)
+
+    return plt
 end
 
 
