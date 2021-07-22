@@ -96,8 +96,6 @@ function compute_var_sensitivity(P::PowerManagementProblem, net::DynamicPowerNet
         ref_val = P.s[t].value[unit]
     end
 
-    id_vec[idx] = 1
-
     return sensitivity_demand_dyn(P, net, d, id_vec, t), ref_val
 end
 
@@ -119,25 +117,26 @@ function sensitivity_demand_check(dnet::DynamicPowerNetwork, d_dyn, node, t; npo
     solve!(dmin, OPT, verbose=true);
     # obtain the optimal objective value
     obj_ref = dmin.problem.optval
-    sens = compute_obj_sensitivity(dmin, dnet, d_dyn, t)
-    sens = sens[node] #extract for the node of interest
+    # compute sensitivity of Objective to demand
+    ∂O∂d = compute_obj_sensitivity(dmin, dnet, d_dyn, t)
+    ∂O∂d = ∂O∂d[node] #extract for the node of interest
     
-    values = zeros(2npoints+1)
+    obj_vals = zeros(2npoints+1)
     for i in -npoints:npoints
         d_crt = [copy(d) for d in d_dyn]
         d_crt[t][node] = d_dyn[t][node] * (1+ i * rel_inc)
         dmin = DynamicPowerManagementProblem(dnet, d_crt)
         solve!(dmin, OPT, verbose=true)
-        values[i+1+npoints] = dmin.problem.optval
+        obj_vals[i+1+npoints] = dmin.problem.optval
     end
     
     # sensitivity-based estimation
-    values_est = [obj_ref + sens*rel_inc*d_dyn[t][node]*i for i in -npoints:npoints]
+    estimated_obj_vals = [obj_ref + ∂O∂d*rel_inc*d_dyn[t][node]*i for i in -npoints:npoints]
     x = [1+i*rel_inc for i in -npoints:npoints]
     
-    return values, values_est, x
+    return obj_vals, estimated_obj_vals, x
 end
-_
+
 """
     sensitivity_var_check(dnet::DynamicPowerNetwork, d_dyn, node, varName, unit, t; npoints=10, rel_inc=1e-1)
 
@@ -154,30 +153,30 @@ function sensitivity_var_check(dnet::DynamicPowerNetwork, d_dyn, node, varName, 
     dmin = DynamicPowerManagementProblem(dnet, d_dyn);
     # solve the problem
     solve!(dmin, OPT, verbose=true);
-    # obtain the optimal objective value
-    sens, ref_val = compute_var_sensitivity(dmin, dnet, d_dyn, varName, unit, t)
-    sens = sens[node] #extract for the node of interest
+    # compute sensitivity of Variable to demand
+    ∂V∂d, ref_val = compute_var_sensitivity(dmin, dnet, d_dyn, varName, unit, t)
+    ∂V∂d = ∂V∂d[node] #extract for the node of interest
     
-    values = zeros(2npoints+1)
+    opt_vals = zeros(2npoints+1)
     for i in -npoints:npoints
         d_crt = [copy(d) for d in d_dyn]
         d_crt[t][node] = d_dyn[t][node] * (1+ i * rel_inc)
         dmin = DynamicPowerManagementProblem(dnet, d_crt)
         solve!(dmin, OPT, verbose=true)
         if varName=='g'
-            values[i+1+npoints] = dmin.g[t].value[unit]
+            opt_vals[i+1+npoints] = dmin.g[t].value[unit]
         elseif varName=='p'
-            values[i+1+npoints] = dmin.p[t].value[unit]
+            opt_vals[i+1+npoints] = dmin.p[t].value[unit]
         elseif varName=='s'
-            values[i+1+npoints] = dmin.s[t].value[unit]
+            opt_vals[i+1+npoints] = dmin.s[t].value[unit]
         end
     end
     
     # sensitivity-based estimation
-    values_est = [ref_val + sens*rel_inc*d_dyn[t][node]*i for i in -npoints:npoints]
+    estimated_vals = [ref_val + ∂V∂d*rel_inc*d_dyn[t][node]*i for i in -npoints:npoints]
     x = [1+i*rel_inc for i in -npoints:npoints]
     
-    return values, values_est, x
+    return opt_vals, estimated_vals, x
 end
 
 """
@@ -189,13 +188,13 @@ with those estimated from implicit diff.
 function plot_sensitivity_check(dnet, d_dyn, node, t; varName="obj", unit=1, npoints=10, rel_inc=1e-1)
 
     if varName=="obj"
-        values, values_est, rel_value = sensitivity_demand_check(dnet, d_dyn, node, t; npoints=npoints, rel_inc=rel_inc);
+        opt_vals, estimated_vals, rel_value = sensitivity_demand_check(dnet, d_dyn, node, t; npoints=npoints, rel_inc=rel_inc);
     else
-        values, values_est, rel_value = sensitivity_var_check(
+        opt_vals, estimated_vals, rel_value = sensitivity_var_check(
             dnet, d_dyn, node, varName, unit, t; npoints=npoints, rel_inc=rel_inc
         )
     end
-    _plot_check(values, values_est, rel_value)
+    _plot_check(opt_vals, estimated_vals, rel_value)
 end
 
 
@@ -213,4 +212,5 @@ function _plot_check(values, values_est, rel_value)
     plot!(rel_value, values_est, label="Estimates from diff", lw=2, ls=:dash, color="orange")
     plot!(legend=:best)
 end
+
 
