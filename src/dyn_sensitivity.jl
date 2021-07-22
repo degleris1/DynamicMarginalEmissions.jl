@@ -164,11 +164,11 @@ function sensitivity_var_check(dnet::DynamicPowerNetwork, d_dyn, node, varName, 
         d_crt[t][node] = d_dyn[t][node] * (1+ i * rel_inc)
         dmin = DynamicPowerManagementProblem(dnet, d_crt)
         solve!(dmin, OPT, verbose=true)
-        if varName=='g'
+        if varName == 'g'
             opt_vals[i+1+npoints] = dmin.g[t].value[unit]
-        elseif varName=='p'
+        elseif varName == 'p'
             opt_vals[i+1+npoints] = dmin.p[t].value[unit]
-        elseif varName=='s'
+        elseif varName == 's'
             opt_vals[i+1+npoints] = dmin.s[t].value[unit]
         end
     end
