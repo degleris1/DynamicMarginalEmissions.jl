@@ -139,10 +139,12 @@ Details:
 - static subproblem constraints: (n + 2l + 2m)*T
 - storage constraints: T*(4n)
 """
-kkt_dims_dyn(n, m, l, T) = T * (6n + 3m + 3l)
+kkt_dims_dyn(n, m, l, T) = T * (kkt_dims(n, m, l) + storage_kkt_dims(n))
 
 """
-add doc
+    storage_kkt_dims(n)
+
+Compute the dimensions of the KKT operator associated with storage constraints.
 """
 storage_kkt_dims(n) = 5n
 

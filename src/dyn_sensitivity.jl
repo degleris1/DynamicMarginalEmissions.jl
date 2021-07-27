@@ -41,8 +41,15 @@ function compute_mefs(P::PowerManagementProblem, net::DynamicPowerNetwork, d, c,
 
     # Construct ∇_x C(x)
     ∇C_dyn = zeros(kkt_dims_dyn(n, m, l, T))
-    idx = (t-1)*static_dim
-    ∇C_dyn[idx+1 : idx+l] .= c
+    idx = 0
+    for _ in 1:T
+        ∇C_dyn[idx+1 : idx+l] .= c
+        idx += static_dim
+    end
+
+    # TO DEPRECATE
+    # idx = (t-1)*static_dim
+    # ∇C_dyn[idx+1 : idx+l] .= c
 
     # Return sensitivity
     return sensitivity_demand_dyn(P, net, d, ∇C_dyn, t)

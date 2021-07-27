@@ -28,7 +28,6 @@ mutable struct PowerManagementProblem
     params
 end
 
-OPT = () -> ECOS.Optimizer(verbose=false)
 
 """
     PowerManagementProblem(f, d, pmax, gmax, A; τ=1e-5)

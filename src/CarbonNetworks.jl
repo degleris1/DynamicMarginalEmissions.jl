@@ -9,7 +9,7 @@ using LightGraphs
 using LinearAlgebra
 using SimpleWeightedGraphs
 using Zygote
-using Plots
+using RecipesBase
 
 using Base.Iterators: product
 using SparseArrays
@@ -38,5 +38,6 @@ include("sensitivity.jl")
 include("dyn_sensitivity.jl")
 include("descent.jl")
 
+OPT = () -> ECOS.Optimizer(verbose=false)
 
 end
