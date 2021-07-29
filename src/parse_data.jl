@@ -129,47 +129,54 @@ end
 
 """
     load_synthetic_network(case_name)
+
+Load a synthetic network file. Returns a `Network` object `θ`, a demand
+vector `d`, and the original data dictionary `data`.
 """
 function load_synthetic_network(case_name)
     # Load network data
     network_data = parse_file(joinpath("../data", case_name));
-	net = make_basic_network(network_data)
-	make_per_unit!(net)
+    net = make_basic_network(network_data)
+    make_per_unit!(net)
 
     # Parse network data
     base_mva = net["baseMVA"]
-	gen, load, branch = net["gen"], net["load"], net["branch"]
-	
-	# Dimensions
-	l = length(net["gen"])
-	n = length(net["bus"])
-	m = length(net["branch"])
-	
-	# Topology
-	A = SparseMatrixCSC(calc_basic_incidence_matrix(net)')
-	B = _make_B(gen, n, l)
-	
-	@assert size(A) == (n, m)
-	@assert size(B) == (n, l)
-	
-	# Capacities
-	pmax = [branch[i]["rate_a"] for i in string.(1:m)]
-	gmax = [gen[i]["mbase"] * gen[i]["pmax"] for i in string.(1:l)] / base_mva
-	
-	# Generator costs
-	fq = [gen[i]["cost"][1] for i in string.(1:l)]
-	fl = [gen[i]["cost"][2] for i in string.(1:l)]
-	
+    gen, load, branch = net["gen"], net["load"], net["branch"]
+
+    # Dimensions
+    l = length(net["gen"])
+    n = length(net["bus"])
+    m = length(net["branch"])
+
+    # Topology
+    A = SparseMatrixCSC(calc_basic_incidence_matrix(net)')
+    B = _make_B(gen, n, l)
+
+    @assert size(A) == (n, m)
+    @assert size(B) == (n, l)
+
+    # Capacities
+    pmax = [branch[i]["rate_a"] for i in string.(1:m)]
+    gmax = [gen[i]["mbase"] * gen[i]["pmax"] for i in string.(1:l)] / base_mva
+
+    # Generator costs
+    fq = [gen[i]["cost"][1] for i in string.(1:l)]
+    fl = [gen[i]["cost"][2] for i in string.(1:l)]
+
     θ = PowerNetwork(fq, fl, pmax, gmax, A, B, TAU)
 
     # Demand
-	d = _make_d(load, n)
+    d = _make_d(load, n)
 
     return θ, d, net
-end
+    end
 
 """
     load_demand_data(case_name::String; source="caiso", normalize_rows=false)
+
+Load CAISO demand data from date `case_name`. Returns a `(T, n)` matrix,
+where `T` is the number of timesteps (usually 24) and `n` is the number
+of nodes. 
 """
 function load_demand_data(case_name::String; source="caiso", normalize_rows=false)
     # Load dataframe
@@ -182,22 +189,26 @@ function load_demand_data(case_name::String; source="caiso", normalize_rows=fals
     hours = unique(df.OPR_HR)
 
     n, T = length(groups), length(hours)
-	
-	data = zeros(T, n)
-	for gr in groups
-		df_gr = filter(row -> row.GROUP == gr, df)
-		data[:, gr] = sort(df_gr, :OPR_HR).MW
-	end
-	
-	if normalize_rows
-		data ./= maximum(data, dims=1)
-	end
+
+    data = zeros(T, n)
+    for gr in groups
+        df_gr = filter(row -> row.GROUP == gr, df)
+        data[:, gr] = sort(df_gr, :OPR_HR).MW
+    end
+
+    if normalize_rows
+        data ./= maximum(data, dims=1)
+    end
 
     return data
 end
 
 """
     load_renewable_data(case_name::String; source="caiso", normalize_rows=false)
+
+Load CAISO renewable data from date `case_name`. Returns a `(T, n)` matrix,
+where `T` is the number of timesteps (usually 24) and `n` is the number
+of nodes.
 """
 function load_renewable_data(case_name::String; source="caiso", normalize_rows=false)
     # Load dataframe
@@ -210,19 +221,19 @@ function load_renewable_data(case_name::String; source="caiso", normalize_rows=f
     hours = unique(df.OPR_HR)
 
     n, T = length(groups), length(hours)
-	
-	data = zeros(T, n)
+
+    data = zeros(T, n)
     labels = []
-	for gr in groups
-		df_gr = filter(row -> row.GROUP == gr, df)
-		data[:, gr] = sort(df_gr, :OPR_HR).MW
+    for gr in groups
+        df_gr = filter(row -> row.GROUP == gr, df)
+        data[:, gr] = sort(df_gr, :OPR_HR).MW
 
         push!(labels, lowercase(df_gr.RENEWABLE_TYPE[1]))
-	end
-	
-	if normalize_rows
-		data ./= maximum(data, dims=1)
-	end
+    end
+
+    if normalize_rows
+        data ./= maximum(data, dims=1)
+    end
 
     return data, labels
 end
