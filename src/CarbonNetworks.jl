@@ -9,7 +9,6 @@ using LightGraphs
 using LinearAlgebra
 using SimpleWeightedGraphs
 using Zygote
-using RecipesBase
 
 using Base.Iterators: product
 using SparseArrays
