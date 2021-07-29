@@ -26,6 +26,32 @@ function sensitivity_demand_dyn(P::PowerManagementProblem, net::DynamicPowerNetw
     return ∇C_θ
 end
 
+function sensitivity_demand_dyn(P::PowerManagementProblem, net::DynamicPowerNetwork, d, ∇C)
+    T = length(d)
+    x = flatten_variables_dyn(P)
+
+    # Get partial Jacobians of KKT operator
+    _, ∂K_xT = Zygote.forward_jacobian(x -> kkt_dyn(x, net, d), x)
+    v = ∂K_xT \ ∇C
+
+    ∇C_θ = []
+    for t in 1:T
+        _, ∂K_θT = Zygote.forward_jacobian(
+            dt -> kkt_dyn(x, net, [tp == t ? dt : d[tp] for tp in 1:T]), 
+            d[t]
+        )
+
+        # Now compute ∇C(g*(θ)) = -∂K_θ' * inv(∂K_x') * v
+        push!(∇C_θ, -∂K_θT * v)
+    end
+
+    if norm(∂K_xT*v - ∇C) > 1e-3
+        @warn "KKT Jacobian is ill-conditioned. Solutions may be innaccurate."
+    end
+
+    return ∇C_θ
+end
+
 
 """
     compute_mefs(P::PowerManagementProblem, net::DynamicPowerNetwork, d, c, t)
@@ -34,22 +60,30 @@ Compute the marginal emission factors at time `t` given carbon costs `c`
 and demands `d`
 """
 function compute_mefs(P::PowerManagementProblem, net::DynamicPowerNetwork, d, c, t)
+    ∇C_dyn = _make_∇C(net, d, c)
+    
+    return sensitivity_demand_dyn(P, net, d, ∇C_dyn, t)
+end
+
+function compute_mefs(P::PowerManagementProblem, net::DynamicPowerNetwork, d, c)
+    ∇C_dyn = _make_∇C(net, d, c)
+    
+    return sensitivity_demand_dyn(P, net, d, ∇C_dyn)
+end
+
+function _make_∇C(net::DynamicPowerNetwork, d, c)
     # Extract dimensions
     T = length(d)
     n, m, l = get_problem_dims(net)
     static_dim = kkt_dims(n, m, l)
-
+ 
     # Construct ∇_x C(x)
     ∇C_dyn = zeros(kkt_dims_dyn(n, m, l, T))
     idx = 0
     for _ in 1:T
-        ∇C_dyn[idx+1 : idx+l] .= c
-        idx += static_dim
+         ∇C_dyn[idx+1 : idx+l] .= c
+         idx += static_dim
     end
-
-    # TO DEPRECATE
-    # idx = (t-1)*static_dim
-    # ∇C_dyn[idx+1 : idx+l] .= c
 
     # Return sensitivity
     return sensitivity_demand_dyn(P, net, d, ∇C_dyn, t)
