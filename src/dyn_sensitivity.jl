@@ -78,15 +78,15 @@ function _make_∇C(net::DynamicPowerNetwork, d, c)
     static_dim = kkt_dims(n, m, l)
  
     # Construct ∇_x C(x)
-    ∇C_dyn = zeros(kkt_dims_dyn(n, m, l, T))
+    ∇C_dyn = zeros(kkt_dims_dyn(n, m, l, T), T)
     idx = 0
-    for _ in 1:T
-         ∇C_dyn[idx+1 : idx+l] .= c
+    for t in 1:T
+         ∇C_dyn[idx+1 : idx+l, t] .= c
          idx += static_dim
     end
 
     # Return sensitivity
-    return sensitivity_demand_dyn(P, net, d, ∇C_dyn, t)
+    return ∇C_dyn
 end
 
 """
