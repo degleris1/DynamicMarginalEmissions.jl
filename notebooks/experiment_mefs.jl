@@ -4,6 +4,15 @@
 using Markdown
 using InteractiveUtils
 
+# This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
+macro bind(def, element)
+    quote
+        local el = $(esc(element))
+        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : missing
+        el
+    end
+end
+
 # ╔═╡ f3a6e0d0-f3c0-11eb-3aee-4545a96915ba
 begin
 	using Pkg; Pkg.activate()
@@ -39,8 +48,9 @@ begin
 	n = length(d_peak)
 	ℓ = size(net.B, 2)
 	
-	# Generation capacities
-	net.gmax *= 0.05
+	# Eliminate transmission
+	net.pmax .= sum(net.gmax)
+	net.fq .= 0
 	
 	"Network loaded."
 end
@@ -68,7 +78,7 @@ end;
 size(d_dyn)
 
 # ╔═╡ 2ccde2fb-489c-4436-8876-87cbe26881b8
-num_days = 28
+num_days = 3*28
 
 # ╔═╡ 392accfa-b8be-483d-9f47-35cf2a45f87c
 ϵ_daily = 0.10
@@ -77,8 +87,8 @@ num_days = 28
 begin
 	Random.seed!(2)
 	d = hcat([
-		(ϵ_daily*rand(n)) .* d_dyn for _ in 1:num_days
-		]...)
+		(1 - ϵ_daily .+ ϵ_daily*rand(n)) .* d_dyn for _ in 1:num_days
+	]...)
 end;
 
 # ╔═╡ a2465906-4342-4106-aa90-6ac8a4568489
@@ -89,52 +99,87 @@ times = (1/T_day) : (1/T_day) : num_days;
 
 # ╔═╡ 584d88a5-4e25-4a48-9e68-bb0596a624a1
 # Emissions rates
-b = [0.8e3, 0.7e3, 0.9e3, 1.4e3, 1.8e3, 1.8e3];
+b = [0.8e3, 0.4e3, 0.9e3, 1.4e3, 1.8e3, 1.8e3];
+
+# ╔═╡ fda9fc17-cf64-4737-b2fc-9e9aa53b5cc3
+begin
+	g = zeros(ℓ, T)
+	opfs = []
+	
+	for t in 1:T
+		# Solve OPF problem
+		opf_t = PowerManagementProblem(net, d[:, t])
+		solve!(opf_t, OPT)
+		@assert opf_t.problem.status in [Convex.MOI.OPTIMAL, Convex.MOI.ALMOST_OPTIMAL] "t=$t, status=$(opf_t.problem.status)"
+		
+		# Get local emissions
+		g[:, t] = evaluate(opf_t.g)
+		push!(opfs, opf_t)
+	end	
+end
 
 # ╔═╡ b29037ad-6f1a-4e7c-8c9e-f6619484aa49
 md"""
 ## Compute MEFs via regression
 """
 
-# ╔═╡ fda9fc17-cf64-4737-b2fc-9e9aa53b5cc3
-begin
-	g = zeros(ℓ, T)
-	
-	for t in 1:T
-		# Solve OPF problem
-		opf_t = PowerManagementProblem(net, d[:, t])
-		solve!(opf_t, OPT)
-		@assert opf_t.problem.status == Convex.MOI.OPTIMAL
-		
-		# Get local emissions
-		g[:, t] = evaluate(opf_t.g)
-	end	
-end
+# ╔═╡ 6723e9df-8d34-4230-a69a-30620b740eff
+E = reshape(sum(b .* g, dims=1), :)
 
 # ╔═╡ bf2773a5-8355-4207-81b0-b2099c175490
 plot(times, g', lw=2, xlabel="t", ylabel="generation", size=(650, 200))
 
-# ╔═╡ 6723e9df-8d34-4230-a69a-30620b740eff
-E = reshape(sum(b .* g, dims=1), :)
-
 # ╔═╡ aeb11efe-77f7-4afb-a6a7-64b3b5ddad7c
 plot(times, E, lw=2, xlabel="t", ylabel="generation", size=(650, 200))
+
+# ╔═╡ 6bcc5093-3aa3-43e4-b20a-051e0aeb18de
+agg_demand = sum(d, dims=1)[1, :]
+
+# ╔═╡ 14638a4b-ed45-48b4-add3-fa2a7406fb0a
+ΔD = diff(agg_demand)
+
+# ╔═╡ 95555f94-8d09-42e1-9195-0efb09ba1893
+ΔE = diff(E)
+
+# ╔═╡ 9ac37885-2495-4e96-b3b4-8464e1018a56
+μ_regression = ΔD \ ΔE
+
+# ╔═╡ 163b893e-cba0-40b6-ad4f-4d25723e46fb
+begin
+	plt = plot(size=(250, 250), xlabel="Δmw", ylabel="Δ(lbs co2 / h)")
+	scatter!(ΔD, ΔE)
+	plot!(sort(ΔD), μ_regression * sort(ΔD), lw=3, alpha=0.9)
+end
 
 # ╔═╡ c5535139-26ba-4380-bd95-fe1f2f3ef654
 md"""
 ## Compute MEFs via differentiation
 """
 
-# ╔═╡ 44be20a2-3c13-438c-9cd3-5d8bb6f542d7
+# ╔═╡ db589efb-1e3f-45bc-83e5-77443bcddb59
+@bind diff_case Slider(1:(T-1))
 
+# ╔═╡ 2128bf24-9be6-43c0-8754-b7cddb844ab2
+diff_case
+
+# ╔═╡ 2c63d8ea-5d84-4b2e-94b7-3418ff466d31
+ordering = sortperm(ΔD);
+
+# ╔═╡ 44be20a2-3c13-438c-9cd3-5d8bb6f542d7
+μ_diff = first(compute_mefs(opfs[ordering .+ 1][diff_case], net, d[:, ordering .+ 1][:, diff_case], b))
+
+# ╔═╡ 84ef4c02-c754-4300-a52b-b212c866be3b
+begin
+	plt2 = plot(size=(350, 200), xlabel="Δmw", ylabel="Δ(lbs co2 / h)")
+	scatter!(ΔD, ΔE)
+	scatter!([ΔD[ordering][diff_case]], [ΔE[ordering][diff_case]], ms=6)
+	plot!(sort(ΔD), μ_diff * sort(ΔD), lw=3, alpha=0.9)
+end
 
 # ╔═╡ 5cde7ef1-f9e5-49a1-84b0-43124ddc3bd9
 md"""
 ## Analyze results
 """
-
-# ╔═╡ 4946031d-16e2-4376-a040-c90be9f72c75
-
 
 # ╔═╡ Cell order:
 # ╠═f3a6e0d0-f3c0-11eb-3aee-4545a96915ba
@@ -152,12 +197,20 @@ md"""
 # ╠═a2465906-4342-4106-aa90-6ac8a4568489
 # ╠═f272e6f5-9475-44e4-8d67-2df690329cb6
 # ╠═584d88a5-4e25-4a48-9e68-bb0596a624a1
-# ╟─b29037ad-6f1a-4e7c-8c9e-f6619484aa49
 # ╠═fda9fc17-cf64-4737-b2fc-9e9aa53b5cc3
+# ╟─b29037ad-6f1a-4e7c-8c9e-f6619484aa49
 # ╠═6723e9df-8d34-4230-a69a-30620b740eff
 # ╠═bf2773a5-8355-4207-81b0-b2099c175490
 # ╠═aeb11efe-77f7-4afb-a6a7-64b3b5ddad7c
+# ╠═6bcc5093-3aa3-43e4-b20a-051e0aeb18de
+# ╠═14638a4b-ed45-48b4-add3-fa2a7406fb0a
+# ╠═95555f94-8d09-42e1-9195-0efb09ba1893
+# ╠═9ac37885-2495-4e96-b3b4-8464e1018a56
+# ╠═163b893e-cba0-40b6-ad4f-4d25723e46fb
 # ╟─c5535139-26ba-4380-bd95-fe1f2f3ef654
+# ╠═db589efb-1e3f-45bc-83e5-77443bcddb59
+# ╟─2128bf24-9be6-43c0-8754-b7cddb844ab2
+# ╠═2c63d8ea-5d84-4b2e-94b7-3418ff466d31
 # ╠═44be20a2-3c13-438c-9cd3-5d8bb6f542d7
+# ╠═84ef4c02-c754-4300-a52b-b212c866be3b
 # ╟─5cde7ef1-f9e5-49a1-84b0-43124ddc3bd9
-# ╠═4946031d-16e2-4376-a040-c90be9f72c75
