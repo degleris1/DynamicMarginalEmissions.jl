@@ -33,6 +33,21 @@ begin
 	using CarbonNetworks
 end
 
+# ╔═╡ 57c6f8cc-5fc3-4738-aa9f-7552d9ebe417
+using BenchmarkTools
+
+# ╔═╡ cfc87b04-1bbf-496c-8a71-5edfc9d6399c
+using CarbonNetworks: kkt, compute_jacobian_kkt
+
+# ╔═╡ c0174666-9813-4ecf-ba65-281b2f4dc0aa
+using Zygote
+
+# ╔═╡ d0d9a342-dc26-4957-961c-e50a0f8f440a
+using ForwardDiff
+
+# ╔═╡ ef235d66-30e9-4b88-9bc5-440f88aa948c
+using SparseArrays
+
 # ╔═╡ 76b72e95-e8fd-4c49-94fc-72ed94f5ba10
 theme(:default, label=nothing, 
 		tickfont=(:Times, 8), guidefont=(:Times, 8), legendfont=(:Times, 8))
@@ -181,6 +196,125 @@ md"""
 ## Analyze results
 """
 
+# ╔═╡ 3434dc78-bab4-4882-b5b2-f69ca035c0e0
+P = opfs[1];
+
+# ╔═╡ 253d5e18-8b49-4a3a-ace2-e8a87b0f29dc
+x = flatten_variables(P);
+
+# ╔═╡ f87a29d0-bd2e-4a1c-9dcb-859e866a5487
+d_test = d[:, 1];
+
+# ╔═╡ 0e25643a-a67b-47b3-82a5-47f848e8849e
+kkt_op(x) = kkt(x, net, d_test)
+
+# ╔═╡ 15177ca0-9e14-4be5-b845-14979d09c301
+time_zyg = @belapsed Zygote.forward_jacobian(kkt_op, $x)
+
+# ╔═╡ 010c4596-0057-455d-b108-03c4238f4dbf
+"Zygote Time: $(1e6*time_zyg) μs"
+
+# ╔═╡ 4ebfb393-b630-414b-8e46-cbc77dbc096e
+cfg = ForwardDiff.JacobianConfig(kkt_op, x);
+
+# ╔═╡ ae944a0a-0ac2-4b6e-a45f-27083675ac86
+grad_fd(x) = ForwardDiff.jacobian(kkt_op, x, cfg, Val{false}())
+
+# ╔═╡ f1f28dca-f739-4c4d-b103-186ac19be4fe
+time_fd = @belapsed grad_fd($x)
+
+# ╔═╡ c2c53041-9869-493d-99ec-eb4c701db7c0
+"ForwardDiff Time: $(1e6*time_fd) μs"
+
+# ╔═╡ b490ca51-2acc-471f-8a62-1e125cccdd6c
+output_buffer = zeros(size(ForwardDiff.jacobian(kkt_op, x)));
+
+# ╔═╡ 582becdd-10e7-4e89-8cb3-28235ff4cb1b
+time_fdip = @belapsed ForwardDiff.jacobian!(output_buffer, kkt_op, x)
+
+# ╔═╡ 9ae3d053-8f0f-4afe-bc2f-170183daf670
+"ForwardDiff (in-place) Time: $(1e6*time_fdip) μs"
+
+# ╔═╡ 36bb5400-3e4b-479a-bce7-06e543597bc0
+time_manual = @belapsed compute_jacobian_kkt($net.fq, $net.fl, $d_test, $net.pmax, $net.gmax, $net.A, $net.B, $x)
+
+# ╔═╡ e2aa1ab3-ef06-427f-b958-5fc28d8a22b3
+"Manual Time: $(1e6*time_manual) μs"
+
+# ╔═╡ 02554976-765c-4306-ac09-7bdda637f921
+J_fd = ForwardDiff.jacobian(kkt_op, x);
+
+# ╔═╡ 4ef65e6e-6cb4-46fe-9077-7eee660c423f
+J_zyg = Zygote.forward_jacobian(kkt_op, x)[2];
+
+# ╔═╡ 7725e477-cd0b-4374-a08e-e099aab8953b
+norm(J_fd - J_zyg')
+
+# ╔═╡ 48c8a0a8-a386-4188-8482-9ce9c7e83468
+m = size(net.A, 2)
+
+# ╔═╡ c7248266-be03-47b9-9afe-680228b3bca8
+n, ℓ, m
+
+# ╔═╡ 82624ece-7b63-4ffd-a92f-fd45fb0fb7c7
+size(J_fd)
+
+# ╔═╡ 38cde096-558e-446a-bdb1-e7ac8fc65cc0
+3m + 3ℓ + n
+
+# ╔═╡ e76f1a9d-ba63-46c4-9818-49d2f1ab5054
+block1, block2 = (3m+2ℓ+1):(3m+3ℓ), 1:2ℓ
+
+# ╔═╡ 533027ae-df7a-4c93-822c-df378b87ef99
+function my_compute_jacobian_kkt(fq, fl, d, pmax, gmax, A, B, x; τ=0.0)
+    n, m = size(A)
+    n, l = size(B)
+
+    g, p, λpl, λpu, λgl, λgu, _ = CarbonNetworks.unflatten_variables(x, n, m, l)
+
+    K11 = [
+        Diagonal(fq)     spzeros(l, m);
+        spzeros(m, l)    τ * I(m)
+    ]
+   
+    K12 = [
+        spzeros(l, 2 * m)   -I(l)       I(l);
+        -I(m)             I(m)        spzeros(m, 2l)
+    ]
+
+    K13 = [-B'; A']
+
+    K21 = [
+        spzeros(m, l) -Diagonal(λpl);
+        spzeros(m, l) Diagonal(λpu);
+        -Diagonal(λgl) spzeros(l, m);
+        Diagonal(λgu) spzeros(l, m)
+    ]
+
+    K22 = Diagonal([-p - pmax; p - pmax; -g; g - gmax])
+    
+    return [
+        K11 K12 K13;
+        K21 K22 spzeros(2 * (m + l), n);
+        K13' spzeros(n, 2 * (m + l) + n)
+    ]
+end
+
+# ╔═╡ 45dbb744-21b4-4fcb-a74c-01ac5fb30ef3
+J_man = my_compute_jacobian_kkt(net.fq, net.fl, d_test, net.pmax, net.gmax, net.A, net.B, x);
+
+# ╔═╡ 9659a65a-6b91-4e0d-b3d6-9bf6c170e8c3
+norm(J_fd - J_man)
+
+# ╔═╡ 0bdaf75e-5f94-439f-a60f-c79ee7be2c84
+resid = J_fd - Matrix(J_man);
+
+# ╔═╡ 8e9b9cf7-2f31-42c6-9868-100093ef13f4
+plot(
+	heatmap(abs.(J_fd)[block1, block2], yflip=true, clim=(0, 0.001), colorbar=false),
+	heatmap(abs.(resid)[block1, block2], yflip=true, clim=(0, 0.001), colorbar=false)
+)
+
 # ╔═╡ Cell order:
 # ╠═f3a6e0d0-f3c0-11eb-3aee-4545a96915ba
 # ╠═a16793d7-0725-4bc5-bb5c-b7c44fd59375
@@ -214,3 +348,36 @@ md"""
 # ╠═44be20a2-3c13-438c-9cd3-5d8bb6f542d7
 # ╠═84ef4c02-c754-4300-a52b-b212c866be3b
 # ╟─5cde7ef1-f9e5-49a1-84b0-43124ddc3bd9
+# ╠═57c6f8cc-5fc3-4738-aa9f-7552d9ebe417
+# ╠═cfc87b04-1bbf-496c-8a71-5edfc9d6399c
+# ╠═c0174666-9813-4ecf-ba65-281b2f4dc0aa
+# ╠═d0d9a342-dc26-4957-961c-e50a0f8f440a
+# ╠═3434dc78-bab4-4882-b5b2-f69ca035c0e0
+# ╠═253d5e18-8b49-4a3a-ace2-e8a87b0f29dc
+# ╠═f87a29d0-bd2e-4a1c-9dcb-859e866a5487
+# ╠═0e25643a-a67b-47b3-82a5-47f848e8849e
+# ╠═15177ca0-9e14-4be5-b845-14979d09c301
+# ╟─010c4596-0057-455d-b108-03c4238f4dbf
+# ╠═4ebfb393-b630-414b-8e46-cbc77dbc096e
+# ╠═ae944a0a-0ac2-4b6e-a45f-27083675ac86
+# ╠═f1f28dca-f739-4c4d-b103-186ac19be4fe
+# ╠═c2c53041-9869-493d-99ec-eb4c701db7c0
+# ╠═b490ca51-2acc-471f-8a62-1e125cccdd6c
+# ╠═582becdd-10e7-4e89-8cb3-28235ff4cb1b
+# ╟─9ae3d053-8f0f-4afe-bc2f-170183daf670
+# ╠═36bb5400-3e4b-479a-bce7-06e543597bc0
+# ╠═e2aa1ab3-ef06-427f-b958-5fc28d8a22b3
+# ╠═45dbb744-21b4-4fcb-a74c-01ac5fb30ef3
+# ╠═02554976-765c-4306-ac09-7bdda637f921
+# ╠═4ef65e6e-6cb4-46fe-9077-7eee660c423f
+# ╠═7725e477-cd0b-4374-a08e-e099aab8953b
+# ╠═9659a65a-6b91-4e0d-b3d6-9bf6c170e8c3
+# ╠═0bdaf75e-5f94-439f-a60f-c79ee7be2c84
+# ╠═48c8a0a8-a386-4188-8482-9ce9c7e83468
+# ╠═c7248266-be03-47b9-9afe-680228b3bca8
+# ╠═82624ece-7b63-4ffd-a92f-fd45fb0fb7c7
+# ╠═38cde096-558e-446a-bdb1-e7ac8fc65cc0
+# ╠═e76f1a9d-ba63-46c4-9818-49d2f1ab5054
+# ╠═8e9b9cf7-2f31-42c6-9868-100093ef13f4
+# ╠═ef235d66-30e9-4b88-9bc5-440f88aa948c
+# ╠═533027ae-df7a-4c93-822c-df378b87ef99

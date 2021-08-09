@@ -153,8 +153,8 @@ function compute_jacobian_kkt(fq, fl, d, pmax, gmax, A, B, x; τ=TAU)
     K21 = [
         spzeros(m, l) -Diagonal(λpl);
         spzeros(m, l) Diagonal(λpu);
-        Diagonal(λgu) spzeros(l, m);
-        -Diagonal(λgl) spzeros(l, m)
+        -Diagonal(λgl) spzeros(l, m);
+        Diagonal(λgu) spzeros(l, m)
     ]
 
     K22 = Diagonal([-p - pmax; p - pmax; -g; g - gmax])
