@@ -15,7 +15,7 @@ begin
 	using LinearAlgebra
 	
 	OPT = () -> ECOS.Optimizer(verbose=false)
-	δ = 0.01
+	δ = 1e-4
 end;
 
 # ╔═╡ 0aac9a3f-a477-4095-9be1-f4babe1e2803
@@ -171,13 +171,13 @@ md"""
 c_rate = 0.25
 
 # ╔═╡ 98a0d7c5-b1a8-4ebe-bb73-7ca88b475592
-storage_penetrations = [0.0, 0.01, 0.02, 0.03, 0.04]
+storage_penetrations = [0.0, 0.05, 0.10]
 
 # ╔═╡ 8fc06205-0227-4b46-a2e9-72bdf9d57926
 mef_times = 1:24
 
 # ╔═╡ 008ed573-67ec-4908-a51a-c5d2a01e5b0e
-refresh = false
+refresh = true
 
 # ╔═╡ 418861e0-a35e-47db-9f00-a6a7fcf733fe
 md"""
@@ -245,11 +245,11 @@ begin
 		
 		meta = Dict()
 		
-		results = zeros(n, length(mef_times), length(storage_penetrations))
+		results = zeros(n, T, length(mef_times), length(storage_penetrations))
 		for (ind_s, s_rel) in enumerate(storage_penetrations)
 
 			# Construct dynamic network
-			C = total_demands * s_rel .+ δ
+			C = total_demands * (s_rel + δ)
 			P = C * c_rate
 			net_dyn = make_dynamic(net, T, P, C, dyn_gmax)
 
@@ -261,7 +261,7 @@ begin
 			# Compute MEFs
 			@time mefs = compute_mefs(opf_dyn, net_dyn, d_dyn, emissions_rates)
 			for ind_t in 1:length(mef_times)
-				results[:, ind_t, ind_s] .= mefs[ind_t]
+				results[:, :, ind_t, ind_s] .= mefs[ind_t]
 			end
 			
 			meta[ind_s] = (opf=opf_dyn, net=net_dyn)
@@ -314,17 +314,19 @@ end
 # ╔═╡ f5b6479f-3bc8-4b86-987a-a14968d60e25
 "PC Renewable: $(sum(evaluate(meta[test_s].opf.g[test_t])[7:end]) / sum(d_dyn[test_t]))"
 
+# ╔═╡ 0740dc70-a532-4818-b09d-b3b8d60fa6ba
+total_mefs = sum(results, dims=2)[:, 1, :, :];
+
 # ╔═╡ 6186798f-6711-4222-94bb-f53b2d0fad7d
 begin
 	subplots = []
-	interesting_nodes = 1 : 2 : 29 
-	curves = [1, 3, 5]
+	interesting_nodes = 2 : 2 : 30 
+	curves = 1:length(storage_penetrations)
 	
 	for (ind_plt, i) in enumerate(interesting_nodes)
 		plt = plot(xticks=[6, 12, 18, 24], xlim=(1, 24))
-		plot!(ylim=(400, 1.1*maximum(emissions_rates)))
 		plot!(legend=nothing)
-		plot!(mef_times, results[i, :, curves], lw=3, alpha=0.8,
+		plot!(mef_times, total_mefs[i, :, curves], lw=4, alpha=0.8,
 			labels=storage_penetrations[curves]')
 		
 		ind_plt in [1, 6, 11] && plot!(ylabel="Δco2 (lbs) / Δmwh")
@@ -348,6 +350,35 @@ begin
 	savefig(plt_dynamic_mef, 
 		"../img/storage_penetration_dynamic_mef_$(highlighted_node).png")
 	plt_dynamic_mef
+end
+
+# ╔═╡ f7e0d09c-40bf-4936-987a-a3bcadae5487
+begin
+	node = interesting_nodes[highlighted_node]
+	
+	heatmap_subplts = []
+	for s_idx in 1:length(storage_penetrations)
+		
+		subplt = heatmap(results[node, :, :, s_idx]', 
+			c=:grayC, clim=(0, 2000), colorbar=false,
+			xlabel="consumption time",
+			title="$(100*storage_penetrations[s_idx])% storage"
+		)
+		
+		s_idx == 1 && plot!(ylabel="emissions time")
+		s_idx == 3 && plot!(colorbar=true)
+		
+		push!(heatmap_subplts, subplt)
+	end
+	
+	plt_emissions_heatmap = plot(heatmap_subplts..., 
+		layout=Plots.grid(1, 3, widths=[0.3, 0.3, 0.4]), 
+		size=(650, 200), 
+		bottom_margin=8Plots.pt
+	)
+	savefig(plt_emissions_heatmap, 
+		"../img/storage_penetration_emissions_heatmap.png")
+	plt_emissions_heatmap
 end
 
 # ╔═╡ Cell order:
@@ -381,7 +412,9 @@ end
 # ╠═cd5fe410-6264-4381-b19f-31d050bc3930
 # ╟─f5b6479f-3bc8-4b86-987a-a14968d60e25
 # ╠═d27ef0d8-70b2-4897-9000-8fa70b1862fc
+# ╠═0740dc70-a532-4818-b09d-b3b8d60fa6ba
 # ╠═6186798f-6711-4222-94bb-f53b2d0fad7d
+# ╠═f7e0d09c-40bf-4936-987a-a3bcadae5487
 # ╟─418861e0-a35e-47db-9f00-a6a7fcf733fe
 # ╟─0d07df73-89e1-4dbf-8f8c-82c202ad84c7
 # ╠═43ab37f7-bf1f-44fb-8858-e3bf7d4e8880
