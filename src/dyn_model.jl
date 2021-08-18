@@ -228,16 +228,24 @@ kkt_dyn(x, net::DynamicPowerNetwork, d) = kkt_dyn(
 
 """
 Compute the terms in the kkt matrix that are only related to the storage
+
+Notes:
+------
+- Dimensions should be 10n, as there are 3 variables of size n + 7 constraints of size n
+
 """
-function kkt_storage(ν_next, ν_t, λsl, λsu, λdsl_next, λdsl_t, λdsu_next, λdsu_t, ds, s, P, C)
+function kkt_storage(s, s_prev, λsu, λsl, λchu, λchl, λdisu, λdisl, ν, νs_t, νs_next, P, C)
     return [
-        (λsu - λsl) + (λdsu_t - λdsl_t) - (λdsu_next - λdsl_next) + (ν_t - ν_next); #∇_s L
-        ; #∇_ch L
-        ; #∇_dis L
+        (λsu - λsl) + (νs_next - νs_t); #∇_s L
+        (λchu - λchl) + ν/η_c + νs_t ; #∇_ch L
+        (λdisu - λdisl) - η_d * ν - νs_t; #∇_dis L
         λsl .* (-s);
         λsu .* (s - C);
-        λdsu_t .* (ds - P);
-        λdsl_t .* (-ds - P);
+        λchl .* (-ch);
+        λchu .* (ch-P);
+        λdisl .* (-dis);
+        λdisu .* (dis-P);
+        s .- s_prev -ch + dis;
     ]
 end
 
