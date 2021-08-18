@@ -108,7 +108,7 @@ kkt_dims(n, m, l) = 3m + 3l + n
 Compute the KKT operator applied to `x`, with parameters given by `fq`,
 `fl`, `d`, `pmax`, `gmax`, `A`, and `τ`.
 """
-function kkt(x, fq, fl, d, pmax, gmax, A, B; τ=TAU, ds=0)
+function kkt(x, fq, fl, d, pmax, gmax, A, B; τ=TAU, ch=0, dis=0)
     n, m = size(A)
     n, l = size(B)
 
@@ -128,7 +128,7 @@ function kkt(x, fq, fl, d, pmax, gmax, A, B; τ=TAU, ds=0)
 end
 
 kkt(x, net::PowerNetwork, d) =
-    kkt(x, net.fq, net.fl, d, net.pmax, net.gmax, net.A, net.B; τ=net.τ, ds=zeros(size(net.A)[1]))
+    kkt(x, net.fq, net.fl, d, net.pmax, net.gmax, net.A, net.B; τ=net.τ, ch=zeros(size(net.A)[1]), dis=zeros(size(net.A)[1]))
 
 function flatten_variables(P::PowerManagementProblem)
     x = [evaluate(P.g); evaluate(P.p)]

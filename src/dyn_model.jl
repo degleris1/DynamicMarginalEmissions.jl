@@ -172,7 +172,7 @@ function kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, P, C; τ=TAU)
     T = length(fq)
 
     # decompose `x` in arrays of T variables
-    g, p, s, λpl, λpu, λgl, λgu, ν, λdsl, λdsu, λsl, λsu, λs, λch, λdis = 
+    g, p, s, ch, dis, λpl, λpu, λgl, λgu, ν, λdsl, λdsu, λchl, λchu, λdisl, λdisu, νs = 
         unflatten_variables_dyn(x, n, m, l, T)
 
     # compute the KKTs for individual problems
@@ -184,32 +184,22 @@ function kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, P, C; τ=TAU)
         x = [g[t]; p[t]; λpl[t]; λpu[t]; λgl[t]; λgu[t]; ν[t]]
 
         # handle edge cases
-        if t == 1
-            ds = s[t] .- INIT_COND
-        else
-            ds = s[t] - s[t - 1]
-        end
-        if t < T
-            ν_next = ν[t + 1]
-            λdsl_next = λdsl[t + 1]
-            λdsu_next = λdsu[t + 1]
-        else
-            ν_next = zeros(n)
-            λdsl_next = zeros(n)
-            λdsu_next = zeros(n)
-        end
+        # ?? TODO: figure out if there is an edge case for ch and dis? 
+        # are they actually variables in n x T or n x (T-1)
+        t==1 ? s_prev = INIT_COND : s_prev = s[t-1]
+        t < T ? νs_next = νs[t + 1] : νs_next = zeros(n)
 
         # compute the KKTs for the static subproblem
-        KKT = kkt(x, fq[t], fl[t], d[t], pmax[t], gmax[t], A, B; τ=TAU, ds=ds)
+        KKT = kkt(x, fq[t], fl[t], d[t], pmax[t], gmax[t], A, B; τ=TAU, ch=ch[t], dis=dis[t])
         # add the KKts for the storage
         KKT_s = kkt_storage(
-            ν_next, ν[t], λsl[t], λsu[t], λdsl_next, λdsl[t], λdsu_next, 
-            λdsu[t], ds, s[t], P, C
-        ) 
+            s[t], s_prev, λsu[t], λsl[t], λchu[t], λchl[t], λdisu[t], λdisl[t], 
+            ν[t], νs[t], νs_next, P, C
+            )
 
         # check the sizes of both matrices computed above
-        @assert length(KKT) == 3l + 3m + n
-        @assert length(KKT_s) == 5n 
+        @assert length(KKT) == kkt_dims(n, m, l)
+        @assert length(KKT_s) == storage_kkt_dims(n)
 
         # append both matrices to the general KKT operator
         KKT_static_tot = vcat(KKT_static_tot, KKT) 
