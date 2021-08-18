@@ -6,6 +6,8 @@
 # ===
 
 TAU = 0.0
+η_c = 1.0 # charging efficiency
+η_d = 1.0 # discharge efficiency
 
 mutable struct PowerNetwork
     fq
@@ -39,7 +41,7 @@ incidence matrix `A`.
 The parameter `τ` is a regularization weight used to make the problem
 strongly convex by adding τ ∑ᵢ pᵢ² to the objective.
 """
-function PowerManagementProblem(fq, fl, d, pmax, gmax, A, B; τ=TAU, ds=0)
+function PowerManagementProblem(fq, fl, d, pmax, gmax, A, B; τ=TAU, ch=0, dis=0)
     n, m = size(A)
     n, l = size(B)
     g = Variable(l)
@@ -55,7 +57,7 @@ function PowerManagementProblem(fq, fl, d, pmax, gmax, A, B; τ=TAU, ds=0)
         p <= pmax,
         -g <= 0, 
         g <= gmax,
-        0 == A*p - B*g + d + ds,
+        0 == A*p - B*g + d + ch/η_c - η_d * dis,
     ])
 
     params = (fq=fq, fl=fl, d=d, pmax=pmax, gmax=gmax, A=A, B=B, τ=τ)

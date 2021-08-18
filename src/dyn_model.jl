@@ -68,16 +68,20 @@ function DynamicPowerManagementProblem(
 
     # Define a storage variable for n nodes over T timesteps
     s = [Variable(n) for _ in 1:T]
+    # Define a charge and discharge variable for n nodes over T timesteps
+    ch = [Variable(n) for _ in 1:T]
+    dis = [Variable(n) for _ in 1:T]
 
+    #TODO: need to handle the initial condition
     subproblems = vcat(
         # first treating the initial constraint explicitly to avoid having to
         # specify another variable for s_0
         [PowerManagementProblem(
-            fq[1], fl[1], d[1], pmax[1], gmax[1], A, B; ds=s[1] - INIT_COND
+            fq[1], fl[1], d[1], pmax[1], gmax[1], A, B; ch=ch[1], dis=dis[1]
         )],
         # then iterating over all the timesteps 
         [PowerManagementProblem(
-            fq[t], fl[t], d[t], pmax[t], gmax[t], A, B; ds=s[t] - s[t - 1]
+            fq[t], fl[t], d[t], pmax[t], gmax[t], A, B; ch=ch[t], dis=dis[t]
         ) for t in 2:T]
     )
 
@@ -92,13 +96,17 @@ function DynamicPowerManagementProblem(
         add_constraints!(dynProblem, sub.problem.constraints)
     end
 
+
     # storage constraints
     # initial conditions
     add_constraints!(dynProblem, [
         0 <= s[1], # λsl
         s[1] <= C, # λsu
         s[1] - INIT_COND <= P, # λdsu
-        -(s[1] - INIT_COND) <= P # λdsl
+        -(s[1] - INIT_COND) <= P, # λdsl
+        s[1] == INIT_COND + ch[1] - dis[1], #λs
+        ch[1] >= 0, #λch
+        dis[1] >= 0 #λdis
     ])
     # running condition
     for t in 2:T
@@ -106,7 +114,10 @@ function DynamicPowerManagementProblem(
             0 <= s[t], # λsl
             s[t] <= C, # λsu
             s[t] - s[t - 1] <= P, # λdsu, as ds = s[t]-s[t-1]
-            s[t - 1] - s[t] <= P # λdsl
+            s[t - 1] - s[t] <= P, # λdsl
+            s[t] == s[t-1] + ch[t] - dis[t], #λs
+            ch[t] >= 0, #λch
+            dis[t] >= 0 #λdis
         ])
     end
 
