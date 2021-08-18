@@ -27,6 +27,8 @@ mutable struct PowerManagementProblem
     p
     g
     s
+    ch
+    dis
     params
 end
 
@@ -53,16 +55,16 @@ function PowerManagementProblem(fq, fl, d, pmax, gmax, A, B; τ=TAU, ch=0, dis=0
         + (τ/2)*sumsquares(p)
     )
     add_constraints!(problem, [
-        -p <= pmax,
-        p <= pmax,
-        -g <= 0, 
-        g <= gmax,
-        0 == A*p - B*g + d + ch/η_c - η_d * dis,
+        -p <= pmax, #λpl
+        p <= pmax, #λpu
+        -g <= 0, #λgl
+        g <= gmax, #λgu
+        0 == A*p - B*g + d + ch/η_c - η_d * dis, #ν
     ])
 
     params = (fq=fq, fl=fl, d=d, pmax=pmax, gmax=gmax, A=A, B=B, τ=τ)
 
-    return PowerManagementProblem(problem, p, g, zeros(n), params)
+    return PowerManagementProblem(problem, p, g, zeros(n), zeros(n), zeros(n), params)
 end
 
 PowerManagementProblem(net::PowerNetwork, d) =
@@ -115,9 +117,9 @@ function kkt(x, fq, fl, d, pmax, gmax, A, B; τ=TAU, ds=0)
     # Lagragian is
     # L = J + λpl'(-p - pmax) + ... + λgu'(g - gmax) + v'(Ap - g - d)
     return [
-        Diagonal(fq)*g +  fl - B'ν - λgl + λgu; 
-        A'ν + λpu - λpl + τ*p;
-        λpl .* (-p - pmax);
+        Diagonal(fq)*g +  fl - B'ν - λgl + λgu; # ∇_g L
+        A'ν + λpu - λpl + τ*p; # ∇_p L
+        λpl .* (-p - pmax); 
         λpu .* (p - pmax);
         -λgl .* g;
         λgu .* (g - gmax);

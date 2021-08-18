@@ -102,22 +102,22 @@ function DynamicPowerManagementProblem(
     add_constraints!(dynProblem, [
         0 <= s[1], # λsl
         s[1] <= C, # λsu
-        s[1] - INIT_COND <= P, # λdsu
-        -(s[1] - INIT_COND) <= P, # λdsl
-        s[1] == INIT_COND + ch[1] - dis[1], #λs
-        ch[1] >= 0, #λch
-        dis[1] >= 0 #λdis
+        ch[1] >= 0, #λchl
+        ch[1] <= P, # λchu
+        dis[1] >= 0 #λdisl
+        dis[1] <= P, # λdisu
+        s[1] == INIT_COND + ch[1] - dis[1], #νs (ν for storage)
     ])
     # running condition
     for t in 2:T
         add_constraints!(dynProblem,[
-            0 <= s[t], # λsl
-            s[t] <= C, # λsu
-            s[t] - s[t - 1] <= P, # λdsu, as ds = s[t]-s[t-1]
-            s[t - 1] - s[t] <= P, # λdsl
-            s[t] == s[t-1] + ch[t] - dis[t], #λs
-            ch[t] >= 0, #λch
-            dis[t] >= 0 #λdis
+        0 <= s[t], # λsl
+        s[t] <= C, # λsu
+        ch[t] >= 0, #λchl
+        ch[t] <= P, # λchu
+        dis[t] >= 0 #λdisl
+        dis[t] <= P, # λdisu
+        0 == - s[t] + s[t-1] + ch[t] - dis[t], #νs (ν for storage)
         ])
     end
 
@@ -126,7 +126,7 @@ function DynamicPowerManagementProblem(
         A = A, B = B, P = P, C = C, τ = τ
     )
 
-    return PowerManagementProblem(dynProblem, p_T, g_T, s, params)
+    return PowerManagementProblem(dynProblem, p_T, g_T, s, ch, dis, params)
 end
 
 DynamicPowerManagementProblem(net::DynamicPowerNetwork, d) =
@@ -157,7 +157,7 @@ kkt_dims_dyn(n, m, l, T) = T * (kkt_dims(n, m, l) + storage_kkt_dims(n))
 
 Compute the dimensions of the KKT operator associated with storage constraints.
 """
-storage_kkt_dims(n) = 5n
+storage_kkt_dims(n) = 3n + 7n
 
 """
     kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, P, C; τ=TAU)
@@ -172,7 +172,7 @@ function kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, P, C; τ=TAU)
     T = length(fq)
 
     # decompose `x` in arrays of T variables
-    g, p, s, λpl, λpu, λgl, λgu, ν, λdsl, λdsu, λsl, λsu = 
+    g, p, s, λpl, λpu, λgl, λgu, ν, λdsl, λdsu, λsl, λsu, λs, λch, λdis = 
         unflatten_variables_dyn(x, n, m, l, T)
 
     # compute the KKTs for individual problems
@@ -231,7 +231,9 @@ Compute the terms in the kkt matrix that are only related to the storage
 """
 function kkt_storage(ν_next, ν_t, λsl, λsu, λdsl_next, λdsl_t, λdsu_next, λdsu_t, ds, s, P, C)
     return [
-        (λsu - λsl) + (λdsu_t - λdsl_t) - (λdsu_next - λdsl_next) + (ν_t - ν_next);
+        (λsu - λsl) + (λdsu_t - λdsl_t) - (λdsu_next - λdsl_next) + (ν_t - ν_next); #∇_s L
+        ; #∇_ch L
+        ; #∇_dis L
         λsl .* (-s);
         λsu .* (s - C);
         λdsu_t .* (ds - P);
@@ -251,11 +253,13 @@ function extract_vars_t(P::PowerManagementProblem, t)
     T = length(P.g)
     
     n_constraints_static = 5
-    n_constraints_storage = 4
+    n_constraints_storage = 7
 
     g = P.g[t].value[:]
     p = P.p[t].value[:]
     s = P.s[t].value[:]
+    ch = P.problem.ch[t].value[:]
+    dis = P.problem.dis[t].value[:]
 
     start_index = (t - 1) * n_constraints_static
     λpl = P.problem.constraints[start_index + 1].dual  
@@ -274,16 +278,22 @@ function extract_vars_t(P::PowerManagementProblem, t)
     storage_index = n_constraints_static * T + (t - 1) * n_constraints_storage
     λsl = P.problem.constraints[storage_index + 1].dual 
     λsu = P.problem.constraints[storage_index + 2].dual 
-    λdsu = P.problem.constraints[storage_index + 3].dual
-    λdsl = P.problem.constraints[storage_index + 4].dual
+    λchl = P.problem.constraints[storage_index + 3].dual
+    λchu = P.problem.constraints[storage_index + 4].dual
+    λdisl = P.problem.constraints[storage_index + 5].dual
+    λdisu = P.problem.constraints[storage_index + 6].dual
+    νs = P.problem.constraints[storage_index + 7].dual
 
     # checking size consistency of dual variables
-    @assert length(λdsl) == n
-    @assert length(λdsu) == n
     @assert length(λsl) == n
     @assert length(λsu) == n
+    @assert length(λchl) == n
+    @assert length(λchu) == n
+    @assert length(λdisl) == n
+    @assert length(λdisu) == n
+    @assert length(νs) == n
 
-    return g, p, s, λpl, λpu, λgl, λgu, ν, λdsl, λdsu, λsl, λsu
+    return g, p, s, ch, dis, λpl, λpu, λgl, λgu, ν, λsl, λsu, λchl, λchu, λdisl, λdisu, νs
 end
 
 """
@@ -313,14 +323,14 @@ function flatten_variables_dyn(P::PowerManagementProblem)
 
     # extract the variables at each timestep
     for t in 1:T
-        g, p, s, λpl, λpu, λgl, λgu, ν, λdsl, λdsu, λsl, λsu = extract_vars_t(P, t)
+        g, p, s, ch, dis, λpl, λpu, λgl, λgu, ν, λsl, λsu, λchl, λchu, λdisl, λdisu, νs = extract_vars_t(P, t)
         x_static = vcat(x_static, g, p, λpl, λpu, λgl, λgu, ν)
-        x_storage = vcat(x_storage, s, λsl, λsu, λdsu, λdsl)
+        x_storage = vcat(x_storage, s, ch, dis, λsl, λsu, λchl, λchu, λdisl, λdisu, νs)
     end
     vars = vcat(x_static, x_storage)
 
-    @assert length(x_storage) == 5 * n * T
     @assert length(x_static) == T * (3l + 3m + n) 
+    @assert length(x_storage) == 10 * n * T
 
     # checking that the size is consistent with expectations
     @assert length(vars) == kkt_dims_dyn(n, m, l, T)
@@ -337,10 +347,14 @@ Extract the primal and dual variables from `x`, an array containing them all.
 function unflatten_variables_dyn(x, n, m, l, T)
 
     static_length = 3l + 3m + n
-    storage_length = 5n
+    storage_length = 10n
 
-    g, p, s = [], [], []
-    λpl, λpu, λgl, λgu, ν, λdsl, λdsu, λsl, λsu = [], [], [], [], [], [], [], [], []
+    # variables
+    g, p, s, ch, dis = [], [], [], [], []
+    # static constriaints
+    λpl, λpu, λgl, λgu, ν = [], [], [], [], []
+    # dynamic constraints
+    λsl, λsu, λchl, λchu, λdisl, λdisu, νs = [], [], [], [], [], [], []
 
     # loop through timesteps, and retrieve variables in the order that 
     # x is constructed in flatten_variables_dyn()
@@ -372,13 +386,23 @@ function unflatten_variables_dyn(x, n, m, l, T)
         i = 0
         s = vcat(s, [x[crt_idx + i + 1:crt_idx + i + n]])
         i += n
+        ch = vcat(ch, [x[crt_idx + i + 1:crt_idx + i + n]])
+        i += n
+        dis = vcat(dis, [x[crt_idx + i + 1:crt_idx + i + n]])
+        i += n
         λsl = vcat(λsl, [x[crt_idx + i + 1:crt_idx + i + n]])
         i += n
         λsu = vcat(λsu, [x[crt_idx + i + 1:crt_idx + i + n]])
         i += n
-        λdsu = vcat(λdsu, [x[crt_idx + i + 1:crt_idx + i + n]])
+        λchl = vcat(λdsu, [x[crt_idx + i + 1:crt_idx + i + n]])
         i += n
-        λdsl = vcat(λdsl, [x[crt_idx + i + 1:crt_idx + i + n]])
+        λchu = vcat(λdsl, [x[crt_idx + i + 1:crt_idx + i + n]])
+        i += n
+        λdisl = vcat(λs, [x[crt_idx + i + 1:crt_idx + i + n]])
+        i += n
+        λdisu = vcat(λch, [x[crt_idx + i + 1:crt_idx + i + n]])
+        i += n
+        νs = vcat(λdis, [x[crt_idx + i + 1:crt_idx + i + n]])
         i += n
     end
     @assert crt_idx + i == T * (static_length + storage_length)
@@ -388,6 +412,8 @@ function unflatten_variables_dyn(x, n, m, l, T)
         @assert length(g[t]) == l
         @assert length(p[t]) == m
         @assert length(s[t]) == n
+        @assert length(ch[t]) == n
+        @assert length(dis[t]) == n
         @assert length(λpl[t]) == m
         @assert length(λpu[t]) == m
         @assert length(λgl[t]) == l
@@ -395,10 +421,13 @@ function unflatten_variables_dyn(x, n, m, l, T)
         @assert length(ν[t]) == n
         @assert length(λsl[t]) == n
         @assert length(λsu[t]) == n
-        @assert length(λdsl[t]) == n
-        @assert length(λdsu[t]) == n
+        @assert length(λchl[t]) == n
+        @assert length(λchu[t]) == n
+        @assert length(λdisl[t]) == n
+        @assert length(λdisu[t]) == n
+        @assert length(νs[t]) == n
     end
 
-    return g, p, s, λpl, λpu, λgl, λgu, ν, λdsl, λdsu, λsl, λsu
+    return g, p, s, ch, dis, λpl, λpu, λgl, λgu, ν, λdsl, λdsu, λchl, λchu, λdisl, λdisu, νs
 end 
 
