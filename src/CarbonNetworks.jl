@@ -25,7 +25,7 @@ export get_lmps, kkt_dims, flatten_variables, unflatten_variables
 
 export DynamicPowerNetwork, DynamicPowerManagementProblem
 export flatten_variables_dyn, unflatten_variables_dyn
-export kkt_dyn, sensitivity_demand_dyn, kkt_dims_dyn
+export kkt_dyn, sensitivity_demand_dyn, kkt_dims_dyn, storage_kkt_dims
 
 export sensitivity_price, sensitivity_demand
 export loss_and_grad, stochastic_loss_and_grad

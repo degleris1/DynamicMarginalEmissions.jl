@@ -123,7 +123,7 @@ function kkt(x, fq, fl, d, pmax, gmax, A, B; τ=TAU, ch=0, dis=0)
         λpu .* (p - pmax);
         -λgl .* g;
         λgu .* (g - gmax);
-        A*p - B*g + d .+ ds;
+        A*p - B*g + d .+ ch/η_c - η_d * dis;
     ]
 end
 
