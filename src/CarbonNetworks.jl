@@ -21,7 +21,7 @@ export open_datasets, parse_network_data, load_case, create_generation_map
 export load_synthetic_network, load_demand_data, load_renewable_data
 
 export PowerNetwork, PowerManagementProblem, solve!
-export get_lmps, kkt_dims, flatten_variables, unflatten_variables
+export get_lmps, kkt_dims, flatten_variables, unflatten_variables, kkt
 
 export DynamicPowerNetwork, DynamicPowerManagementProblem
 export flatten_variables_dyn, unflatten_variables_dyn
