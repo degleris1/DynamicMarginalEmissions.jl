@@ -36,11 +36,12 @@ mutable struct DynamicPowerNetwork
     B
     P
     C
+    T
     τ
 end
 
-DynamicPowerNetwork(fq, fl, pmax, gmax, A, B, P, C; τ=TAU) = 
-    DynamicPowerNetwork(fq, fl, pmax, gmax, A, B, P, C, τ)
+DynamicPowerNetwork(fq, fl, pmax, gmax, A, B, P, C, T; τ=TAU) = 
+    DynamicPowerNetwork(fq, fl, pmax, gmax, A, B, P, C, T, τ)
 
 # ===
 # Dynamic PowerManagementProblem

@@ -9,7 +9,7 @@ and dual variables) of the power management problem `P` with parameters
 `∇C` is the gradient `∇_x C(x)`.
 """
 function sensitivity_demand_dyn(P::PowerManagementProblem, net::DynamicPowerNetwork, d, ∇C, t)
-    T = length(d)
+    T = net.T
     x = flatten_variables_dyn(P)
 
     # Get partial Jacobians of KKT operator
@@ -27,7 +27,7 @@ function sensitivity_demand_dyn(P::PowerManagementProblem, net::DynamicPowerNetw
 end
 
 function sensitivity_demand_dyn(P::PowerManagementProblem, net::DynamicPowerNetwork, d, ∇C)
-    T = length(d)
+    T = net.T
     x = flatten_variables_dyn(P)
 
     # Get partial Jacobians of KKT operator
@@ -60,13 +60,13 @@ Compute the marginal emission factors at time `t` given carbon costs `c`
 and demands `d`
 """
 function compute_mefs(P::PowerManagementProblem, net::DynamicPowerNetwork, d, c, t)
-    ∇C_dyn = _make_∇C(net, d, c)
+    ∇C_dyn = _make_∇C(net, c)
     
     return sensitivity_demand_dyn(P, net, d, ∇C_dyn, t)
 end
 
 function compute_mefs(P::PowerManagementProblem, net::DynamicPowerNetwork, d, c)
-    ∇C_dyn = _make_∇C(net, d, c)
+    ∇C_dyn = _make_∇C(net, c)
 
     return sensitivity_demand_dyn(P, net, d, ∇C_dyn)
 end
@@ -77,10 +77,9 @@ end
 Constructs carbon cost gradient to be propagated for mef computation for 
 the DynamicPowerNetwork `net`. `d` is the demand and `c` are the carbon costs. 
 """
-function _make_∇C(net::DynamicPowerNetwork, d, c)
+function _make_∇C(net::DynamicPowerNetwork, c)
     # Extract dimensions
-    T = length(d)
-    n, m, l = get_problem_dims(net)
+    n, m, l, T = get_problem_dims(net)
     static_dim = kkt_dims(n, m, l)
  
     # Construct ∇_x C(x)
@@ -103,8 +102,8 @@ profile `d`.
 """
 function compute_obj_sensitivity(P::PowerManagementProblem, net::DynamicPowerNetwork, d, t)
     # Extract dimensions
-    T = length(d)
-    n, m, l = get_problem_dims(net)
+
+    n, m, l, T = get_problem_dims(net)
     static_dim = kkt_dims(n, m, l)
 
     # Construct ∇_x C(x)
@@ -124,8 +123,7 @@ The `unit` parameter defines which unit is considered (e.g. generator number, ed
 """
 function compute_var_sensitivity(P::PowerManagementProblem, net::DynamicPowerNetwork, d, varName, unit, t)
     # Extract dimensions
-    T = length(d)
-    n, m, l = get_problem_dims(net)
+    n, m, l, T = get_problem_dims(net)
     static_dim = kkt_dims(n, m, l) 
 
     # J = sensitivity_demand_dyn(P, net, d, I(kkt_dims_dyn(n, m, l, T)), t)
