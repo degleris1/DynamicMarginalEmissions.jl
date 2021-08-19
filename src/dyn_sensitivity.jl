@@ -67,10 +67,16 @@ end
 
 function compute_mefs(P::PowerManagementProblem, net::DynamicPowerNetwork, d, c)
     ∇C_dyn = _make_∇C(net, d, c)
-    
+
     return sensitivity_demand_dyn(P, net, d, ∇C_dyn)
 end
 
+"""
+    _make_∇C(net::DynamicPowerNetwork, d, c)
+
+Constructs carbon cost gradient to be propagated for mef computation for 
+the DynamicPowerNetwork `net`. `d` is the demand and `c` are the carbon costs. 
+"""
 function _make_∇C(net::DynamicPowerNetwork, d, c)
     # Extract dimensions
     T = length(d)
