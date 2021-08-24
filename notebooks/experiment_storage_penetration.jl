@@ -4,6 +4,15 @@
 using Markdown
 using InteractiveUtils
 
+# This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
+macro bind(def, element)
+    quote
+        local el = $(esc(element))
+        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : missing
+        el
+    end
+end
+
 # ╔═╡ db59921e-e998-11eb-0307-e396d43191b5
 begin
 	using Pkg; Pkg.activate()
@@ -162,13 +171,53 @@ begin
 	emissions_rates = [emissions_rates; zeros(n)]
 end;
 
+# ╔═╡ c8f71644-9371-443b-b976-1734cc7ae583
+md"""
+## What is the impact of charging/discharging efficiency on storage dynamics?
+"""
+
+# ╔═╡ 57a37eb0-a547-428c-9f8c-e5f3e30f5260
+c_rate = 0.25
+
+# ╔═╡ 491da4e6-03e6-49d3-907d-43ddcffdfb42
+s_rel = .1
+
+# ╔═╡ 9a45c280-d8a4-4849-8977-2dc763ed633b
+@bind η_c Slider(0.0:0.1:1.0)
+
+# ╔═╡ e55e0566-7bd6-4126-8f60-0d940f6d8111
+@bind η_d Slider(0.0:0.1:1.0)
+
+# ╔═╡ 9deb6bdf-54f4-42ee-855d-7e82cef6f4bb
+begin
+	# Construct dynamic network
+	C = total_demands * (s_rel)
+	P = C * c_rate
+	net_dyn = make_dynamic(net, T, P, C, dyn_gmax, η_c, η_d)
+
+	# Construct and solve OPF problem
+	opf_dyn = DynamicPowerManagementProblem(net_dyn, d_dyn)
+	solve!(opf_dyn, OPT, verbose=false)
+end
+
+# ╔═╡ af6d4ef0-f59f-42be-af36-7cf447478e4c
+begin
+	s_vals = zeros(n, T)
+	for t in 1:T
+    	s_vals[:, t] = opf_dyn.s[t].value./C
+	end
+end
+
+# ╔═╡ dd9efed9-f6ed-43fb-93f2-4d21d1360091
+begin
+	plot(s_vals', ylim=(0, 1))
+	title!("Relative SOC \n η_c = $η_c, η_d = $η_d")
+end
+
 # ╔═╡ 30ec492c-8d21-43f6-bb09-32810494f21e
 md"""
 ## How does storage penetration affect MEFs?
 """
-
-# ╔═╡ 64b06f05-b1ab-44c4-80e2-faeeb1466421
-c_rate = 0.25
 
 # ╔═╡ 98a0d7c5-b1a8-4ebe-bb73-7ca88b475592
 storage_penetrations = [0.0, 0.05, 0.10]
@@ -178,57 +227,6 @@ mef_times = 1:24
 
 # ╔═╡ 008ed573-67ec-4908-a51a-c5d2a01e5b0e
 refresh = true
-
-# ╔═╡ 418861e0-a35e-47db-9f00-a6a7fcf733fe
-md"""
-## Appendix
-"""
-
-# ╔═╡ 0d07df73-89e1-4dbf-8f8c-82c202ad84c7
-md"""
-### Solve static problem
-
-Solve the static optimal power flow problem and display the LMPs.
-"""
-
-# ╔═╡ 43ab37f7-bf1f-44fb-8858-e3bf7d4e8880
-begin
-	for t in 1:T
-		opf_t = PowerManagementProblem(net, d_dyn[t])
-		solve!(opf_t, OPT, verbose=true)
-		@assert opf_t.problem.status == Convex.MOI.OPTIMAL
-	end
-		
-	opf = PowerManagementProblem(net, d_dyn[18])
-	solve!(opf, OPT, verbose=true)
-	
-	opf.problem.status
-end
-
-# ╔═╡ e1ef0db3-3130-45b0-9f07-c5776d72c31a
-begin
-	λ = get_lmps(opf)
-	bar(λ, size=(600, 200), ylim=(100, Inf), title="locational marginal prices")
-end
-
-# ╔═╡ 08cce787-8118-4792-829a-153d2b637a78
-bar(abs.(evaluate(opf.p)) ./ (net.pmax), size=(600, 100), title="line flows")
-
-# ╔═╡ 67ef9083-dbfe-48e8-a741-2a5fb035b8d7
-bar(evaluate(opf.g)[1:6], size=(600, 100))
-
-# ╔═╡ 7e1bec31-9cdf-466c-83b3-dc792fd5cc53
-md"""
-### Utilities
-"""
-
-# ╔═╡ a3105ef4-67e7-41ad-bd2e-5d458c853d80
-function make_dynamic(net, T, P, C, dyn_gmax)
-	fqs = [net.fq for t in 1:T]
-	fls = [net.fl for t in 1:T]
-	pmaxs = [net.pmax for t in 1:T]
-	return DynamicPowerNetwork(fqs, fls, pmaxs, dyn_gmax, net.A, net.B, P, C)
-end
 
 # ╔═╡ 6f08828b-4c4b-4f50-bd40-35805a37aae0
 begin
@@ -251,7 +249,7 @@ begin
 			# Construct dynamic network
 			C = total_demands * (s_rel + δ)
 			P = C * c_rate
-			net_dyn = make_dynamic(net, T, P, C, dyn_gmax)
+			net_dyn = make_dynamic(net, T, P, C, dyn_gmax, η_c, η_d)
 
 			# Construct and solve OPF problem
 			opf_dyn = DynamicPowerManagementProblem(net_dyn, d_dyn)
@@ -381,6 +379,44 @@ begin
 	plt_emissions_heatmap
 end
 
+# ╔═╡ 418861e0-a35e-47db-9f00-a6a7fcf733fe
+md"""
+## Appendix
+"""
+
+# ╔═╡ 0d07df73-89e1-4dbf-8f8c-82c202ad84c7
+md"""
+### Solve static problem
+
+Solve the static optimal power flow problem and display the LMPs.
+"""
+
+# ╔═╡ 43ab37f7-bf1f-44fb-8858-e3bf7d4e8880
+begin
+	for t in 1:T
+		opf_t = PowerManagementProblem(net, d_dyn[t])
+		solve!(opf_t, OPT, verbose=true)
+		@assert opf_t.problem.status == Convex.MOI.OPTIMAL
+	end
+		
+	opf = PowerManagementProblem(net, d_dyn[18])
+	solve!(opf, OPT, verbose=true)
+	
+	opf.problem.status
+end
+
+# ╔═╡ e1ef0db3-3130-45b0-9f07-c5776d72c31a
+begin
+	λ = get_lmps(opf)
+	bar(λ, size=(600, 200), ylim=(100, Inf), title="locational marginal prices")
+end
+
+# ╔═╡ 08cce787-8118-4792-829a-153d2b637a78
+bar(abs.(evaluate(opf.p)) ./ (net.pmax), size=(600, 100), title="line flows")
+
+# ╔═╡ 67ef9083-dbfe-48e8-a741-2a5fb035b8d7
+bar(evaluate(opf.g)[1:6], size=(600, 100))
+
 # ╔═╡ Cell order:
 # ╠═db59921e-e998-11eb-0307-e396d43191b5
 # ╠═0aac9a3f-a477-4095-9be1-f4babe1e2803
@@ -402,8 +438,15 @@ end
 # ╠═bfa4a8f9-cfcd-4e22-b2dc-751226f3a73c
 # ╟─a8ccbc8e-24e6-4214-a179-4edf3cf26dad
 # ╠═e8ee5cbb-4afc-4737-b006-90071f6138cd
+# ╟─c8f71644-9371-443b-b976-1734cc7ae583
+# ╠═57a37eb0-a547-428c-9f8c-e5f3e30f5260
+# ╠═491da4e6-03e6-49d3-907d-43ddcffdfb42
+# ╠═9a45c280-d8a4-4849-8977-2dc763ed633b
+# ╠═e55e0566-7bd6-4126-8f60-0d940f6d8111
+# ╟─9deb6bdf-54f4-42ee-855d-7e82cef6f4bb
+# ╠═af6d4ef0-f59f-42be-af36-7cf447478e4c
+# ╠═dd9efed9-f6ed-43fb-93f2-4d21d1360091
 # ╟─30ec492c-8d21-43f6-bb09-32810494f21e
-# ╠═64b06f05-b1ab-44c4-80e2-faeeb1466421
 # ╠═98a0d7c5-b1a8-4ebe-bb73-7ca88b475592
 # ╠═8fc06205-0227-4b46-a2e9-72bdf9d57926
 # ╠═008ed573-67ec-4908-a51a-c5d2a01e5b0e
@@ -421,5 +464,3 @@ end
 # ╟─e1ef0db3-3130-45b0-9f07-c5776d72c31a
 # ╟─08cce787-8118-4792-829a-153d2b637a78
 # ╟─67ef9083-dbfe-48e8-a741-2a5fb035b8d7
-# ╟─7e1bec31-9cdf-466c-83b3-dc792fd5cc53
-# ╠═a3105ef4-67e7-41ad-bd2e-5d458c853d80
