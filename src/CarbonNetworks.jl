@@ -31,6 +31,8 @@ export sensitivity_price, sensitivity_demand
 export loss_and_grad, stochastic_loss_and_grad
 export compute_mefs
 export plot_sensitivity_check
+export make_dynamic
+
 
 # Files
 include("model.jl")
@@ -40,6 +42,8 @@ include("parse_data.jl")
 include("sensitivity.jl")
 include("dyn_sensitivity.jl")
 include("descent.jl")
+
+include("utils.jl")
 
 OPT = () -> ECOS.Optimizer(verbose=false)
 
