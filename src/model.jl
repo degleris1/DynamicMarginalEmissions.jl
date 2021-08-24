@@ -6,8 +6,6 @@
 # ===
 
 TAU = 0.0
-η_c = 1.0 # charging efficiency
-η_d = 1.0 # discharge efficiency
 
 mutable struct PowerNetwork
     fq
@@ -43,7 +41,7 @@ incidence matrix `A`.
 The parameter `τ` is a regularization weight used to make the problem
 strongly convex by adding τ ∑ᵢ pᵢ² to the objective.
 """
-function PowerManagementProblem(fq, fl, d, pmax, gmax, A, B; τ=TAU, ch=0, dis=0)
+function PowerManagementProblem(fq, fl, d, pmax, gmax, A, B; τ=TAU, ch=0, dis=0, η_c=1.0, η_d=1.0)
     n, m = size(A)
     n, l = size(B)
     g = Variable(l)
@@ -59,10 +57,10 @@ function PowerManagementProblem(fq, fl, d, pmax, gmax, A, B; τ=TAU, ch=0, dis=0
         p <= pmax, #λpu
         -g <= 0, #λgl
         g <= gmax, #λgu
-        0 == A*p - B*g + d + ch/η_c - η_d * dis, #ν
+        0 == A*p - B*g + d + ch - dis, #ν
     ])
 
-    params = (fq=fq, fl=fl, d=d, pmax=pmax, gmax=gmax, A=A, B=B, τ=τ)
+    params = (fq=fq, fl=fl, d=d, pmax=pmax, gmax=gmax, A=A, B=B, τ=τ, η_c=η_c, η_d=η_d)
 
     return PowerManagementProblem(problem, p, g, zeros(n), zeros(n), zeros(n), params)
 end
@@ -123,7 +121,7 @@ function kkt(x, fq, fl, d, pmax, gmax, A, B; τ=TAU, ch=0, dis=0)
         λpu .* (p - pmax);
         -λgl .* g;
         λgu .* (g - gmax);
-        A*p - B*g + d .+ ch/η_c .- η_d * dis;
+        A*p - B*g + d .+ ch .- dis;
     ]
 end
 

@@ -38,10 +38,12 @@ mutable struct DynamicPowerNetwork
     C
     T
     τ
+    η_c
+    η_d
 end
 
-DynamicPowerNetwork(fq, fl, pmax, gmax, A, B, P, C, T; τ=TAU) = 
-    DynamicPowerNetwork(fq, fl, pmax, gmax, A, B, P, C, T, τ)
+DynamicPowerNetwork(fq, fl, pmax, gmax, A, B, P, C, T; τ=TAU, η_c=1.0, η_d=1.0) = 
+    DynamicPowerNetwork(fq, fl, pmax, gmax, A, B, P, C, T, τ, η_c, η_d)
 
 # ===
 # Dynamic PowerManagementProblem
@@ -62,7 +64,7 @@ Note:
 - There is currently no final condition on the storage. 
 """
 function DynamicPowerManagementProblem(
-    fq, fl, d, pmax, gmax, A, B, P, C; τ=TAU
+    fq, fl, d, pmax, gmax, A, B, P, C; τ=TAU, η_c=1.0, η_d=1.0
 )
     T = length(fq)
     n, _ = size(A)
@@ -73,17 +75,10 @@ function DynamicPowerManagementProblem(
     ch = [Variable(n) for _ in 1:T]
     dis = [Variable(n) for _ in 1:T]
 
-    #TODO: need to handle the initial condition
     subproblems = vcat(
-        # first treating the initial constraint explicitly to avoid having to
-        # specify another variable for s_0
         [PowerManagementProblem(
-            fq[1], fl[1], d[1], pmax[1], gmax[1], A, B; ch=ch[1], dis=dis[1]
-        )],
-        # then iterating over all the timesteps 
-        [PowerManagementProblem(
-            fq[t], fl[t], d[t], pmax[t], gmax[t], A, B; ch=ch[t], dis=dis[t]
-        ) for t in 2:T]
+            fq[t], fl[t], d[t], pmax[t], gmax[t], A, B; τ=τ, ch=ch[t], dis=dis[t], η_c=η_c, η_d=η_d
+        ) for t in 1:T]
     )
 
     objective = sum([sub.problem.objective for sub in subproblems])
@@ -107,7 +102,7 @@ function DynamicPowerManagementProblem(
         ch[1] <= P, # λchu
         dis[1] >= 0, #λdisl
         dis[1] <= P, # λdisu
-        s[1] == INIT_COND + ch[1] - dis[1], #νs (ν for storage)
+        s[1] == INIT_COND + ch[1]/η_c - η_d * dis[1], #νs (ν for storage)
     ])
     # running condition
     for t in 2:T
@@ -118,7 +113,7 @@ function DynamicPowerManagementProblem(
         ch[t] <= P, # λchu
         dis[t] >= 0, #λdisl
         dis[t] <= P, # λdisu
-        0 == - s[t] + s[t-1] + ch[t] - dis[t], #νs (ν for storage)
+        0 == - s[t] + s[t-1] + ch[t]/η_c - η_d * dis[t], #νs (ν for storage)
         ])
     end
 
@@ -132,7 +127,7 @@ end
 
 DynamicPowerManagementProblem(net::DynamicPowerNetwork, d) =
     DynamicPowerManagementProblem(
-        net.fq, net.fl, d, net.pmax, net.gmax, net.A, net.B, net.P, net.C; τ=net.τ
+        net.fq, net.fl, d, net.pmax, net.gmax, net.A, net.B, net.P, net.C; τ=net.τ, η_c=net.η_c, η_d=net.η_d
     )
 
 # ===
@@ -158,7 +153,7 @@ kkt_dims_dyn(n, m, l, T) = T * (kkt_dims(n, m, l) + storage_kkt_dims(n))
 
 Compute the dimensions of the KKT operator associated with storage constraints.
 """
-storage_kkt_dims(n) = 3n + 7n
+storage_kkt_dims(n) = 10n # 3n for stationarity, 7n for complementary slackness
 
 """
     kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, P, C; τ=TAU)
@@ -166,7 +161,7 @@ storage_kkt_dims(n) = 3n + 7n
 Compute the KKT operator applied to `x`, with parameters given by `fq`,
 `fl`, `d`, `pmax`, `gmax`, `A`, `B`, `P`, `C`, and `τ`.
 """
-function kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, P, C; τ=TAU)
+function kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, P, C, η_c, η_d; τ=TAU)
 
     n, m = size(A)
     _, l = size(B)
@@ -196,7 +191,7 @@ function kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, P, C; τ=TAU)
         # add the KKts for the storage
         KKT_s = kkt_storage(
             s[t], s_prev, ch[t], dis[t], λsu[t], λsl[t], λchu[t], λchl[t],  
-            λdisu[t], λdisl[t], ν[t], νs[t], νs_next, P, C
+            λdisu[t], λdisl[t], ν[t], νs[t], νs_next, P, C, η_c, η_d
             )
 
         # check the sizes of both matrices computed above
@@ -215,7 +210,7 @@ function kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, P, C; τ=TAU)
 end
 
 kkt_dyn(x, net::DynamicPowerNetwork, d) = kkt_dyn(
-    x, net.fq, net.fl, d, net.pmax, net.gmax, net.A, net.B, net.P, net.C; τ=net.τ
+    x, net.fq, net.fl, d, net.pmax, net.gmax, net.A, net.B, net.P, net.C, net.η_c, net.η_d; τ=net.τ
 )
 
 """
@@ -226,7 +221,9 @@ Notes:
 - Dimensions should be 10n, as there are 3 variables of size n + 7 constraints of size n
 
 """
-function kkt_storage(s, s_prev, ch, dis, λsu, λsl, λchu, λchl, λdisu, λdisl, ν, νs_t, νs_next, P, C)
+function kkt_storage(
+    s, s_prev, ch, dis, λsu, λsl, λchu, λchl, λdisu, λdisl, ν, νs_t, νs_next, P, C, η_c, η_d
+    )
     return [
         (λsu - λsl) + (νs_next - νs_t); #∇_s L
         (λchu - λchl) + ν/η_c + νs_t ; #∇_ch L
@@ -237,7 +234,7 @@ function kkt_storage(s, s_prev, ch, dis, λsu, λsl, λchu, λchl, λdisu, λdis
         λchu .* (ch-P);
         λdisl .* (-dis);
         λdisu .* (dis-P);
-        s .- s_prev - ch + dis;
+        s .- s_prev - ch/η_c + η_d * dis;
     ]
 end
 
@@ -346,8 +343,8 @@ Extract the primal and dual variables from `x`, an array containing them all.
 """
 function unflatten_variables_dyn(x, n, m, l, T)
 
-    static_length = 3l + 3m + n
-    storage_length = 10n
+    static_length = kkt_dims(n, m, l)
+    storage_length = storage_kkt_dims(n)
 
     # variables
     g, p, s, ch, dis = [], [], [], [], []
