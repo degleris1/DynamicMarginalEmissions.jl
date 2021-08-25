@@ -214,6 +214,16 @@ begin
 	title!("Relative SOC \n η_c = $η_c, η_d = $η_d")
 end
 
+# ╔═╡ 3f9eb091-059c-44a5-9b50-ae3cabe24060
+md"""
+## How does charging efficiency affect MEFs
+"""
+
+# ╔═╡ 4ee8d0aa-9a68-44e5-8b72-f3158c4ba7f8
+md"""
+TODO LUCAS: basically implement the same loop as below with storage penetration fixed and with varying η_c and η_d
+"""
+
 # ╔═╡ 30ec492c-8d21-43f6-bb09-32810494f21e
 md"""
 ## How does storage penetration affect MEFs?
@@ -228,10 +238,18 @@ mef_times = 1:24
 # ╔═╡ 008ed573-67ec-4908-a51a-c5d2a01e5b0e
 refresh = true
 
+# ╔═╡ 3dce8c04-8a5c-41a7-b18a-be06caa628d3
+begin
+	#fix values to avoid rerunning the whole cell whenever playing with the sliders
+	η_c_ = 1.0
+	η_d_ = 1.0
+end
+
 # ╔═╡ 6f08828b-4c4b-4f50-bd40-35805a37aae0
 begin
 	# Recompute results
 	if refresh || !isfile("../results/storage.jld")
+		println("Recomputing results")
 		options = (
 			c_rate=c_rate,
 			renewable_penetration=renewable_penetration,
@@ -249,13 +267,13 @@ begin
 			# Construct dynamic network
 			C = total_demands * (s_rel + δ)
 			P = C * c_rate
-			net_dyn = make_dynamic(net, T, P, C, dyn_gmax, η_c, η_d)
+			net_dyn = make_dynamic(net, T, P, C, dyn_gmax, η_c_, η_d_)
 
 			# Construct and solve OPF problem
 			opf_dyn = DynamicPowerManagementProblem(net_dyn, d_dyn)
 			solve!(opf_dyn, OPT, verbose=false)
 			@show opf_dyn.problem.optval / T
-
+			
 			# Compute MEFs
 			@time mefs = compute_mefs(opf_dyn, net_dyn, d_dyn, emissions_rates)
 			for ind_t in 1:length(mef_times)
@@ -266,7 +284,7 @@ begin
 		end
 		
 		println("")
-		println("\007")
+
 		JLD.save("../results/storage.jld", 
 			"results", results, "options", options)
 		
@@ -446,10 +464,13 @@ bar(evaluate(opf.g)[1:6], size=(600, 100))
 # ╟─9deb6bdf-54f4-42ee-855d-7e82cef6f4bb
 # ╠═af6d4ef0-f59f-42be-af36-7cf447478e4c
 # ╠═dd9efed9-f6ed-43fb-93f2-4d21d1360091
+# ╟─3f9eb091-059c-44a5-9b50-ae3cabe24060
+# ╟─4ee8d0aa-9a68-44e5-8b72-f3158c4ba7f8
 # ╟─30ec492c-8d21-43f6-bb09-32810494f21e
 # ╠═98a0d7c5-b1a8-4ebe-bb73-7ca88b475592
 # ╠═8fc06205-0227-4b46-a2e9-72bdf9d57926
 # ╠═008ed573-67ec-4908-a51a-c5d2a01e5b0e
+# ╠═3dce8c04-8a5c-41a7-b18a-be06caa628d3
 # ╠═6f08828b-4c4b-4f50-bd40-35805a37aae0
 # ╠═ec676d81-d56e-452b-b739-3c3040bf6c8d
 # ╠═cd5fe410-6264-4381-b19f-31d050bc3930
