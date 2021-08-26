@@ -224,6 +224,15 @@ md"""
 TODO LUCAS: basically implement the same loop as below with storage penetration fixed and with varying η_c and η_d
 """
 
+# ╔═╡ 4a8c7752-6de8-4ea7-aafe-702b17507185
+storage_pen = .05
+
+# ╔═╡ 6e6b15b1-7685-4a20-9d94-dd703caa2fe9
+η_vals = [0.1, 0.5, 0.9]
+
+# ╔═╡ dfa2a03b-6925-4be0-aeac-076c4cf25969
+interesting_nodes = 2 : 2 : 30 
+
 # ╔═╡ 30ec492c-8d21-43f6-bb09-32810494f21e
 md"""
 ## How does storage penetration affect MEFs?
@@ -237,6 +246,97 @@ mef_times = 1:24
 
 # ╔═╡ 008ed573-67ec-4908-a51a-c5d2a01e5b0e
 refresh = true
+
+# ╔═╡ 47e2e177-3701-471f-ae3c-38276ec69370
+begin
+	# Recompute results
+	if refresh || !isfile("../results/storage_eta.jld")
+		println("Recomputing results")
+		options_η = (
+			c_rate=c_rate,
+			renewable_penetration=renewable_penetration,
+			storage_penetrations=storage_pen,
+			mef_times=mef_times,
+			emissions_rates=emissions_rates,
+			d_dyn=d_dyn,
+			η_vals=η_vals
+		)
+		
+		meta_η = Dict()
+		
+		results_η = zeros(n, T, length(mef_times), length(η_vals))
+		for (ind_η, η) in enumerate(η_vals)
+
+			# Construct dynamic network
+			C = total_demands * (storage_pen + δ)
+			P = C * c_rate
+			net_dyn = make_dynamic(net, T, P, C, dyn_gmax, η, η)
+
+			# Construct and solve OPF problem
+			opf_dyn = DynamicPowerManagementProblem(net_dyn, d_dyn)
+			solve!(opf_dyn, OPT, verbose=false)
+			@show opf_dyn.problem.optval / T
+			
+			# Compute MEFs
+			@time mefs = compute_mefs(opf_dyn, net_dyn, d_dyn, emissions_rates)
+			for ind_t in 1:length(mef_times)
+				results_η[:, :, ind_t, ind_η] .= mefs[ind_t]
+			end
+			
+			meta_η[ind_η] = (opf=opf_dyn, net=net_dyn)
+		end
+		
+		println("")
+
+		JLD.save("../results/storage_eta.jld", 
+			"results", results_η, "options", options_η)
+		
+	else
+		
+		jld_file_η = JLD.load("../results/storage_eta.jld")
+		results_η, options_η = jld_file_η["results"], jld_file_η["options"]
+		
+	end
+	
+	"Results loaded."
+end
+
+# ╔═╡ 457c1959-94fa-4267-8645-3ed1409cd0a0
+total_mefs_η = sum(results_η, dims=2)[:, 1, :, :];
+
+# ╔═╡ a7e75e49-5031-4cc4-b96e-6227277ec3ba
+begin
+	subplots_η = []
+	curves_η = 1:length(η_vals)
+	
+	for (ind_plt, i) in enumerate(interesting_nodes)
+		plt = plot(xticks=[6, 12, 18, 24], xlim=(1, 24))
+		plot!(legend=nothing)
+		plot!(mef_times, total_mefs_η[i, :, curves_η], lw=4, alpha=0.8,
+			labels=η_vals[curves_η]')
+		
+		ind_plt in [1, 6, 11] && plot!(ylabel="Δco2 (lbs) / Δmwh")
+		ind_plt in 11:15 && plot!(xlabel="hour")
+		# ind_plt in [2] && plot!(legend=:topleft)
+		
+		push!(subplots_η, plt)
+	end
+	
+	plot(subplots_η..., layout=(3, 5), leftmargin=4Plots.mm, size=(800, 400))
+end
+
+# ╔═╡ d9617524-76c3-447d-9b94-0a690f83a7b9
+begin
+	highlighted_node_ = 5
+	plt_dyn_mef_eta = plot(subplots_η[highlighted_node_])
+	plot!(size=(600, 200), legend=:outertopright)
+	plot!(title="node $(interesting_nodes[highlighted_node_])", bottommargin=3Plots.mm)
+	plot!(ylabel="Δco2 (lbs) / Δmwh", xlabel="hour")
+	
+	# savefig(plt_dynamic_mef, 
+	# 	"../img/storage_penetration_dynamic_mef_$(highlighted_node).png")
+	plt_dyn_mef_eta
+end
 
 # ╔═╡ 3dce8c04-8a5c-41a7-b18a-be06caa628d3
 begin
@@ -257,6 +357,8 @@ begin
 			mef_times=mef_times,
 			emissions_rates=emissions_rates,
 			d_dyn=d_dyn,
+			η_c=η_c_,
+			η_d=η_d_
 		)
 		
 		meta = Dict()
@@ -336,7 +438,6 @@ total_mefs = sum(results, dims=2)[:, 1, :, :];
 # ╔═╡ 6186798f-6711-4222-94bb-f53b2d0fad7d
 begin
 	subplots = []
-	interesting_nodes = 2 : 2 : 30 
 	curves = 1:length(storage_penetrations)
 	
 	for (ind_plt, i) in enumerate(interesting_nodes)
@@ -466,6 +567,13 @@ bar(evaluate(opf.g)[1:6], size=(600, 100))
 # ╠═dd9efed9-f6ed-43fb-93f2-4d21d1360091
 # ╟─3f9eb091-059c-44a5-9b50-ae3cabe24060
 # ╟─4ee8d0aa-9a68-44e5-8b72-f3158c4ba7f8
+# ╠═4a8c7752-6de8-4ea7-aafe-702b17507185
+# ╠═6e6b15b1-7685-4a20-9d94-dd703caa2fe9
+# ╠═47e2e177-3701-471f-ae3c-38276ec69370
+# ╠═457c1959-94fa-4267-8645-3ed1409cd0a0
+# ╠═dfa2a03b-6925-4be0-aeac-076c4cf25969
+# ╠═a7e75e49-5031-4cc4-b96e-6227277ec3ba
+# ╠═d9617524-76c3-447d-9b94-0a690f83a7b9
 # ╟─30ec492c-8d21-43f6-bb09-32810494f21e
 # ╠═98a0d7c5-b1a8-4ebe-bb73-7ca88b475592
 # ╠═8fc06205-0227-4b46-a2e9-72bdf9d57926
@@ -475,9 +583,9 @@ bar(evaluate(opf.g)[1:6], size=(600, 100))
 # ╠═ec676d81-d56e-452b-b739-3c3040bf6c8d
 # ╠═cd5fe410-6264-4381-b19f-31d050bc3930
 # ╟─f5b6479f-3bc8-4b86-987a-a14968d60e25
-# ╠═d27ef0d8-70b2-4897-9000-8fa70b1862fc
 # ╠═0740dc70-a532-4818-b09d-b3b8d60fa6ba
 # ╠═6186798f-6711-4222-94bb-f53b2d0fad7d
+# ╠═d27ef0d8-70b2-4897-9000-8fa70b1862fc
 # ╠═f7e0d09c-40bf-4936-987a-a3bcadae5487
 # ╟─418861e0-a35e-47db-9f00-a6a7fcf733fe
 # ╟─0d07df73-89e1-4dbf-8f8c-82c202ad84c7
