@@ -46,7 +46,7 @@ function PowerManagementProblem(fq, fl, d, pmax, gmax, A, B; τ=TAU, ds=0)
     p = Variable(m)
 
     problem = minimize(
-        (1/2)*quadform(g, Diagonal(fq))
+        (1/2)*sumsquares(dot(*)(sqrt.(fq), g))  #quadform(g, diagm(fq))  # <--- NICE PEROFRMANCE BOOST WOO
         + fl'g
         + (τ/2)*sumsquares(p)
     )
