@@ -102,7 +102,7 @@ function DynamicPowerManagementProblem(
         ch[1] <= P, # λchu
         dis[1] >= 0, #λdisl
         dis[1] <= P, # λdisu
-        s[1] == INIT_COND + ch[1]/η_c - η_d * dis[1], #νs (ν for storage)
+        s[1] == INIT_COND + ch[1] * η_c - dis[1]/η_d, #νs (ν for storage)
     ])
     # running condition
     for t in 2:T
@@ -113,7 +113,7 @@ function DynamicPowerManagementProblem(
         ch[t] <= P, # λchu
         dis[t] >= 0, #λdisl
         dis[t] <= P, # λdisu
-        0 == - s[t] + s[t-1] + ch[t]/η_c - η_d * dis[t], #νs (ν for storage)
+        0 == - s[t] + s[t-1] + ch[t] * η_c - dis[t]/η_d, #νs (ν for storage)
         ])
     end
 
@@ -226,15 +226,15 @@ function kkt_storage(
     )
     return [
         (λsu - λsl) + (νs_next - νs_t); #∇_s L
-        (λchu - λchl) + ν/η_c + νs_t ; #∇_ch L
-        (λdisu - λdisl) - η_d * ν - νs_t; #∇_dis L
+        (λchu - λchl) + ν * η_c + νs_t ; #∇_ch L
+        (λdisu - λdisl) - ν/η_d - νs_t; #∇_dis L
         λsl .* (-s);
         λsu .* (s - C);
         λchl .* (-ch);
         λchu .* (ch-P);
         λdisl .* (-dis);
         λdisu .* (dis-P);
-        s .- s_prev - ch/η_c + η_d * dis;
+        s .- s_prev - ch * η_c + dis/η_d;
     ]
 end
 
