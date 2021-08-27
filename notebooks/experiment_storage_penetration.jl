@@ -183,10 +183,10 @@ c_rate = 0.25
 s_rel = .1
 
 # ╔═╡ 9a45c280-d8a4-4849-8977-2dc763ed633b
-@bind η_c Slider(0.0:0.1:1.0)
+@bind η_c Slider(0.8:0.01:1.0)
 
 # ╔═╡ e55e0566-7bd6-4126-8f60-0d940f6d8111
-@bind η_d Slider(0.0:0.1:1.0)
+@bind η_d Slider(0.8:0.01:1.0)
 
 # ╔═╡ 9deb6bdf-54f4-42ee-855d-7e82cef6f4bb
 begin
@@ -219,16 +219,11 @@ md"""
 ## How does charging efficiency affect MEFs
 """
 
-# ╔═╡ 4ee8d0aa-9a68-44e5-8b72-f3158c4ba7f8
-md"""
-TODO LUCAS: basically implement the same loop as below with storage penetration fixed and with varying η_c and η_d
-"""
-
 # ╔═╡ 4a8c7752-6de8-4ea7-aafe-702b17507185
 storage_pen = .05
 
 # ╔═╡ 6e6b15b1-7685-4a20-9d94-dd703caa2fe9
-η_vals = [0.1, 0.5, 0.9]
+η_vals = [0.9, 0.95, 0.99]
 
 # ╔═╡ dfa2a03b-6925-4be0-aeac-076c4cf25969
 interesting_nodes = 2 : 2 : 30 
@@ -562,18 +557,17 @@ bar(evaluate(opf.g)[1:6], size=(600, 100))
 # ╠═491da4e6-03e6-49d3-907d-43ddcffdfb42
 # ╠═9a45c280-d8a4-4849-8977-2dc763ed633b
 # ╠═e55e0566-7bd6-4126-8f60-0d940f6d8111
-# ╟─9deb6bdf-54f4-42ee-855d-7e82cef6f4bb
+# ╠═9deb6bdf-54f4-42ee-855d-7e82cef6f4bb
 # ╠═af6d4ef0-f59f-42be-af36-7cf447478e4c
 # ╠═dd9efed9-f6ed-43fb-93f2-4d21d1360091
 # ╟─3f9eb091-059c-44a5-9b50-ae3cabe24060
-# ╟─4ee8d0aa-9a68-44e5-8b72-f3158c4ba7f8
 # ╠═4a8c7752-6de8-4ea7-aafe-702b17507185
 # ╠═6e6b15b1-7685-4a20-9d94-dd703caa2fe9
 # ╠═47e2e177-3701-471f-ae3c-38276ec69370
 # ╠═457c1959-94fa-4267-8645-3ed1409cd0a0
-# ╠═dfa2a03b-6925-4be0-aeac-076c4cf25969
-# ╠═a7e75e49-5031-4cc4-b96e-6227277ec3ba
-# ╠═d9617524-76c3-447d-9b94-0a690f83a7b9
+# ╟─dfa2a03b-6925-4be0-aeac-076c4cf25969
+# ╟─a7e75e49-5031-4cc4-b96e-6227277ec3ba
+# ╟─d9617524-76c3-447d-9b94-0a690f83a7b9
 # ╟─30ec492c-8d21-43f6-bb09-32810494f21e
 # ╠═98a0d7c5-b1a8-4ebe-bb73-7ca88b475592
 # ╠═8fc06205-0227-4b46-a2e9-72bdf9d57926
