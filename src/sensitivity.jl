@@ -2,16 +2,30 @@
 
 
 """
-    get_problem_dims(net::Union{PowerNetwork, DynamicPowerNetwork})
+    get_problem_dims(net::PowerNetwork)
 
 Return `(n, m, l)`, where `n` is the number of nodes in the network,
 `m` is the number of edges, and `l` is the number of generators.
 """
-function get_problem_dims(net::Union{PowerNetwork, DynamicPowerNetwork})
+function get_problem_dims(net::PowerNetwork)
     n, m = size(net.A)
     n, l = size(net.B)
 
     return n, m, l
+end
+
+"""
+    get_problem_dims(net::DynamicPowerNetwork)
+
+Return `(n, m, l, T)`, where `n` is the number of nodes in the network,
+`m` is the number of edges, and `l` is the number of generators,
+and `T` is the number of timesteps in the dynamic problem.
+"""
+function get_problem_dims(net::DynamicPowerNetwork)
+    n, m = size(net.A)
+    n, l = size(net.B)
+
+    return n, m, l, net.T
 end
 
 

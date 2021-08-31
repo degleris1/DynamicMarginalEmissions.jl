@@ -21,16 +21,18 @@ export open_datasets, parse_network_data, load_case, create_generation_map
 export load_synthetic_network, load_demand_data, load_renewable_data
 
 export PowerNetwork, PowerManagementProblem, solve!
-export get_lmps, kkt_dims, flatten_variables, unflatten_variables
+export get_lmps, kkt_dims, flatten_variables, unflatten_variables, kkt
 
 export DynamicPowerNetwork, DynamicPowerManagementProblem
 export flatten_variables_dyn, unflatten_variables_dyn
-export kkt_dyn, sensitivity_demand_dyn, kkt_dims_dyn
+export kkt_dyn, sensitivity_demand_dyn, kkt_dims_dyn, storage_kkt_dims
 
 export sensitivity_price, sensitivity_demand
 export loss_and_grad, stochastic_loss_and_grad
 export compute_mefs
 export plot_sensitivity_check
+export make_dynamic
+
 
 # Files
 include("model.jl")
@@ -40,6 +42,8 @@ include("parse_data.jl")
 include("sensitivity.jl")
 include("dyn_sensitivity.jl")
 include("descent.jl")
+
+include("utils.jl")
 
 OPT = () -> ECOS.Optimizer(verbose=false)
 
