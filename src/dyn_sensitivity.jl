@@ -31,8 +31,14 @@ function sensitivity_demand_dyn(P::PowerManagementProblem, net::DynamicPowerNetw
     x = flatten_variables_dyn(P)
 
     # Get partial Jacobians of KKT operator
+
+    #@show size(x)
+
     _, ∂K_xT = Zygote.forward_jacobian(x -> kkt_dyn(x, net, d), x)
-    v = ∂K_xT \ ∇C
+
+    #@show size(∂K_xT)
+
+    v = sparse(∂K_xT) \ ∇C
 
     ∇C_θ = []
     for t in 1:T
@@ -77,7 +83,7 @@ end
 Constructs carbon cost gradient to be propagated for mef computation for 
 the DynamicPowerNetwork `net`. `d` is the demand and `c` are the carbon costs. 
 """
-function _make_∇C(net::DynamicPowerNetwork, c)
+function _make_∇C(net::DynamicPowerNetwork, c, cq=0, g=0)
     # Extract dimensions
     n, m, l, T = get_problem_dims(net)
     static_dim = kkt_dims(n, m, l)
@@ -86,7 +92,11 @@ function _make_∇C(net::DynamicPowerNetwork, c)
     ∇C_dyn = zeros(kkt_dims_dyn(n, m, l, T), T)
     idx = 0
     for t in 1:T
-         ∇C_dyn[idx+1 : idx+l, t] .= c
+        if g == 0
+            ∇C_dyn[idx+1 : idx+l, t] .= c
+        else
+            ∇C_dyn[idx+1 : idx+l, t] .= c .+ (cq .* g[t])
+        end
          idx += static_dim
     end
 

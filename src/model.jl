@@ -115,7 +115,7 @@ function kkt(x, fq, fl, d, pmax, gmax, A, B; τ=TAU, ch=0, dis=0)
     # Lagragian is
     # L = J + λpl'(-p - pmax) + ... + λgu'(g - gmax) + v'(Ap - g - d)
     return [
-        Diagonal(fq)*g +  fl - B'ν - λgl + λgu; # ∇_g L
+        Diagonal(fq)*g + fl - B'ν - λgl + λgu; # ∇_g L
         A'ν + λpu - λpl + τ*p; # ∇_p L
         λpl .* (-p - pmax); 
         λpu .* (p - pmax);

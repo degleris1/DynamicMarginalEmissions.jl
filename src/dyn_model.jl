@@ -253,10 +253,19 @@ function extract_vars_t(P::PowerManagementProblem, t)
     n_constraints_storage = 7
 
     g = P.g[t].value[:]
-    p = P.p[t].value[:]
-    s = P.s[t].value[:]
-    ch = P.ch[t].value[:]
-    dis = P.dis[t].value[:]
+    p = evaluate(P.p[t]) #.value[:]
+    s = evaluate(P.s[t]) #.value[:]
+    ch = evaluate(P.ch[t]) #.value[:]
+    dis = evaluate(P.dis[t]) #.value[:]
+
+    make_array = x -> (typeof(x) <: Array) ? x : [x]
+
+    p = make_array(p)
+    s = make_array(s)
+    ch = make_array(ch)
+    dis = make_array(dis)
+
+    # @show size(p), size(s), size(ch), size(dis)
 
     start_index = (t - 1) * n_constraints_static
     λpl = P.problem.constraints[start_index + 1].dual  

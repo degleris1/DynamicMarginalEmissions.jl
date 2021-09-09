@@ -169,7 +169,7 @@ function load_synthetic_network(case_name)
     d = _make_d(load, n)
 
     return θ, d, net
-    end
+end
 
 """
     load_demand_data(case_name::String; source="caiso", normalize_rows=false)
