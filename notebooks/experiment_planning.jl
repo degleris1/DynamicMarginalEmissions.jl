@@ -354,18 +354,8 @@ _jac[1:2*n1, :]
 # ╔═╡ 6da32f65-707a-4572-b753-4bfa98a15685
 jac_manual
 
-# ╔═╡ d160b73a-a149-487a-9ad3-150cce66eced
-((_jac[1:2*n1, :] .!= 0) - (jac_manual .!= 0))
-
-# ╔═╡ 3d87426d-3fa3-4587-94cf-a6bac0d60b1a
-2*n1
-
-# ╔═╡ 4c885c83-6173-4520-886d-0db7ebde8b01
-let
-	d = 1
-	_jac[n1*(d-1)+1:d*n1, :]
-	#[d*n1-n:d*n1, 2*n1+n+1:2*n1+3n]
-end
+# ╔═╡ 0f56cf21-2f2d-4301-b640-23f3782b7ec4
+maximum(abs, _jac[1:2*n1, :] - jac_manual)
 
 # ╔═╡ 92156e27-145b-4bb5-a2cb-01a4c6e82cda
 fig_width = 1.79168591667*100
@@ -612,9 +602,7 @@ md"""
 # ╠═252c8eff-255a-418e-a381-760d35e1c981
 # ╠═d40e9bea-0669-4bb1-8e13-0edbb6b0596e
 # ╠═6da32f65-707a-4572-b753-4bfa98a15685
-# ╠═d160b73a-a149-487a-9ad3-150cce66eced
-# ╠═3d87426d-3fa3-4587-94cf-a6bac0d60b1a
-# ╠═4c885c83-6173-4520-886d-0db7ebde8b01
+# ╠═0f56cf21-2f2d-4301-b640-23f3782b7ec4
 # ╠═92156e27-145b-4bb5-a2cb-01a4c6e82cda
 # ╠═1c3d0bc2-ac19-4d48-8273-513be139d9c1
 # ╠═3a58391a-3ec8-42a0-8bf7-c8b54e80a378
