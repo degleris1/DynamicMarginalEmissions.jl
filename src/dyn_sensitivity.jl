@@ -283,3 +283,42 @@ function sensitivity_var_check(dnet::DynamicPowerNetwork, d_dyn, node, varName, 
     
     return opt_vals, estimated_vals, x
 end
+
+
+
+"""
+Compute the Jacobian for the dyn part of the problem
+"""
+function compute_jacobian_kkt_dyn_t(fq, fl, d, pmax, gmax, A, B, x; τ=TAU)
+    n, m = size(A)
+    n, l = size(B)
+
+    g, p, λpl, λpu, λgl, λgu, _ = unflatten_variables(x, n, m, l)
+
+    K11 = [
+        Diagonal(fq)     spzeros(l, m);
+        spzeros(m, l)    τ * I(m)
+    ]
+   
+    K12 = [
+        spzeros(l, 2 * m)   -I(l)       I(l);
+        -I(m)             I(m)        spzeros(m, 2l)
+    ]
+
+    K13 = [-B'; A']
+
+    K21 = [
+        spzeros(m, l) -Diagonal(λpl);
+        spzeros(m, l) Diagonal(λpu);
+        -Diagonal(λgl) spzeros(l, m);
+        Diagonal(λgu) spzeros(l, m)
+    ]
+
+    K22 = Diagonal([-p - pmax; p - pmax; -g; g - gmax])
+    
+    return [
+        K11 K12 K13;
+        K21 K22 spzeros(2 * (m + l), n);
+        K13' spzeros(n, 2 * (m + l) + n)
+    ]
+end
