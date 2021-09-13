@@ -120,7 +120,9 @@ function compute_jacobian_kkt_dyn(x, net, d_dyn)
 
     # Compute individual Jacobians
     Kτ1 = [
-        compute_jacobian_kkt(net.fq[t], net.fl[t], d_dyn[t], net.pmax[t], net.gmax[t], net.A, net.B, x; τ=TAU)
+        compute_jacobian_kkt(
+            net.fq[t], net.fl[t], d_dyn[t], net.pmax[t], net.gmax[t], net.A, net.B, 
+            [g[t]; p[t]; λpl[t]; λpu[t]; λgl[t]; λgu[t]; ν[t]]; τ=TAU)
         for t in 1:T
     ]
     Kτ2 = [
