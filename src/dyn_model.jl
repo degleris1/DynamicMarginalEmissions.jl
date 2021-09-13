@@ -182,7 +182,7 @@ function kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, P, C, η_c, η_d; τ=TAU)
         # handle edge cases
         # ?? TODO: figure out if there is an edge case for ch and dis? 
         # are they actually variables in n x T or n x (T-1)
-        t==1 ? s_prev = INIT_COND : s_prev = s[t-1]
+        t == 1 ? s_prev = INIT_COND : s_prev = s[t-1]
         t < T ? νs_next = νs[t + 1] : νs_next = zeros(n)
 
         # compute the KKTs for the static subproblem
@@ -225,9 +225,9 @@ function kkt_storage(
     s, s_prev, ch, dis, λsu, λsl, λchu, λchl, λdisu, λdisl, ν, νs_t, νs_next, P, C, η_c, η_d
     )
     return [
-        (λsu - λsl) + (νs_next - νs_t); #∇_s L
-        (λchu - λchl) + ν * η_c + νs_t ; #∇_ch L
-        (λdisu - λdisl) - ν/η_d - νs_t; #∇_dis L
+        (λsu - λsl) + (νs_next - νs_t);  # ∇_s L
+        (λchu - λchl) + ν * η_c + νs_t ;  # ∇_ch L
+        (λdisu - λdisl) - ν/η_d - νs_t;  # ∇_dis L
         λsl .* (-s);
         λsu .* (s - C);
         λchl .* (-ch);

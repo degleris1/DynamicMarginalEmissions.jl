@@ -135,7 +135,7 @@ vector `d`, and the original data dictionary `data`.
 """
 function load_synthetic_network(case_name)
     # Load network data
-    network_data = parse_file(joinpath("../data", case_name));
+    network_data = parse_file(joinpath(@__DIR__, "../data", case_name));
     net = make_basic_network(network_data)
     make_per_unit!(net)
 
@@ -181,7 +181,7 @@ of nodes.
 function load_demand_data(case_name::String; source="caiso", normalize_rows=false)
     # Load dataframe
     filename = join([source, "demand", case_name, ".csv"], "_", "") 
-    path = joinpath("../data/", filename)
+    path = joinpath(@__DIR__, "../data/", filename)
     df = DataFrame(CSV.File(path))
 
     # Parse data
@@ -213,7 +213,7 @@ of nodes.
 function load_renewable_data(case_name::String; source="caiso", normalize_rows=false)
     # Load dataframe
     filename = join([source, "renewables", case_name, ".csv"], "_", "") 
-    path = joinpath("../data/", filename)
+    path = joinpath(@__DIR__, "../data/", filename)
     df = DataFrame(CSV.File(path))
 
     # Parse data

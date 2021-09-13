@@ -104,6 +104,55 @@ function _make_∇C(net::DynamicPowerNetwork, c, cq=0, g=0)
     return ∇C_dyn
 end
 
+function compute_jacobian_kkt_dyn(x, net, d_dyn)
+    n, m = size(net.A)
+    _, l = size(net.B)
+    T = length(net.fq)
+
+    dim_t = kkt_dims(n, m, l)
+    dim_s = storage_kkt_dims(n)
+
+    @show dim_t, dim_s, T*(dim_t + dim_s)
+
+    # decompose `x` in arrays of T variables
+    g, p, s, ch, dis, λpl, λpu, λgl, λgu, ν, λsl, λsu, λchl, λchu, λdisl, λdisu, νs = 
+        unflatten_variables_dyn(x, n, m, l, T)
+
+    # Compute individual Jacobians
+    Kτ1 = [
+        compute_jacobian_kkt(net.fq[t], net.fl[t], d_dyn[t], net.pmax[t], net.gmax[t], net.A, net.B, x; τ=TAU)
+        for t in 1:T
+    ]
+    Kτ2 = [
+        compute_jacobian_kkt_charge_discharge(dim_t, n, net.η_c, net.η_d)
+        for t in 1:T
+    ]
+
+    # Stack matrices
+    Kτ = [
+        hcat(
+            spzeros(dim_t, (t-1)*dim_t),
+            Kτ1[t],
+            spzeros(dim_t, (T-t)*dim_t),
+            spzeros(dim_t, (t-1)*dim_s),
+            Kτ2[t],
+            spzeros(dim_t, (T-t)*dim_s)
+        )
+        for t in 1:T
+    ]
+
+    return vcat(Kτ...)
+end
+
+function compute_jacobian_kkt_charge_discharge(dims, n, η_c, η_d)
+    dKdch = [spzeros(dims-n, n); Diagonal(ones(n))]
+    dKddis = [spzeros(dims-n, n); -Diagonal(ones(n))]
+
+    return [spzeros(dims, n) dKdch dKddis spzeros(dims, 7n)]
+end
+
+
+
 """
     compute_obj_sensitivity(P::PowerManagementProblem, net::DynamicPowerNetwork, d, t)
 

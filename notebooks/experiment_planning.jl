@@ -29,11 +29,14 @@ using SparseArrays
 # ╔═╡ 53a5f459-87c3-41fe-9c4e-835cfb7d27a1
 using CarbonNetworks: _make_∇C
 
+# ╔═╡ f1fdcb88-8796-474d-ab7d-d17a4db03178
+using CarbonNetworks: compute_jacobian_kkt_dyn
+
 # ╔═╡ c41f71b1-17fb-4a15-b2f4-885d96ab1bc4
 using LinearAlgebra
 
 # ╔═╡ 4be4fdac-474f-4d93-b984-335ae099bde7
-theme(:default, label=nothing)
+theme(:default, label=nothing, titlefont=(:Times, 10), guidefont=(:Times, 10), tickfont=(:Times, 8))
 
 # ╔═╡ 809702b6-08fc-48aa-9605-248de37ecde8
 md"""
@@ -125,6 +128,15 @@ let
 	bar(d_dyn_no_renew[_k])
 	bar!(d_dyn[_k])
 end
+
+# ╔═╡ c1e7bac8-f9e0-43c1-ad66-7c813f7c217c
+sum(net.gmax)
+
+# ╔═╡ 2c9583c7-9690-4c80-801e-2887279cac2b
+mean(net.pmax)
+
+# ╔═╡ 52688016-a435-40ae-b49a-df959d138dc5
+maximum(3*sum(d_peak))
 
 # ╔═╡ 8f0afe62-9e47-4f6c-b8bf-10ae80c46132
 md"""
@@ -222,7 +234,7 @@ end
 initialize(pmax_init, C_init) = deepcopy([pmax_init; C_init])
 
 # ╔═╡ eb3bbd85-670b-4fad-a48d-d92e17d399d7
-function formulate_and_solve_problem(θ)
+function formulate_and_solve_problem(θ, T=24)
 	pmax, C = θ[1:m], θ[m+1:m+n]
 	
 	# Construct problem
@@ -232,8 +244,8 @@ function formulate_and_solve_problem(θ)
 		charge_rate * C,
 		C, 
 		[net.gmax for _ in 1:T],
-		η_c, 
-		η_d
+		0.5,  #η_c 
+		1/3
 	)
 	dnet.pmax = [pmax for _ in 1:T]
 	
@@ -246,37 +258,41 @@ function formulate_and_solve_problem(θ)
 	# Compute Jacobian
 	x = flatten_variables_dyn(opf)
 	_, ∂K_xT = Zygote.forward_jacobian(x -> kkt_dyn(x, dnet, d_dyn), x)
-	
 	_, ∂K_pmaxT = Zygote.forward_jacobian(pmax -> kkt_dyn(x, dnet.fq, dnet.fl, d_dyn, [pmax for _ in 1:T], dnet.gmax, dnet.A, dnet.B, dnet.P, dnet.C, dnet.η_c, dnet.η_d), pmax)
 	_, ∂K_CT = Zygote.forward_jacobian(C -> kkt_dyn(x, dnet.fq, dnet.fl, d_dyn, dnet.pmax, dnet.gmax, dnet.A, dnet.B, charge_rate*C, C, dnet.η_c, dnet.η_d), C)
 	
 	∂K_θT = [∂K_pmaxT; ∂K_CT]
-	
-	
-	# test_b = rand(size(∂K_xT, 2))
-	# test_x = sparse(∂K_xT) \ test_b
-	# @assert (norm(sparse(∂K_xT)*test_x - test_b) / length(test_x)) < 1e-4 
-	
+		
 	return opf.problem.optval, evaluate.(opf.g), (∂K_xT=sparse(∂K_xT), ∂K_θT=∂K_θT), dnet, opf
 end
 
 # ╔═╡ 16513e3d-587d-4cdf-899b-2f876cfd4315
 project(θ, pmax_min, C_min) = max.([pmax_min; C_min], θ)
 
-# ╔═╡ 65082604-1a8a-48e8-9e87-4b9cf7ad8693
-begin
-	θ = initialize(pmax_init, C_init)
+# ╔═╡ 51f4a3e3-9955-45ae-bfa7-e8778699347b
+function run_sgd(θ_init, λ; num_iter=3000)
+	θ = deepcopy(θ_init)
 	println("\n\n\n\n\nStarting planning problem...")
 	
 	loss_hist = []
 	grad_hist = []
+	θ_hist = []
 	
-	for iter in 1:3_000
+	
+	if λ < 1
+		λ1 = 1
+		λ2 = λ
+	else
+		λ1 = 1 / λ
+		λ2 = 1
+	end
+	
+	for iter in 1:num_iter
 		J, x, Dx, dnet, opf = formulate_and_solve_problem(θ)
 		
 		E = sum([c'xt for xt in x])
 		
-		O = [η; ξ]'θ + production_cost_scaling * (J + λ*E)
+		O = λ1*[η; ξ]'θ + production_cost_scaling * (λ1*J + λ2*E)
 		@show iter, O
 		
 		if opf.problem.status in [Convex.MOI.ALMOST_OPTIMAL, Convex.MOI.OPTIMAL]
@@ -287,41 +303,84 @@ begin
 			∇E = -[η; ξ] / production_cost_scaling - ones(length(θ))
 		end
 		
-		dθ = [η; ξ] + production_cost_scaling * (∇J + λ*∇E)
+		dθ = λ1*[η; ξ] + production_cost_scaling * (λ1*∇J + λ2*∇E)
 		@show norm(dθ), norm(∇J), norm(∇E)
 			
 
+		push!(loss_hist, O)
+		push!(grad_hist, dθ)
+		push!(θ_hist, θ)
+		
+		# Update
 		θ .= θ - α*dθ
 		θ .= project(θ, pmax_min, C_min)
 		
-		push!(loss_hist, O)
-		push!(grad_hist, dθ)
-		
 		println()
 	end
+	
+	return θ, (loss=loss_hist, grad=grad_hist, θ=θ_hist)
 end
 
-# ╔═╡ 1c3d0bc2-ac19-4d48-8273-513be139d9c1
+# ╔═╡ 9f3e83ad-bf02-46f5-8716-1f195ed90c59
+θ_init = initialize(pmax_init, C_init)
+
+# ╔═╡ 65082604-1a8a-48e8-9e87-4b9cf7ad8693
+θ, history = run_sgd([net.pmax + rand(m); 2 .+ rand(n)], λ, num_iter=2);
+
+# ╔═╡ 66ad0017-31fd-4a41-b248-44af60b4e3e6
+_, _, _Dx, _dnet, _opf = formulate_and_solve_problem(θ, 2);
+
+# ╔═╡ 012df7a6-efc8-45d8-a0e3-01702080657d
+_x = flatten_variables_dyn(_opf)[:, 1];
+
+# ╔═╡ a1f5aa73-e891-4684-8458-4e4dfb96390c
+n1 = kkt_dims(n, m, length(net.gmax))
+
+# ╔═╡ 55b9656d-77a4-4f87-8ade-6211bfbbb429
+_jac = sparse(_Dx.∂K_xT');
+
+# ╔═╡ b084dc40-fa72-48ae-999c-5172d865c953
+jac_manual = compute_jacobian_kkt_dyn(_x, _dnet, d_dyn);
+
+# ╔═╡ 4804d0ff-7c13-43ee-bd35-1b55ffc9b8f1
+458 - 346
+
+# ╔═╡ 252c8eff-255a-418e-a381-760d35e1c981
+2*n1+2*140
+
+# ╔═╡ d40e9bea-0669-4bb1-8e13-0edbb6b0596e
+_jac[1:2*n1, :]
+
+# ╔═╡ 6da32f65-707a-4572-b753-4bfa98a15685
+jac_manual
+
+# ╔═╡ d160b73a-a149-487a-9ad3-150cce66eced
+((_jac[1:2*n1, :] .!= 0) - (jac_manual .!= 0))
+
+# ╔═╡ 3d87426d-3fa3-4587-94cf-a6bac0d60b1a
+2*n1
+
+# ╔═╡ 4c885c83-6173-4520-886d-0db7ebde8b01
 let
-	plt1 = plot(loss_hist, lw=4, title="cost", size=(600, 200))
-	#plt2 = plot(norm.(grad_hist), lw=4, title="norm of gradient")
-	
-	#plot(plt1, plt2, layout=(2, 1))
-	
-	plot(map(x -> x[end], grad_hist)[1:100])
+	d = 1
+	_jac[n1*(d-1)+1:d*n1, :]
+	#[d*n1-n:d*n1, 2*n1+n+1:2*n1+3n]
 end
+
+# ╔═╡ 92156e27-145b-4bb5-a2cb-01a4c6e82cda
+fig_width = 1.79168591667*100
 
 # ╔═╡ 3a58391a-3ec8-42a0-8bf7-c8b54e80a378
-@show loss_hist[end]
+history.loss[end]
 
 # ╔═╡ ad5fc387-5b38-4d71-b9bb-2e50c25d62f6
 [η; ξ]' * θ - [η; ξ]' * [pmax_min; C_min]
 
 # ╔═╡ b7e89c1d-268c-4cfd-8ee8-3ad50e5266f9
-@show θ[1:m] - pmax_min
+θ[1:m] - pmax_min
 
 # ╔═╡ 07f7e05b-e660-4b6f-95e0-1bcf6ab7d0c6
-@show θ[m+1:end] - C_min
+θ[m+1:end] - C_min
 
 # ╔═╡ 3cf7c255-0e16-4b76-a151-ec44988dac34
 let
@@ -332,55 +391,153 @@ let
 	plot(p2, p3, p1, layout=(3, 1))
 end
 
+# ╔═╡ 0448787e-89fe-468e-b480-c64f5dff50e4
+positions = [
+	(0, 0),
+	(1, -5),
+	(7, -5.5),
+	(6.5, -2),
+	(2, -1),
+	(2.5, 0.5),
+	(7.5, -0.5),
+	(8, 1),
+	(7, 2),
+	(5, 2),
+	(3.5, 3),
+	(1, 3.5),
+	(2.5, 4.5),
+	(5, 4),
+]
+
+# ╔═╡ 20cb4cf1-ed2d-46c3-87a2-c2a4dad0014b
+x_pos, y_pos = collect.(zip(positions...))
+
+# ╔═╡ 0bfd3a2d-dceb-44be-af44-e87c952f79dd
+function make_rect(z)
+	verts = [(0, 0), (0, z), (1, z), (1, 0), (0, 0)]
+	return Shape(verts)
+end
+
+# ╔═╡ e903f7d6-b1f1-4ec2-a6a6-f98df3dee20b
+md"""
+## Figure: λ vs emissions
+"""
+
+# ╔═╡ 7cddb62c-3096-47c4-96aa-4cf301e40e38
+λ_arr = [0, 0.1, 1.0, 10, 100, 1000]
+
+# ╔═╡ 18ee2775-e5d2-4ff5-9f25-e1de91f87827
+begin
+	pareto_curve_results = []
+	for λi in λ_arr
+		push!(pareto_curve_results, run_sgd(θ_init, λi))
+	end
+end
+
+# ╔═╡ 1c3d0bc2-ac19-4d48-8273-513be139d9c1
+begin
+	plt_1a = plot(pareto_curve_results[3][2].loss, lw=4)
+	plot!(title="objective value", xlabel="iteration", size=(fig_width, fig_width))
+	plot!(bottom_margin=10Plots.pt)
+	savefig(plt_1a, "../img/planning_obj_val.pdf")
+	plt_1a
+end
+
 # ╔═╡ 41cce822-ba68-4a8c-a0e8-8930ae53d3d8
-let
-	L = net.A * diagm(sqrt.(net.pmax)) * net.A'
-	vals, vecs = eigen(Matrix(L))
+begin
+	C = pareto_curve_results[3][1][m+1:end]
+	C_rel = ((C .- minimum(C)) / maximum(C .- minimum(C)))
 	
-	plot()
+	
+	plt_1b = plot() #fonts=(:Times, 10))
+	
+	# Plot edges
+	edge_lw = sqrt.(net.pmax)
+	edge_lw .*= 4 / maximum(edge_lw)
+	edge_lw .+= 2
 	for col in 1:size(net.A, 2)
 		fr = findfirst(x -> x == -1, net.A[:, col])
 		to = findfirst(x -> x == 1, net.A[:, col])
-		plot!([vecs[fr, 2]; vecs[to, 2]], [vecs[fr, 3]; vecs[to, 3]], 
-			c=:black, lw=3, alpha=0.5)
+		lw = sqrt(net.pmax[col])
+		
+		plot!(x_pos[[fr, to]], y_pos[[fr, to]], c=:Gray, lw=edge_lw[col], alpha=0.5)
 	end
-	scatter!(vecs[:, 2], vecs[:, 3])
-	annotate!(vecs[:, 2] .- 0.02, vecs[:, 3] .+ 0.03, 1:n)
-	plot!()
 	
+	# Plot nodes with labels
+	is_gen = (d_peak .== 0) .+ 1
+	node_c = [:Black, :Yellow][is_gen]
+	scatter!(x_pos, y_pos, shape=:rect, ms=8, group=is_gen, c=node_c, markerborder=10, label=["load" "generator"])
+	annotate!(x_pos .- 0.65, y_pos .+ 0.8, ["$i" for i in 1:n], fontsize=8)
 	
-	#vals
+	# Plot changes to storage
+	cap_grad = cgrad([:honeydew2, :green])
+	scatter!(x_pos .- 0.7, y_pos .- 0.25, 
+		shape=make_rect.(2*C), ms=15, c=cap_grad[C_rel], line_z=cap_grad[C_rel], seriescolor=cap_grad)
+	
+	# Adjust plot
+	plot!(xlim=(minimum(x_pos)-1, maximum(x_pos)+1))
+	plot!(ylim=(minimum(y_pos)-1, maximum(y_pos)+1))
+	plot!(frame=:none)
+	plot!(size=(2*fig_width, 2*fig_width))
+	
+	#sort(C_rel)
+	
+	savefig(plt_1b, "../img/planning_net_changes.pdf")
+	plt_1b
 end
 
-# ╔═╡ 285adcdc-4f6f-4ef8-ba4f-5c8cf994a9f8
-net.pmax
+# ╔═╡ c0b45551-9c9e-4c6d-93a6-bc964de5e3fe
+begin
+	emissions_vals = []
+	cost_vals = []
+	
+	for (θi, _) in pareto_curve_results
+		J, x, Dx, dnet, opf = formulate_and_solve_problem(θi)
+		
+		E = sum([c'xt for xt in x])
+		QJ = [η; ξ]'θi + production_cost_scaling * J
+		
+		push!(emissions_vals, E)
+		push!(cost_vals, QJ)
+	end
+end
 
-# ╔═╡ d68c0ec3-cec4-4552-b5ea-4275fbdf9a8f
-Matrix(net.A)
+# ╔═╡ 80ddfc7d-425a-48ce-a884-39bff5421578
+begin
+	plt_1c = plot(cost_vals[1:4] / 1000, emissions_vals[1:4] .- 41000, 
+		lw=4, xlabel="cost (millions)", ylabel="emissions (mTCO2)")
+	plot!(size=(fig_width, fig_width), xticks=(275:50:375, 275:50:375))
+	
+	
+	savefig(plt_1c, "../img/planning_pareto.pdf")
+	plt_1c
+end
 
-# ╔═╡ 5d4f8975-807d-4d9e-b734-badcb1db3597
-diag(Matrix(net.A'net.A)
+# ╔═╡ bf661856-c6a7-48e0-a39c-41ff73a84957
+
+
+# ╔═╡ 1fa8fe63-aeaa-4466-a9ec-edc96b0d69d3
+emissions_vals
+
+# ╔═╡ bea93e72-cd43-464e-916d-15d7e0659875
+emissions_vals
 
 # ╔═╡ b4270990-e676-4591-8d0a-2dee91b8f793
 md"""
-### Parameter ideas
-- Push it further---more renewables
-- Look at cheap vs expensive storage options
-- Have homogeneous storage options, eg a pumped hydro option
-- * Change emissions rates to match gen properties
-- * Increase the emissions weights!
-- Consider a emissions focused vs moderate planning scheme
+#### Parameter tweaks
+- [ ] Increase demand & renewable pen---some lines should be improved!
+- [ ] Let renewable penetration vary by node
+- [ ] Make renewables curtailable
+- [ ] Fix generator emissions rates
+- [ ] Increase emissions weight
+- [ ] Run with cheap and expensive storage options
 
-
-* Cheap vs expensive storage
-* Fix storage efficiency parameter
-
-### Plot ideas
-
-- Show which nodes had storage improved
-- Plot network, before and after (show flows before and after)
-- Show how flows vary at different times of day
-- 
+#### Plots
+1. [X] Convergence history
+2. [X] Network plot
+3. [ ] Cheap vs expensive storage
+4. [ ] Emissions weight---cost vs emissions
+5. [ ] Planning with carbon tax vs planning with correct market model
 """
 
 # ╔═╡ Cell order:
@@ -410,6 +567,9 @@ md"""
 # ╠═1f4a0995-0f99-4460-8b3b-a5306df76aa5
 # ╠═22bb2f8d-77ac-4093-88c6-73dd17ba76b5
 # ╠═140e655c-5c40-4ee0-9a6f-203c1a3ea284
+# ╠═c1e7bac8-f9e0-43c1-ad66-7c813f7c217c
+# ╠═2c9583c7-9690-4c80-801e-2887279cac2b
+# ╠═52688016-a435-40ae-b49a-df959d138dc5
 # ╠═8f0afe62-9e47-4f6c-b8bf-10ae80c46132
 # ╟─9e721cd4-a588-45d6-a765-c40dd2c597e8
 # ╠═ed7b4437-4358-41df-a1b5-4f44adf0b996
@@ -437,9 +597,25 @@ md"""
 # ╟─1829b639-2c04-4fc7-b13b-85702e8e9191
 # ╠═82eec4ea-4780-43d1-81c4-d5a2b461149b
 # ╠═53a5f459-87c3-41fe-9c4e-835cfb7d27a1
-# ╟─eb3bbd85-670b-4fad-a48d-d92e17d399d7
+# ╠═eb3bbd85-670b-4fad-a48d-d92e17d399d7
 # ╟─16513e3d-587d-4cdf-899b-2f876cfd4315
+# ╟─51f4a3e3-9955-45ae-bfa7-e8778699347b
+# ╠═9f3e83ad-bf02-46f5-8716-1f195ed90c59
 # ╠═65082604-1a8a-48e8-9e87-4b9cf7ad8693
+# ╠═66ad0017-31fd-4a41-b248-44af60b4e3e6
+# ╠═012df7a6-efc8-45d8-a0e3-01702080657d
+# ╠═f1fdcb88-8796-474d-ab7d-d17a4db03178
+# ╠═a1f5aa73-e891-4684-8458-4e4dfb96390c
+# ╠═55b9656d-77a4-4f87-8ade-6211bfbbb429
+# ╠═b084dc40-fa72-48ae-999c-5172d865c953
+# ╠═4804d0ff-7c13-43ee-bd35-1b55ffc9b8f1
+# ╠═252c8eff-255a-418e-a381-760d35e1c981
+# ╠═d40e9bea-0669-4bb1-8e13-0edbb6b0596e
+# ╠═6da32f65-707a-4572-b753-4bfa98a15685
+# ╠═d160b73a-a149-487a-9ad3-150cce66eced
+# ╠═3d87426d-3fa3-4587-94cf-a6bac0d60b1a
+# ╠═4c885c83-6173-4520-886d-0db7ebde8b01
+# ╠═92156e27-145b-4bb5-a2cb-01a4c6e82cda
 # ╠═1c3d0bc2-ac19-4d48-8273-513be139d9c1
 # ╠═3a58391a-3ec8-42a0-8bf7-c8b54e80a378
 # ╠═ad5fc387-5b38-4d71-b9bb-2e50c25d62f6
@@ -447,8 +623,16 @@ md"""
 # ╠═07f7e05b-e660-4b6f-95e0-1bcf6ab7d0c6
 # ╠═3cf7c255-0e16-4b76-a151-ec44988dac34
 # ╠═c41f71b1-17fb-4a15-b2f4-885d96ab1bc4
+# ╟─0448787e-89fe-468e-b480-c64f5dff50e4
+# ╠═20cb4cf1-ed2d-46c3-87a2-c2a4dad0014b
+# ╟─0bfd3a2d-dceb-44be-af44-e87c952f79dd
 # ╠═41cce822-ba68-4a8c-a0e8-8930ae53d3d8
-# ╠═285adcdc-4f6f-4ef8-ba4f-5c8cf994a9f8
-# ╠═d68c0ec3-cec4-4552-b5ea-4275fbdf9a8f
-# ╠═5d4f8975-807d-4d9e-b734-badcb1db3597
+# ╠═e903f7d6-b1f1-4ec2-a6a6-f98df3dee20b
+# ╠═7cddb62c-3096-47c4-96aa-4cf301e40e38
+# ╠═18ee2775-e5d2-4ff5-9f25-e1de91f87827
+# ╠═c0b45551-9c9e-4c6d-93a6-bc964de5e3fe
+# ╠═80ddfc7d-425a-48ce-a884-39bff5421578
+# ╠═bf661856-c6a7-48e0-a39c-41ff73a84957
+# ╠═1fa8fe63-aeaa-4466-a9ec-edc96b0d69d3
+# ╠═bea93e72-cd43-464e-916d-15d7e0659875
 # ╠═b4270990-e676-4591-8d0a-2dee91b8f793
