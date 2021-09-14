@@ -19,6 +19,7 @@ time_Zygote = zeros(size(n_vec));
 time_manual = zeros(size(n_vec));
 
 Threads.@threads for i = 1:length(n_vec)
+
     n = n_vec[i]
     l = n
 
@@ -35,6 +36,9 @@ Threads.@threads for i = 1:length(n_vec)
 
     tz = @elapsed _, ∂K_xT = Zygote.forward_jacobian(x -> kkt_dyn(x, dnet, d_dyn), x);
     tm = @elapsed Jac_manual = compute_jacobian_kkt_dyn(x, dnet, d_dyn);
+    @show i
+    @show tz
+    @show tm
     
     time_Zygote[i] = tz;
     time_manual[i] = tm;
