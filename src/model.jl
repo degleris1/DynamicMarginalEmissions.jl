@@ -41,7 +41,7 @@ incidence matrix `A`.
 The parameter `τ` is a regularization weight used to make the problem
 strongly convex by adding τ ∑ᵢ pᵢ² to the objective.
 """
-function PowerManagementProblem(fq, fl, d, pmax, gmax, A, B; τ=TAU, ch=0, dis=0, η_c=1.0, η_d=1.0)
+function PowerManagementProblem(fq::Vector, fl::Vector, d, pmax, gmax, A, B; τ=TAU, ch=0, dis=0, η_c=1.0, η_d=1.0)
     n, m = size(A)
     n, l = size(B)
     g = Variable(l)

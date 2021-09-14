@@ -13,6 +13,17 @@ include("config.jl")
 
 RESULTS_DIRECTORY = joinpath(@__DIR__, "../../results/")
 FILE_PREFIX = "planning_"
+FILE_SUFFIX = ".jld"
+
+function load_results(savename)
+    f = joinpath(RESULTS_DIRECTORY, FILE_PREFIX*savename*FILE_SUFFIX)
+    r = JLD.load(f)
+
+    config, θ, history = r["config"], r["theta"], r["history"]
+    P = create_planning_problem(config)
+
+    return P, config, θ, history
+end
 
 function run_expansion_planning(config, savename)
     # Unpack
@@ -29,7 +40,7 @@ function run_expansion_planning(config, savename)
     θ, history = run_sgd(θ0, P; verbose=true)
 
     # Save results
-    f = joinpath(RESULTS_DIRECTORY, FILE_PREFIX*savename)
+    f = joinpath(RESULTS_DIRECTORY, FILE_PREFIX*savename*FILE_SUFFIX)
     JLD.save(f, "config", config, "theta", θ, "history", history)
 
     return config, θ, history
