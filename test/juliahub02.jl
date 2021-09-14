@@ -13,7 +13,7 @@ n_threads = 10
 
 T = 20;
 
-n_vec = [4, 10, 50, 100, 200, 500];
+n_vec = [4, 10, 50, 100];
 norms = zeros(size(n_vec));
 time_Zygote = zeros(size(n_vec));
 time_manual = zeros(size(n_vec));
