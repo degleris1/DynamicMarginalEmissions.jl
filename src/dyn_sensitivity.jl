@@ -104,21 +104,21 @@ function _make_∇C(net::DynamicPowerNetwork, c, cq=0, g=0)
     return ∇C_dyn
 end
 
+"""
+"""
 function compute_jacobian_kkt_dyn(x, net, d_dyn)
-    n, m = size(net.A)
-    _, l = size(net.B)
-    T = length(net.fq)
+    n, m, l, T = get_problem_dims(net)
 
     dim_t = kkt_dims(n, m, l)
     dim_s = storage_kkt_dims(n)
 
-    @show dim_t, dim_s, T*(dim_t + dim_s)
+    # @show dim_t, dim_s, T*(dim_t + dim_s)
 
     # decompose `x` in arrays of T variables
     g, p, s, ch, dis, λpl, λpu, λgl, λgu, ν, λsl, λsu, λchl, λchu, λdisl, λdisu, νs = 
         unflatten_variables_dyn(x, n, m, l, T)
 
-    # Compute individual Jacobians
+    # Compute individual Jacobians for the static system
     Kτ1 = [
         compute_jacobian_kkt(
             net.fq[t], net.fl[t], d_dyn[t], net.pmax[t], net.gmax[t], net.A, net.B, 
@@ -126,7 +126,7 @@ function compute_jacobian_kkt_dyn(x, net, d_dyn)
         for t in 1:T
     ]
     Kτ2 = [
-        compute_jacobian_kkt_charge_discharge(dim_t, n, net.η_c, net.η_d)
+        compute_jacobian_kkt_charge_discharge(dim_t, n)
         for t in 1:T
     ]
 
@@ -143,10 +143,17 @@ function compute_jacobian_kkt_dyn(x, net, d_dyn)
         for t in 1:T
     ]
 
-    return vcat(Kτ...)
+    # Compute individual Jacobians for the dynamic system
+    Ks = [
+        compute_jacobian_kkt_dyn_t(
+            s[t], ch[t], dis[t], λsl[t], λsu[t], λchl[t], λchu[t], λdisl[t], λdisu[t], net, t)
+        for t in 1:T
+    ]
+
+    return [vcat(Kτ...) ; vcat(Ks...)]
 end
 
-function compute_jacobian_kkt_charge_discharge(dims, n, η_c, η_d)
+function compute_jacobian_kkt_charge_discharge(dims, n)
     dKdch = [spzeros(dims-n, n); Diagonal(ones(n))]
     dKddis = [spzeros(dims-n, n); -Diagonal(ones(n))]
 
@@ -291,36 +298,92 @@ end
 """
 Compute the Jacobian for the dyn part of the problem
 """
-function compute_jacobian_kkt_dyn_t(fq, fl, d, pmax, gmax, A, B, x; τ=TAU)
-    n, m = size(A)
-    n, l = size(B)
+function compute_jacobian_kkt_dyn_t(s, ch, dis, λsl, λsu, λchl, λchu, λdisl, λdisu, net, t)
 
-    g, p, λpl, λpu, λgl, λgu, _ = unflatten_variables(x, n, m, l)
+    # @show t
 
-    K11 = [
-        Diagonal(fq)     spzeros(l, m);
-        spzeros(m, l)    τ * I(m)
-    ]
-   
+    # extract some variables
+    η_c = net.η_c
+    η_d = net.η_d
+    C = net.C
+    P = net.P
+    n, m, l, T = get_problem_dims(net)
+
+    # Relevant sizes for the problem
+    kdims = kkt_dims(n, m, l)
+    sdims = storage_kkt_dims(n)
+
+    # D_x ∇_x L 
+    # dim = 3n, 3n
+    K11 = spzeros(3n, 3n) # dim = n for s, ch, and dis 
+    # D_x F^T
+    # dim = 3n, 6n
     K12 = [
-        spzeros(l, 2 * m)   -I(l)       I(l);
-        -I(m)             I(m)        spzeros(m, 2l)
+        -I(n) I(n) spzeros(n, 4n);
+        spzeros(n, 2n) -I(n) I(n) spzeros(n, 2n);
+       spzeros(n, 4n) -I(n) I(n)
     ]
-
-    K13 = [-B'; A']
-
-    K21 = [
-        spzeros(m, l) -Diagonal(λpl);
-        spzeros(m, l) Diagonal(λpu);
-        -Diagonal(λgl) spzeros(l, m);
-        Diagonal(λgu) spzeros(l, m)
+    # D_x H^T
+    # dim = 3n, n
+    K13 = [
+        -I(n);
+        η_c*I(n);
+        -1/η_d*I(n)
     ]
-
-    K22 = Diagonal([-p - pmax; p - pmax; -g; g - gmax])
+    # Diag(λ) * D_xF
+    # dim = 6n, 6n
+    D_xF = K12'
+    D = Diagonal([λsl; λsu; λchl; λchu; λdisl; λdisu])
+    K21 = D * D_xF
     
-    return [
+    # diag(F)
+    # dim = 6n, 6n
+    K22 = Diagonal([-s; s-C; -ch; ch-P; -dis; dis-P])
+    
+    # diagonal part of the Jacobian
+    K_storage_t = [
         K11 K12 K13;
-        K21 K22 spzeros(2 * (m + l), n);
-        K13' spzeros(n, 2 * (m + l) + n)
+        K21 K22 spzeros(6n, n);
+        K13' spzeros(n, 7n) 
     ]
+
+    # static part
+    # includes "cross terms" with the ν dual variable
+    K_static = 
+    [
+        spzeros(n, T*kdims);
+        spzeros(n, t*kdims-n) η_c*I(n) spzeros(n, (T-t)*kdims);
+        spzeros(n, t*kdims-n) -I(n)/η_d spzeros(n, (T-t)*kdims);
+        spzeros(sdims-3n, T*kdims);
+    ]
+    
+    # we have to return cross terms
+    # for s_prev, the location is the location of s at time step t-1 ==> t-2
+    # s
+    # νs_next
+    if t>1
+        K_storage_left = [
+            spzeros(sdims-n, (t-1)*sdims);
+            spzeros(n, (t-2)*sdims) I(n) spzeros(n, sdims-n);
+        ]
+    else
+        K_storage_left = spzeros(sdims, 0);
+    end
+    if t<T
+        K_storage_right = [
+            spzeros(n, sdims-n) I(n) spzeros(n, (T-(t+1))*sdims);
+            spzeros(sdims-n, (T-t)*sdims);
+        ]
+    else
+        K_storage_right = spzeros(sdims, 0);
+    end
+
+    # @show size(K_storage_left)
+    # @show size(K_storage_t)
+    # @show size(K_storage_right)
+
+    K_storage = [K_storage_left K_storage_t K_storage_right];
+
+    return [K_static K_storage]
+   
 end

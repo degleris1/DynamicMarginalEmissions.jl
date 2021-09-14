@@ -33,6 +33,8 @@ export compute_mefs
 export plot_sensitivity_check
 export make_dynamic
 
+export compute_jacobian_kkt_dyn
+
 
 # Files
 include("model.jl")
