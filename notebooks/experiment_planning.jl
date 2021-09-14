@@ -43,6 +43,9 @@ md"""
 ## Load network
 """
 
+# ╔═╡ c8c37d25-86dc-4d1a-87f0-782ba892c923
+
+
 # ╔═╡ 7bbad73e-f84d-4614-910b-a83112e6213b
 demand_data = load_demand_data("2021_07_01", normalize_rows=true);
 
@@ -66,7 +69,9 @@ demand_growth = 1.2
 # ╔═╡ 482843af-3901-4a52-9b8f-6e85c3f94c28
 begin
 	net, d_peak, casefile = load_synthetic_network("case14.m")
-	net.gmax .*= (1 + demand_growth/2)
+	net.gmax .= net.gmax * (sum(d_peak) * demand_growth / sum(net.gmax))
+	net.fl /= 100
+	net.fq /= 100
 end
 
 # ╔═╡ 0db77332-1785-4326-a442-5c545587dfc2
@@ -74,6 +79,9 @@ casefile["bus"]["5"]
 
 # ╔═╡ a3a173cc-3594-4379-8bd3-802e243ffa15
 n = length(d_peak)
+
+# ╔═╡ da3ed953-3c90-449c-8f1b-b8756491a691
+sum(net.gmax) / sum(d_peak * demand_growth)
 
 # ╔═╡ d61f3dbd-410a-4a5c-8176-62fed16f33c0
 T, n_demand = size(demand_data)
@@ -151,7 +159,7 @@ md"""
 """
 
 # ╔═╡ ed7b4437-4358-41df-a1b5-4f44adf0b996
-pmax_min = copy(net.pmax) / 2
+pmax_min = copy(net.pmax)
 
 # ╔═╡ 25c3d688-d9b1-4f43-9c29-ced4bf252eab
 m = length(pmax_min)
@@ -160,7 +168,7 @@ m = length(pmax_min)
 line_cost_per_mw_mile = 3  # in thousands of dollars
 
 # ╔═╡ 502a8d13-5f99-466d-a8c4-a8be8cc2d9e4
-miles_per_line = rand(Uniform(25, 35), m)
+miles_per_line = rand(Uniform(35, 45), m)
 
 # ╔═╡ b0b2893e-74c1-4d11-830e-5b3ee9806d1c
 η = line_cost_per_mw_mile * miles_per_line  # cost per mw transmission
@@ -183,10 +191,10 @@ storage_cost_per_mwh = 350  # in thousands
 ξ = ones(n)*storage_cost_per_mwh
 
 # ╔═╡ 2c70c0a4-c64a-454c-af77-77c70f2a988d
-η_c = 0.8
+η_c = 0.95
 
 # ╔═╡ d1c548f1-d939-443b-bab8-0065fa157583
-η_d = 1.0
+η_d = 0.95
 
 # ╔═╡ 041a1bd6-ffe2-43bd-901b-712856602d2d
 md"""
@@ -194,7 +202,7 @@ md"""
 """
 
 # ╔═╡ d1dcccdd-050a-4516-9193-5713015edd1c
-c = [0.8e3, 0.7e3, 0.9e3, 1.4e3, 1.8e3]
+c = [0.35, 0.45, 1.1, 1.2, 1.3]
 
 # ╔═╡ 230ffe69-e7c9-4a5d-a8e5-3a77507f9c30
 md"""
@@ -214,9 +222,6 @@ md"""
 
 # ╔═╡ 29c4b385-d539-457a-8abe-f99b3e658d89
 λ = 1.0  # emissions weight
-
-# ╔═╡ 4782ec56-2a80-4ce6-89a9-7fafb8fc22df
-α = 5e-4  # step size
 
 # ╔═╡ 73840389-33f8-47b9-9098-798ddfc423b5
 begin
@@ -244,8 +249,8 @@ function formulate_and_solve_problem(θ, T=24)
 		charge_rate * C,
 		C, 
 		[net.gmax for _ in 1:T],
-		0.5,  #η_c 
-		1/3
+		η_c,
+		η_d
 	)
 	dnet.pmax = [pmax for _ in 1:T]
 	
@@ -253,11 +258,14 @@ function formulate_and_solve_problem(θ, T=24)
 	opf = DynamicPowerManagementProblem(dnet, d_dyn)
 	solve!(opf, () -> ECOS.Optimizer(verbose=false))
 	
-	@show opf.problem.status
-	
 	# Compute Jacobian
 	x = flatten_variables_dyn(opf)
-	_, ∂K_xT = Zygote.forward_jacobian(x -> kkt_dyn(x, dnet, d_dyn), x)
+	
+	# Of KKT operator wrt variables
+	#_, ∂K_xT = Zygote.forward_jacobian(x -> kkt_dyn(x, dnet, d_dyn), x)
+	∂K_xT = adjoint(compute_jacobian_kkt_dyn(x, dnet, d_dyn))
+	
+	# Of KKT operator wrt params
 	_, ∂K_pmaxT = Zygote.forward_jacobian(pmax -> kkt_dyn(x, dnet.fq, dnet.fl, d_dyn, [pmax for _ in 1:T], dnet.gmax, dnet.A, dnet.B, dnet.P, dnet.C, dnet.η_c, dnet.η_d), pmax)
 	_, ∂K_CT = Zygote.forward_jacobian(C -> kkt_dyn(x, dnet.fq, dnet.fl, d_dyn, dnet.pmax, dnet.gmax, dnet.A, dnet.B, charge_rate*C, C, dnet.η_c, dnet.η_d), C)
 	
@@ -266,57 +274,79 @@ function formulate_and_solve_problem(θ, T=24)
 	return opf.problem.optval, evaluate.(opf.g), (∂K_xT=sparse(∂K_xT), ∂K_θT=∂K_θT), dnet, opf
 end
 
-# ╔═╡ 16513e3d-587d-4cdf-899b-2f876cfd4315
-project(θ, pmax_min, C_min) = max.([pmax_min; C_min], θ)
-
 # ╔═╡ 51f4a3e3-9955-45ae-bfa7-e8778699347b
-function run_sgd(θ_init, λ; num_iter=3000)
+function run_sgd(θ_init, λ; num_iter=1000, α=1e-5)
 	θ = deepcopy(θ_init)
+	θ_min = copy([pmax_min; C_min])
+	μ = [η; ξ]
+	
 	println("\n\n\n\n\nStarting planning problem...")
 	
+	α_max = 10*α
 	loss_hist = []
 	grad_hist = []
 	θ_hist = []
 	
-	
-	if λ < 1
+	if λ > 1
+		λ1 = 1/sqrt(λ)
+		λ2 = sqrt(λ)  # For numerical stability
+	else
 		λ1 = 1
 		λ2 = λ
-	else
-		λ1 = 1 / λ
-		λ2 = 1
 	end
 	
 	for iter in 1:num_iter
 		J, x, Dx, dnet, opf = formulate_and_solve_problem(θ)
 		
 		E = sum([c'xt for xt in x])
-		
-		O = λ1*[η; ξ]'θ + production_cost_scaling * (λ1*J + λ2*E)
-		@show iter, O
+		O = μ'θ + production_cost_scaling * (J + λ*E) - μ'θ_min
 		
 		if opf.problem.status in [Convex.MOI.ALMOST_OPTIMAL, Convex.MOI.OPTIMAL]
-			∇J = sum(-Dx.∂K_θT * (Dx.∂K_xT \ _make_∇C(dnet, dnet.fl[1], dnet.fq[1], x)), dims=2)[:, 1]
-			∇E = sum(-Dx.∂K_θT * (Dx.∂K_xT \ _make_∇C(dnet, c)), dims=2)[:, 1]
+			dJ = sum(_make_∇C(dnet, dnet.fl[1], dnet.fq[1], x), dims=2)[:, 1]
+			dE = sum(_make_∇C(dnet, c), dims=2)[:, 1]
+			
+			∇J = -Dx.∂K_θT * (Dx.∂K_xT \ dJ)
+			∇E = -Dx.∂K_θT * (Dx.∂K_xT \ dE)
+						
+			dθ = λ1*μ + production_cost_scaling * (λ1*∇J + λ2*∇E)
+
+			# Update
+			@. θ = θ - α*dθ
+			θ .= max.(θ, θ_min)
+	
+			if iter > 1 && O < loss_hist[end]
+				α = min(α * 1.05, Inf)  #α_max)
+			elseif iter > 1
+				α = 0.7 * α
+			end
+			
 		else
-			∇J = -[η; ξ] / production_cost_scaling - ones(length(θ))
-			∇E = -[η; ξ] / production_cost_scaling - ones(length(θ))
+			@warn "Problem infeasible at iter $(iter)! Backtracking to last safe iterate."
+			O = Inf
+			
+			∇J = -2μ
+			∇E = zeros(length(θ))
+			
+			dθ = λ1*μ + production_cost_scaling * (λ1*∇J + λ2*∇E)
+			
+			# Update
+			@. θ = θ - α*dθ
+			θ .= max.(θ, θ_min)
+			
+			α = α * 0.7
 		end
 		
-		dθ = λ1*[η; ξ] + production_cost_scaling * (λ1*∇J + λ2*∇E)
-		@show norm(dθ), norm(∇J), norm(∇E)
+		if iter % 100 == 0
+			@show iter, O, J, E, α
+			@show norm(dθ), norm(∇J), norm(∇E)
+			println("---")
+		end
 			
-
 		push!(loss_hist, O)
-		push!(grad_hist, dθ)
-		push!(θ_hist, θ)
-		
-		# Update
-		θ .= θ - α*dθ
-		θ .= project(θ, pmax_min, C_min)
-		
-		println()
+		push!(grad_hist, copy(dθ))
+		push!(θ_hist, copy(θ))
 	end
+	
 	
 	return θ, (loss=loss_hist, grad=grad_hist, θ=θ_hist)
 end
@@ -325,43 +355,52 @@ end
 θ_init = initialize(pmax_init, C_init)
 
 # ╔═╡ 65082604-1a8a-48e8-9e87-4b9cf7ad8693
-θ, history = run_sgd([net.pmax + rand(m); 2 .+ rand(n)], λ, num_iter=2);
+# 273
+begin
+	Random.seed!(123)
+	θ, history = run_sgd(
+		[net.pmax + 2*rand(m); 2 .+ 2*rand(n)], 500, num_iter=200,
+	)
+end
 
-# ╔═╡ 66ad0017-31fd-4a41-b248-44af60b4e3e6
-_, _, _Dx, _dnet, _opf = formulate_and_solve_problem(θ, 2);
+# ╔═╡ 714fe0da-2ac4-46c0-a746-3f62c2064127
+J, x, Dx, dnet, opf = formulate_and_solve_problem(history.θ[argmin(history.loss)]);
 
-# ╔═╡ 012df7a6-efc8-45d8-a0e3-01702080657d
-_x = flatten_variables_dyn(_opf)[:, 1];
+# ╔═╡ 36b29bf5-a16d-4699-ab2d-e71d2d36f937
+sum([c'xt for xt in x])
 
-# ╔═╡ a1f5aa73-e891-4684-8458-4e4dfb96390c
-n1 = kkt_dims(n, m, length(net.gmax))
+# ╔═╡ 33b3005c-6355-441e-9e6c-e6f22855d65a
+sum(_make_∇C(dnet, net.fl, net.fq, x), dims=2)[:, 1]
 
-# ╔═╡ 55b9656d-77a4-4f87-8ade-6211bfbbb429
-_jac = sparse(_Dx.∂K_xT');
+# ╔═╡ b8d8a15d-5370-4a6b-96b6-e0e181f824fd
+[η; ξ]' * (θ - [pmax_min; C_min])
 
-# ╔═╡ b084dc40-fa72-48ae-999c-5172d865c953
-jac_manual = compute_jacobian_kkt_dyn(_x, _dnet, d_dyn);
+# ╔═╡ b4f1b7fd-701c-4a60-97b8-01a2f9d6eb51
+minimum(history.loss)
 
-# ╔═╡ 4804d0ff-7c13-43ee-bd35-1b55ffc9b8f1
-458 - 346
+# ╔═╡ 5ae358e4-0a4f-48a5-9f41-52152ed6821b
+plot(
+	plot(history.loss, lw=4),
+	size=(600, 200)
+)
 
-# ╔═╡ 252c8eff-255a-418e-a381-760d35e1c981
-2*n1+2*140
+# ╔═╡ 317b155c-2ad1-45cb-b4c9-7e41541a32f0
+bar(history.θ[argmin(history.loss)][1:m] - net.pmax, size=(600, 200))
 
-# ╔═╡ d40e9bea-0669-4bb1-8e13-0edbb6b0596e
-_jac[1:2*n1, :]
+# ╔═╡ bf444b0f-34b7-4139-9402-83ae5e50af57
+bar(history.θ[argmin(history.loss)][m+1:end], size=(600, 200))
 
-# ╔═╡ 6da32f65-707a-4572-b753-4bfa98a15685
-jac_manual
+# ╔═╡ d3a964a8-bf40-4d61-ae6e-24e333fc19d2
+history.θ[argmin(history.loss)] - θ
 
-# ╔═╡ 0f56cf21-2f2d-4301-b640-23f3782b7ec4
-maximum(abs, _jac[1:2*n1, :] - jac_manual)
+# ╔═╡ 180eb884-50bc-45ab-85d6-d2e091511a62
+history.θ[end]
 
 # ╔═╡ 92156e27-145b-4bb5-a2cb-01a4c6e82cda
 fig_width = 1.79168591667*100
 
 # ╔═╡ 3a58391a-3ec8-42a0-8bf7-c8b54e80a378
-history.loss[end]
+
 
 # ╔═╡ ad5fc387-5b38-4d71-b9bb-2e50c25d62f6
 [η; ξ]' * θ - [η; ξ]' * [pmax_min; C_min]
@@ -536,8 +575,10 @@ md"""
 # ╠═b14255d5-bdb0-4a5a-80ce-ab004eaa370e
 # ╠═4be4fdac-474f-4d93-b984-335ae099bde7
 # ╠═809702b6-08fc-48aa-9605-248de37ecde8
+# ╠═c8c37d25-86dc-4d1a-87f0-782ba892c923
 # ╠═0db77332-1785-4326-a442-5c545587dfc2
 # ╠═482843af-3901-4a52-9b8f-6e85c3f94c28
+# ╠═da3ed953-3c90-449c-8f1b-b8756491a691
 # ╠═a3a173cc-3594-4379-8bd3-802e243ffa15
 # ╠═7bbad73e-f84d-4614-910b-a83112e6213b
 # ╠═c54bfcd8-1beb-4e99-9ca7-bd48a8b6cf93
@@ -581,28 +622,26 @@ md"""
 # ╠═b313fce9-d02d-474d-aea9-a3122c991dc6
 # ╠═76b5b11b-e9a5-4e14-8726-a54230799767
 # ╠═29c4b385-d539-457a-8abe-f99b3e658d89
-# ╠═4782ec56-2a80-4ce6-89a9-7fafb8fc22df
 # ╠═73840389-33f8-47b9-9098-798ddfc423b5
 # ╠═7122567d-0ceb-4681-bbcb-88b1eeefddb0
 # ╟─1829b639-2c04-4fc7-b13b-85702e8e9191
 # ╠═82eec4ea-4780-43d1-81c4-d5a2b461149b
 # ╠═53a5f459-87c3-41fe-9c4e-835cfb7d27a1
-# ╠═eb3bbd85-670b-4fad-a48d-d92e17d399d7
-# ╟─16513e3d-587d-4cdf-899b-2f876cfd4315
-# ╟─51f4a3e3-9955-45ae-bfa7-e8778699347b
-# ╠═9f3e83ad-bf02-46f5-8716-1f195ed90c59
-# ╠═65082604-1a8a-48e8-9e87-4b9cf7ad8693
-# ╠═66ad0017-31fd-4a41-b248-44af60b4e3e6
-# ╠═012df7a6-efc8-45d8-a0e3-01702080657d
 # ╠═f1fdcb88-8796-474d-ab7d-d17a4db03178
-# ╠═a1f5aa73-e891-4684-8458-4e4dfb96390c
-# ╠═55b9656d-77a4-4f87-8ade-6211bfbbb429
-# ╠═b084dc40-fa72-48ae-999c-5172d865c953
-# ╠═4804d0ff-7c13-43ee-bd35-1b55ffc9b8f1
-# ╠═252c8eff-255a-418e-a381-760d35e1c981
-# ╠═d40e9bea-0669-4bb1-8e13-0edbb6b0596e
-# ╠═6da32f65-707a-4572-b753-4bfa98a15685
-# ╠═0f56cf21-2f2d-4301-b640-23f3782b7ec4
+# ╟─eb3bbd85-670b-4fad-a48d-d92e17d399d7
+# ╠═51f4a3e3-9955-45ae-bfa7-e8778699347b
+# ╠═714fe0da-2ac4-46c0-a746-3f62c2064127
+# ╠═36b29bf5-a16d-4699-ab2d-e71d2d36f937
+# ╠═33b3005c-6355-441e-9e6c-e6f22855d65a
+# ╠═9f3e83ad-bf02-46f5-8716-1f195ed90c59
+# ╠═b8d8a15d-5370-4a6b-96b6-e0e181f824fd
+# ╠═b4f1b7fd-701c-4a60-97b8-01a2f9d6eb51
+# ╠═65082604-1a8a-48e8-9e87-4b9cf7ad8693
+# ╠═5ae358e4-0a4f-48a5-9f41-52152ed6821b
+# ╠═317b155c-2ad1-45cb-b4c9-7e41541a32f0
+# ╠═bf444b0f-34b7-4139-9402-83ae5e50af57
+# ╠═d3a964a8-bf40-4d61-ae6e-24e333fc19d2
+# ╠═180eb884-50bc-45ab-85d6-d2e091511a62
 # ╠═92156e27-145b-4bb5-a2cb-01a4c6e82cda
 # ╠═1c3d0bc2-ac19-4d48-8273-513be139d9c1
 # ╠═3a58391a-3ec8-42a0-8bf7-c8b54e80a378
