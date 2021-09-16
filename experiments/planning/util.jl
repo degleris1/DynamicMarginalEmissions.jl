@@ -4,7 +4,7 @@ using SparseArrays
 using Zygote
 using CarbonNetworks
 
-import JLD
+using JLD
 
 using Distributions: Uniform
 using CarbonNetworks: compute_jacobian_kkt_dyn, _make_∇C
@@ -19,7 +19,8 @@ function load_results(savename)
     f = joinpath(RESULTS_DIRECTORY, FILE_PREFIX*savename*FILE_SUFFIX)
     r = JLD.load(f)
 
-    config, θ, history = r["config"], r["theta"], r["history"]
+    θ, history = r["theta"], r["history"]
+    config = Dict(zip(r["config"].keys, r["config"].values))
     P = create_planning_problem(config)
 
     return P, config, θ, history
@@ -94,6 +95,8 @@ function create_network(config=DEFAULT_CONFIG)
     renewable_penetration = config[:renewable_penetration]
     demand_growth = config[:demand_growth]
     renewable_archetypes = config[:renewable_archetypes]
+    emissions_tax = config[:emissions_tax]
+    emissions_rate = config[:emissions_rate]
     seed = config[:net_seed]
 
     # Set seed
@@ -136,6 +139,9 @@ function create_network(config=DEFAULT_CONFIG)
     net.fl ./= 100
     net.fq ./= 100
 
+    # Add emissions tax
+    net.fl .+= emissions_tax * emissions_rate
+
     return net, d_dyn
 end
 
@@ -150,14 +156,8 @@ function run_sgd(θ0, P; num_iter=500, α=1e-5, verbose=false)
     grad_hist = []
     θ_hist = []
 
-    # For numerical stability, make λ near 1
-    if λ > 1
-		λ1 = 1/sqrt(λ)
-		λ2 = sqrt(λ)  # For numerical stability
-	else
-		λ1 = 1
-		λ2 = λ
-	end
+    λ1 = 1
+    λ2 = λ
 
     verbose && println("\n\n\n\n\nStarting planning problem...")
     for iter in 1:num_iter
@@ -193,6 +193,7 @@ function run_sgd(θ0, P; num_iter=500, α=1e-5, verbose=false)
             
             # Compute objective
 			O = Inf
+            E = Inf
 			
             # Compute gradient
 			∇J = -2ξ
