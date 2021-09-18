@@ -32,6 +32,10 @@ DEFAULT_CONFIG = Dict(
     :emissions_tax => 0.0
 )
 
+NO_CARBON_CONFIG = set_config(DEFAULT_CONFIG, Dict{Symbol, Any}(
+    :emissions_weight => 0.0
+))
+
 CARBON_TAX_CONFIG = [set_config(DEFAULT_CONFIG, Dict{Symbol, Any}(
     :emissions_tax => λ,
     :emissions_weight => 0.0,
@@ -40,13 +44,14 @@ CARBON_TAX_CONFIG = [set_config(DEFAULT_CONFIG, Dict{Symbol, Any}(
 ]
 
 PARETO_CONFIG = [set_config(DEFAULT_CONFIG, Dict{Symbol, Any}(
-    :emissions_weight => λ
+    :emissions_weight => λ,
+    :initialization_seed => k,
 ))
-    for λ in (0.0 : 100.0 : 2000.0) .+ 1.0
+    for λ in (0.0 : 100.0 : 2000.0) .+ 1.0, k in 1:5
 ]
 
 SEED_CONFIG = [set_config(DEFAULT_CONFIG, Dict{Symbol, Any}(
-    :initialization_seed => k
+    :initialization_seed => k,
 ))
     for k in 1:10
 ]

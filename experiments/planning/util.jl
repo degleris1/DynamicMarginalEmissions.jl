@@ -20,7 +20,11 @@ function load_results(savename)
     r = JLD.load(f)
 
     θ, history = r["theta"], r["history"]
-    config = Dict(zip(r["config"].keys, r["config"].values))
+    if !(typeof(r["config"]) <: Dict)
+        config = Dict(zip(r["config"].keys, r["config"].values))
+    else
+        config = r["config"]
+    end
     P = create_planning_problem(config)
 
     return P, config, θ, history
@@ -33,12 +37,19 @@ function run_expansion_planning(config, savename)
     # Load problem
     P = create_planning_problem(config)
     
-    # Initialize θ
-    Random.seed!(init_seed)
-    θ0 = P.θ_min .+ 3*rand(length(P.θ_min))
+    if config[:emissions_weight] > 0  # Use gradient descent
+        # Initialize θ
+        Random.seed!(init_seed)
+        θ0 = P.θ_min .+ 3*rand(length(P.θ_min))
 
-    # Run gradient descent
-    θ, history = run_sgd(θ0, P; verbose=true)
+        # Run gradient descent
+        θ, history = run_sgd(θ0, P; verbose=true)
+
+    else  # weight = 0, solve using Convex
+        println("Solving with Convex.jl...")
+        θ, history = solve_with_cvx(P)
+    end
+        
 
     # Save results
     f = joinpath(RESULTS_DIRECTORY, FILE_PREFIX*savename*FILE_SUFFIX)
@@ -252,4 +263,33 @@ function formulate_and_solve_problem(θ, P)
 	∂K_θT = [∂K_pmaxT; ∂K_CT]
 		
 	return opf.problem.optval, evaluate.(opf.g), (∂K_xT=sparse(∂K_xT), ∂K_θT=∂K_θT), dnet, opf
+end
+
+
+function solve_with_cvx(P)
+    # Unpack
+    net, d_dyn, η_c, η_d, P0 = P.net, P.d_dyn, P.η_c, P.η_d, P.P0
+    n, m = size(net.A)
+
+    θ = Variable(m+n)
+    add_constraint!(θ, θ >= P.θ_min)
+
+    pmax, C = θ[1:m], θ[m+1:end]
+
+    T = length(d_dyn)
+	
+	# Construct problem
+	dnet = make_dynamic(net, T, P0 * C, C, [net.gmax for _ in 1:T], η_c, η_d)
+	dnet.pmax = [pmax for _ in 1:T]
+	
+	# Create dispatch problem
+	opf = DynamicPowerManagementProblem(dnet, d_dyn)
+
+    # Create expansion planning problem
+    ξ, Z = P.ξ, P.Z
+    ep = minimize(ξ' * θ + Z*opf.problem.objective, opf.problem.constraints)
+	solve!(ep, () -> ECOS.Optimizer(verbose=false))
+    @show ep.status
+
+	return evaluate(θ), (loss=[ep.optval], grad=[], θ=[evaluate(θ)])
 end
