@@ -142,6 +142,9 @@ net_gen = (
 	* P.Z  # Time horizon
 )
 
+# ╔═╡ 5019aabc-525f-4c50-a205-8826c28b0300
+k = 6
+
 # ╔═╡ f07689f4-f861-45f6-a40d-a3e1a7368fa3
 md"""
 ## Figure 2: Network changes
@@ -293,7 +296,7 @@ begin
 	scatter!([M_base/net_gen], P.Z*[E_base], color=:Green, ms=5)
 	
 	# $125 and $500 tax
-	scatter!([Ms_tax[6]/net_gen], P.Z*[Es_tax[4]], color=:Red, ms=5)
+	scatter!([Ms_tax[k]/net_gen], P.Z*[Es_tax[k]], color=:Red, ms=5)
 	scatter!([Ms_tax[end]/net_gen], P.Z*[Es_tax[end]], color=:Yellow, ms=5)
 	
 	plot!(xlabel="Levelized Cost [\$/MWh]", ylabel="Emissions [mTCO2]")
@@ -308,7 +311,6 @@ end
 
 # ╔═╡ dfe68663-7c4e-48c6-94c0-1d2e27ecb515
 begin
-	k = 4
 	yticks3 = 0 : 0.5 : 1.5
 	bw = 0.4
 	
@@ -331,17 +333,20 @@ begin
 	plt3_bot = plot(
 		xlabel="Bus", xlim=(0, n+1), xticks=[1, 2, 4, 7, 8, 9, 10, 11, 14],
 		ylim=(0, 1.55), ylabel="Storage [MWh]",
-		bottom_margin=8Plots.pt
+		
 	)
 	bar!(1:n, θA[m+1:end], bar_width=bw, color=:Green)
 	bar!((1:n) .+ bw, θB[m+1:end], bar_width=bw, c=:Red)
 	annotate!(0.25, 1.5, text("D", :Times, :left, :top, 14))
 	
 	
+	
 	plt3 = plot(
-		plt3_top, plt3_bot,
+		plt3_bot, plt3_top,
 		layout=(2, 1), grid=false, frame=:box
 	)
+	
+	plot!(plt3[2], bottom_margin=8Plots.pt)
 	plot!(size=in_to_pix(0.6*textwidth, figheight), link=:y)
 	
 end
@@ -385,6 +390,7 @@ end
 # ╠═961c7c6a-f73c-49d1-891b-18ffc3ea1e0e
 # ╠═ced988c3-e644-4bfa-85a4-cf6ab075b0f6
 # ╠═b3021867-a100-470d-8cd2-04e005ae9cdf
+# ╠═5019aabc-525f-4c50-a205-8826c28b0300
 # ╠═577a49a5-6c18-4176-b624-9d0bdf094fa4
 # ╟─f07689f4-f861-45f6-a40d-a3e1a7368fa3
 # ╟─20092653-2b80-4bc5-a1d9-d26930a4e9c1
