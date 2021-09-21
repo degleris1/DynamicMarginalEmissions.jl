@@ -46,12 +46,18 @@ function sensitivity_demand(P::PowerManagementProblem, ∇C, fq, fl, d, pmax, gm
     x = flatten_variables(P)
 
     # Get partial Jacobians of KKT operator
-    _, ∂K_xT = Zygote.forward_jacobian(x -> kkt(x, fq, fl, d, pmax, gmax, A, B), x)
+    #_, ∂K_xT2 = Zygote.forward_jacobian(x -> kkt(x, fq, fl, d, pmax, gmax, A, B), x)
+    ∂K_x = compute_jacobian_kkt(fq, fl, d, pmax, gmax, A, B, x)
+    ∂K_xT = ∂K_x'
+    #@show norm(∂K_xT - ∂K_xT2)
+
     _, ∂K_θT = Zygote.forward_jacobian(d -> kkt(x, fq, fl, d, pmax, gmax, A, B), d)
 
     # Now compute ∇C(g*(θ)) = -∂K_θ' * inv(∂K_x') * v
     v = ∂K_xT \ ∇C
     ∇C_θ = -∂K_θT * v
+
+    #@show norm(∂K_xT*v - ∇C)
 
     return ∇C_θ
 end
@@ -167,8 +173,8 @@ function compute_jacobian_kkt(fq, fl, d, pmax, gmax, A, B, x; τ=TAU)
     K21 = [
         spzeros(m, l) -Diagonal(λpl);
         spzeros(m, l) Diagonal(λpu);
-        Diagonal(λgu) spzeros(l, m);
-        -Diagonal(λgl) spzeros(l, m)
+        -Diagonal(λgl) spzeros(l, m);
+        Diagonal(λgu) spzeros(l, m)
     ]
 
     K22 = Diagonal([-p - pmax; p - pmax; -g; g - gmax])

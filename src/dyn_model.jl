@@ -4,8 +4,6 @@
 # POWER MANAGEMENT PROBLEM
 # ===
 
-# TODO: 
-# - add edge constraints
 
 INIT_COND = 0
 
@@ -102,7 +100,7 @@ function DynamicPowerManagementProblem(
         ch[1] <= P, # λchu
         dis[1] >= 0, #λdisl
         dis[1] <= P, # λdisu
-        s[1] == INIT_COND + ch[1] * η_c - dis[1]/η_d, #νs (ν for storage)
+        0 == s[1] - INIT_COND + ch[1] * η_c - dis[1]/η_d, #νs (ν for storage)
     ])
     # running condition
     for t in 2:T
@@ -182,7 +180,7 @@ function kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, P, C, η_c, η_d; τ=TAU)
         # handle edge cases
         # ?? TODO: figure out if there is an edge case for ch and dis? 
         # are they actually variables in n x T or n x (T-1)
-        t==1 ? s_prev = INIT_COND : s_prev = s[t-1]
+        t == 1 ? s_prev = INIT_COND : s_prev = s[t-1]
         t < T ? νs_next = νs[t + 1] : νs_next = zeros(n)
 
         # compute the KKTs for the static subproblem
@@ -219,22 +217,22 @@ Compute the terms in the kkt matrix that are only related to the storage
 Notes:
 ------
 - Dimensions should be 10n, as there are 3 variables of size n + 7 constraints of size n
-
+- The variables that are not in the diagonal block for the Jacobian are νs_next and ν
 """
 function kkt_storage(
     s, s_prev, ch, dis, λsu, λsl, λchu, λchl, λdisu, λdisl, ν, νs_t, νs_next, P, C, η_c, η_d
     )
     return [
-        (λsu - λsl) + (νs_next - νs_t); #∇_s L
-        (λchu - λchl) + ν * η_c + νs_t ; #∇_ch L
-        (λdisu - λdisl) - ν/η_d - νs_t; #∇_dis L
+        (λsu - λsl) + (νs_next - νs_t);  # ∇_s L
+        (λchu - λchl) + ν * η_c + νs_t * η_c ;  # ∇_ch L
+        (λdisu - λdisl) - ν/η_d - νs_t/η_d;  # ∇_dis L
         λsl .* (-s);
         λsu .* (s - C);
         λchl .* (-ch);
         λchu .* (ch-P);
         λdisl .* (-dis);
         λdisu .* (dis-P);
-        s .- s_prev - ch * η_c + dis/η_d;
+        - s .+ s_prev + ch * η_c - dis/η_d;
     ]
 end
 
@@ -253,10 +251,17 @@ function extract_vars_t(P::PowerManagementProblem, t)
     n_constraints_storage = 7
 
     g = P.g[t].value[:]
-    p = P.p[t].value[:]
-    s = P.s[t].value[:]
-    ch = P.ch[t].value[:]
-    dis = P.dis[t].value[:]
+    p = evaluate(P.p[t]) 
+    s = evaluate(P.s[t]) 
+    ch = evaluate(P.ch[t]) 
+    dis = evaluate(P.dis[t])
+
+    make_array = x -> (typeof(x) <: Array) ? x : [x]
+
+    p = make_array(p)
+    s = make_array(s)
+    ch = make_array(ch)
+    dis = make_array(dis)
 
     start_index = (t - 1) * n_constraints_static
     λpl = P.problem.constraints[start_index + 1].dual  

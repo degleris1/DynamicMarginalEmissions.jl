@@ -31,7 +31,9 @@ export sensitivity_price, sensitivity_demand
 export loss_and_grad, stochastic_loss_and_grad
 export compute_mefs
 export plot_sensitivity_check
-export make_dynamic
+export make_dynamic, generate_random_data
+
+export compute_jacobian_kkt_dyn
 
 
 # Files

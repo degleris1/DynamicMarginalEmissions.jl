@@ -26,13 +26,23 @@ function sensitivity_demand_dyn(P::PowerManagementProblem, net::DynamicPowerNetw
     return ∇C_θ
 end
 
+"""
+    sensitivity_demand_dyn(P::PowerManagementProblem, net::DynamicPowerNetwork, d, ∇C)
+"""
+
 function sensitivity_demand_dyn(P::PowerManagementProblem, net::DynamicPowerNetwork, d, ∇C)
     T = net.T
     x = flatten_variables_dyn(P)
 
     # Get partial Jacobians of KKT operator
+
+    #@show size(x)
+
     _, ∂K_xT = Zygote.forward_jacobian(x -> kkt_dyn(x, net, d), x)
-    v = ∂K_xT \ ∇C
+
+    #@show size(∂K_xT)
+
+    v = sparse(∂K_xT) \ ∇C
 
     ∇C_θ = []
     for t in 1:T
@@ -57,7 +67,7 @@ end
     compute_mefs(P::PowerManagementProblem, net::DynamicPowerNetwork, d, c, t)
 
 Compute the marginal emission factors at time `t` given carbon costs `c`
-and demands `d`
+and demands `d`.
 """
 function compute_mefs(P::PowerManagementProblem, net::DynamicPowerNetwork, d, c, t)
     ∇C_dyn = _make_∇C(net, c)
@@ -65,6 +75,13 @@ function compute_mefs(P::PowerManagementProblem, net::DynamicPowerNetwork, d, c,
     return sensitivity_demand_dyn(P, net, d, ∇C_dyn, t)
 end
 
+
+"""
+    compute_mefs(P::PowerManagementProblem, net::DynamicPowerNetwork, d, c)
+
+Compute the marginal emission factors given carbon costs `c`
+and demands `d` across the entire time horizon.
+"""
 function compute_mefs(P::PowerManagementProblem, net::DynamicPowerNetwork, d, c)
     ∇C_dyn = _make_∇C(net, c)
 
@@ -77,7 +94,7 @@ end
 Constructs carbon cost gradient to be propagated for mef computation for 
 the DynamicPowerNetwork `net`. `d` is the demand and `c` are the carbon costs. 
 """
-function _make_∇C(net::DynamicPowerNetwork, c)
+function _make_∇C(net::DynamicPowerNetwork, c, cq=0, g=0)
     # Extract dimensions
     n, m, l, T = get_problem_dims(net)
     static_dim = kkt_dims(n, m, l)
@@ -86,13 +103,87 @@ function _make_∇C(net::DynamicPowerNetwork, c)
     ∇C_dyn = zeros(kkt_dims_dyn(n, m, l, T), T)
     idx = 0
     for t in 1:T
-         ∇C_dyn[idx+1 : idx+l, t] .= c
+        if g == 0
+            ∇C_dyn[idx+1 : idx+l, t] .= c
+        else
+            ∇C_dyn[idx+1 : idx+l, t] .= c .+ (cq .* g[t])
+        end
          idx += static_dim
     end
 
     # Return sensitivity
     return ∇C_dyn
 end
+
+"""
+    compute_jacobian_kkt_dyn(x, net, d_dyn)
+
+Constructs the Jacobian for a dynamic network `net`, with input variables `x` and
+demand `d_dyn`.
+"""
+function compute_jacobian_kkt_dyn(x, net, d_dyn)
+
+    n, m, l, T = get_problem_dims(net)
+
+    dim_t = kkt_dims(n, m, l)
+    dim_s = storage_kkt_dims(n)
+
+    # decompose `x` in arrays of T variables
+    g, p, s, ch, dis, λpl, λpu, λgl, λgu, ν, λsl, λsu, λchl, λchu, λdisl, λdisu, νs = 
+        unflatten_variables_dyn(x, n, m, l, T)
+
+    # Compute individual Jacobians for the static system
+
+    Kτ1 = [
+        compute_jacobian_kkt(
+            net.fq[t], net.fl[t], d_dyn[t], net.pmax[t], net.gmax[t], net.A, net.B, 
+            [g[t]; p[t]; λpl[t]; λpu[t]; λgl[t]; λgu[t]; ν[t]]; τ=TAU)
+        for t in 1:T
+    ]
+    Kτ2 = [
+        compute_jacobian_kkt_charge_discharge(dim_t, n)
+        for t in 1:T
+    ]
+
+    # Stack matrices
+    Kτ = [
+        hcat(
+            spzeros(dim_t, (t-1)*dim_t),
+            Kτ1[t],
+            spzeros(dim_t, (T-t)*dim_t),
+            spzeros(dim_t, (t-1)*dim_s),
+            Kτ2[t],
+            spzeros(dim_t, (T-t)*dim_s)
+        )
+        for t in 1:T
+    ]
+
+    # Compute individual Jacobians for the dynamic system
+
+    Ks = [
+        compute_jacobian_kkt_dyn_t(
+            s[t], ch[t], dis[t], λsl[t], λsu[t], λchl[t], λchu[t], λdisl[t], λdisu[t], net, t)
+        for t in 1:T
+    ]
+
+    return [vcat(Kτ...) ; vcat(Ks...)]
+end
+
+
+"""
+    compute_jacobian_kkt_charge_discharge(dims, n)
+
+Compute the part of the Jacobian associated with charge and discharge, 
+with `dims` being the dimension of the static system and `n` the number of nodes.
+"""
+function compute_jacobian_kkt_charge_discharge(dims, n)
+    dKdch = [spzeros(dims-n, n); Diagonal(ones(n))]
+    dKddis = [spzeros(dims-n, n); -Diagonal(ones(n))]
+
+    return [spzeros(dims, n) dKdch dKddis spzeros(dims, 7n)]
+end
+
+
 
 """
     compute_obj_sensitivity(P::PowerManagementProblem, net::DynamicPowerNetwork, d, t)
@@ -223,4 +314,92 @@ function sensitivity_var_check(dnet::DynamicPowerNetwork, d_dyn, node, varName, 
     x = [1+i*rel_inc for i in -npoints:npoints]
     
     return opt_vals, estimated_vals, x
+end
+
+
+
+"""
+    compute_jacobian_kkt_dyn_t(s, ch, dis, λsl, λsu, λchl, λchu, λdisl, λdisu, net, t)
+
+Compute the Jacobian for a given timestep of the storage part of the problem. Input variables are the primal and dual variables, 
+`net` is the dynamic network and `t` is the timestep at which the Jacobian is to be computed.
+"""
+function compute_jacobian_kkt_dyn_t(s, ch, dis, λsl, λsu, λchl, λchu, λdisl, λdisu, net, t)
+
+    # extract some variables
+    η_c = net.η_c
+    η_d = net.η_d
+    C = net.C
+    P = net.P
+    n, m, l, T = get_problem_dims(net)
+
+    # Relevant sizes for the problem
+    kdims = kkt_dims(n, m, l)
+    sdims = storage_kkt_dims(n)
+
+    # D_x ∇_x L 
+    # dim = 3n, 3n
+    K11 = spzeros(3n, 3n) # dim = n for s, ch, and dis 
+    # D_x F^T
+    # dim = 3n, 6n
+    K12 = [
+        -I(n) I(n) spzeros(n, 4n);
+        spzeros(n, 2n) -I(n) I(n) spzeros(n, 2n);
+       spzeros(n, 4n) -I(n) I(n)
+    ]
+    # D_x H^T
+    # dim = 3n, n
+    K13 = [
+        -I(n);
+        η_c*I(n);
+        -1/η_d*I(n)
+    ]
+    # Diag(λ) * D_xF
+    # dim = 6n, 6n
+    D_xF = K12'
+    D = Diagonal([λsl; λsu; λchl; λchu; λdisl; λdisu])
+    K21 = D * D_xF
+    
+    # diag(F)
+    # dim = 6n, 6n
+    K22 = Diagonal([-s; s-C; -ch; ch-P; -dis; dis-P])
+    
+    # diagonal part of the Jacobian
+    K_storage_t = [
+        K11 K12 K13;
+        K21 K22 spzeros(6n, n);
+        K13' spzeros(n, 7n) 
+    ]
+
+    # static part
+    # includes "cross terms" with the ν dual variable
+    K_static = 
+    [
+        spzeros(n, T*kdims);
+        spzeros(n, t*kdims-n) η_c*I(n) spzeros(n, (T-t)*kdims);
+        spzeros(n, t*kdims-n) -I(n)/η_d spzeros(n, (T-t)*kdims);
+        spzeros(sdims-3n, T*kdims);
+    ]
+    
+    if t>1
+        K_storage_left = [
+            spzeros(sdims-n, (t-1)*sdims);
+            spzeros(n, (t-2)*sdims) I(n) spzeros(n, sdims-n);
+        ]
+    else
+        K_storage_left = spzeros(sdims, 0);
+    end
+    if t<T
+        K_storage_right = [
+            spzeros(n, sdims-n) I(n) spzeros(n, (T-(t+1))*sdims);
+            spzeros(sdims-n, (T-t)*sdims);
+        ]
+    else
+        K_storage_right = spzeros(sdims, 0);
+    end
+
+    K_storage = [K_storage_left K_storage_t K_storage_right];
+
+    return [K_static K_storage]
+   
 end
