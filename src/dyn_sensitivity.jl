@@ -126,10 +126,10 @@ function compute_jacobian_kkt_dyn(x, net, d_dyn)
     n, m, l, T = get_problem_dims(net)
 
     dim_t = kkt_dims(n, m, l)
-    dim_s = storage_kkt_dims(n)
+    dim_s = storage_kkt_dims(n, l)
 
     # decompose `x` in arrays of T variables
-    g, p, s, ch, dis, λpl, λpu, λgl, λgu, ν, λsl, λsu, λchl, λchu, λdisl, λdisu, νs = 
+    g, p, s, ch, dis, λpl, λpu, λgl, λgu, ν, λsl, λsu, λchl, λchu, λdisl, λdisu, λrampl, λrampu, νs = 
         unflatten_variables_dyn(x, n, m, l, T)
 
     # Compute individual Jacobians for the static system
@@ -141,7 +141,7 @@ function compute_jacobian_kkt_dyn(x, net, d_dyn)
         for t in 1:T
     ]
     Kτ2 = [
-        compute_jacobian_kkt_charge_discharge(dim_t, n)
+        compute_jacobian_kkt_charge_discharge_ramp(dim_t, n)
         for t in 1:T
     ]
 
@@ -159,7 +159,7 @@ function compute_jacobian_kkt_dyn(x, net, d_dyn)
     ]
 
     # Compute individual Jacobians for the dynamic system
-
+    error()
     Ks = [
         compute_jacobian_kkt_dyn_t(
             s[t], ch[t], dis[t], λsl[t], λsu[t], λchl[t], λchu[t], λdisl[t], λdisu[t], net, t)
@@ -180,7 +180,7 @@ function compute_jacobian_kkt_charge_discharge(dims, n)
     dKdch = [spzeros(dims-n, n); Diagonal(ones(n))]
     dKddis = [spzeros(dims-n, n); -Diagonal(ones(n))]
 
-    return [spzeros(dims, n) dKdch dKddis spzeros(dims, 7n)]
+    return [spzeros(dims, n) dKdch dKddis spzeros(dims, 6n) spzeros(dims, 2l) spzeros(dims, n)]
 end
 
 
@@ -373,6 +373,7 @@ function compute_jacobian_kkt_dyn_t(s, ch, dis, λsl, λsu, λchl, λchu, λdisl
 
     # static part
     # includes "cross terms" with the ν dual variable
+    # TODO: should efficiency be here?
     K_static = 
     [
         spzeros(n, T*kdims);
