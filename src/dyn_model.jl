@@ -4,8 +4,6 @@
 # POWER MANAGEMENT PROBLEM
 # ===
 
-# TODO: 
-# - add edge constraints
 
 INIT_COND = 0
 
@@ -253,10 +251,10 @@ function extract_vars_t(P::PowerManagementProblem, t)
     n_constraints_storage = 7
 
     g = P.g[t].value[:]
-    p = evaluate(P.p[t]) #.value[:]
-    s = evaluate(P.s[t]) #.value[:]
-    ch = evaluate(P.ch[t]) #.value[:]
-    dis = evaluate(P.dis[t]) #.value[:]
+    p = evaluate(P.p[t]) 
+    s = evaluate(P.s[t]) 
+    ch = evaluate(P.ch[t]) 
+    dis = evaluate(P.dis[t])
 
     make_array = x -> (typeof(x) <: Array) ? x : [x]
 
@@ -264,8 +262,6 @@ function extract_vars_t(P::PowerManagementProblem, t)
     s = make_array(s)
     ch = make_array(ch)
     dis = make_array(dis)
-
-    # @show size(p), size(s), size(ch), size(dis)
 
     start_index = (t - 1) * n_constraints_static
     λpl = P.problem.constraints[start_index + 1].dual  

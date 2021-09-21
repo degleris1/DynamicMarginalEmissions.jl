@@ -91,12 +91,11 @@ get_lmps(P::PowerManagementProblem) = P.problem.constraints[end].dual[:, 1]
 # ===
 
 """
-    kkt_dims(n, m)
+    kkt_dims(n, m, l)
 
 Compute the dimensions of the input / output of the KKT operator for
-a network with `n` nodes and `m` edges.
+a network with `n` nodes and `m` edges and `l` generator per node
 
-TODO: add `l` in docs
 """
 kkt_dims(n, m, l) = 3m + 3l + n
 
@@ -128,12 +127,24 @@ end
 kkt(x, net::PowerNetwork, d) =
     kkt(x, net.fq, net.fl, d, net.pmax, net.gmax, net.A, net.B; τ=net.τ, ch=zeros(size(net.A)[1]), dis=zeros(size(net.A)[1]))
 
+
+"""
+    flatten_variables(P::PowerManagementProblem)
+
+Concatenates primal and dual variables from `P` into a single vector.
+"""
 function flatten_variables(P::PowerManagementProblem)
     x = [evaluate(P.g); evaluate(P.p)]
     λ = vcat([c.dual for c in P.problem.constraints]...)
     return [x; λ][:, 1]
 end
 
+
+"""
+    unflatten_variables(x, n, m, l)
+
+Extracts primal and dual variables from `x`.
+"""
 function unflatten_variables(x, n, m, l)
     i = 0
     

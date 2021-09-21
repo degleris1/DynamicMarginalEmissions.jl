@@ -26,6 +26,10 @@ function sensitivity_demand_dyn(P::PowerManagementProblem, net::DynamicPowerNetw
     return ∇C_θ
 end
 
+"""
+    sensitivity_demand_dyn(P::PowerManagementProblem, net::DynamicPowerNetwork, d, ∇C)
+"""
+
 function sensitivity_demand_dyn(P::PowerManagementProblem, net::DynamicPowerNetwork, d, ∇C)
     T = net.T
     x = flatten_variables_dyn(P)
@@ -63,7 +67,7 @@ end
     compute_mefs(P::PowerManagementProblem, net::DynamicPowerNetwork, d, c, t)
 
 Compute the marginal emission factors at time `t` given carbon costs `c`
-and demands `d`
+and demands `d`.
 """
 function compute_mefs(P::PowerManagementProblem, net::DynamicPowerNetwork, d, c, t)
     ∇C_dyn = _make_∇C(net, c)
@@ -71,6 +75,13 @@ function compute_mefs(P::PowerManagementProblem, net::DynamicPowerNetwork, d, c,
     return sensitivity_demand_dyn(P, net, d, ∇C_dyn, t)
 end
 
+
+"""
+    compute_mefs(P::PowerManagementProblem, net::DynamicPowerNetwork, d, c)
+
+Compute the marginal emission factors given carbon costs `c`
+and demands `d` across the entire time horizon.
+"""
 function compute_mefs(P::PowerManagementProblem, net::DynamicPowerNetwork, d, c)
     ∇C_dyn = _make_∇C(net, c)
 
@@ -105,20 +116,24 @@ function _make_∇C(net::DynamicPowerNetwork, c, cq=0, g=0)
 end
 
 """
+    compute_jacobian_kkt_dyn(x, net, d_dyn)
+
+Constructs the Jacobian for a dynamic network `net`, with input variables `x` and
+demand `d_dyn`.
 """
 function compute_jacobian_kkt_dyn(x, net, d_dyn)
+
     n, m, l, T = get_problem_dims(net)
 
     dim_t = kkt_dims(n, m, l)
     dim_s = storage_kkt_dims(n)
-
-    # @show dim_t, dim_s, T*(dim_t + dim_s)
 
     # decompose `x` in arrays of T variables
     g, p, s, ch, dis, λpl, λpu, λgl, λgu, ν, λsl, λsu, λchl, λchu, λdisl, λdisu, νs = 
         unflatten_variables_dyn(x, n, m, l, T)
 
     # Compute individual Jacobians for the static system
+
     Kτ1 = [
         compute_jacobian_kkt(
             net.fq[t], net.fl[t], d_dyn[t], net.pmax[t], net.gmax[t], net.A, net.B, 
@@ -144,6 +159,7 @@ function compute_jacobian_kkt_dyn(x, net, d_dyn)
     ]
 
     # Compute individual Jacobians for the dynamic system
+
     Ks = [
         compute_jacobian_kkt_dyn_t(
             s[t], ch[t], dis[t], λsl[t], λsu[t], λchl[t], λchu[t], λdisl[t], λdisu[t], net, t)
@@ -153,6 +169,13 @@ function compute_jacobian_kkt_dyn(x, net, d_dyn)
     return [vcat(Kτ...) ; vcat(Ks...)]
 end
 
+
+"""
+    compute_jacobian_kkt_charge_discharge(dims, n)
+
+Compute the part of the Jacobian associated with charge and discharge, 
+with `dims` being the dimension of the static system and `n` the number of nodes.
+"""
 function compute_jacobian_kkt_charge_discharge(dims, n)
     dKdch = [spzeros(dims-n, n); Diagonal(ones(n))]
     dKddis = [spzeros(dims-n, n); -Diagonal(ones(n))]
@@ -296,11 +319,12 @@ end
 
 
 """
-Compute the Jacobian for the dyn part of the problem
+    compute_jacobian_kkt_dyn_t(s, ch, dis, λsl, λsu, λchl, λchu, λdisl, λdisu, net, t)
+
+Compute the Jacobian for a given timestep of the storage part of the problem. Input variables are the primal and dual variables, 
+`net` is the dynamic network and `t` is the timestep at which the Jacobian is to be computed.
 """
 function compute_jacobian_kkt_dyn_t(s, ch, dis, λsl, λsu, λchl, λchu, λdisl, λdisu, net, t)
-
-    # @show t
 
     # extract some variables
     η_c = net.η_c
@@ -357,10 +381,6 @@ function compute_jacobian_kkt_dyn_t(s, ch, dis, λsl, λsu, λchl, λchu, λdisl
         spzeros(sdims-3n, T*kdims);
     ]
     
-    # we have to return cross terms
-    # for s_prev, the location is the location of s at time step t-1 ==> t-2
-    # s
-    # νs_next
     if t>1
         K_storage_left = [
             spzeros(sdims-n, (t-1)*sdims);
@@ -377,10 +397,6 @@ function compute_jacobian_kkt_dyn_t(s, ch, dis, λsl, λsu, λchl, λchu, λdisl
     else
         K_storage_right = spzeros(sdims, 0);
     end
-
-    # @show size(K_storage_left)
-    # @show size(K_storage_t)
-    # @show size(K_storage_right)
 
     K_storage = [K_storage_left K_storage_t K_storage_right];
 
