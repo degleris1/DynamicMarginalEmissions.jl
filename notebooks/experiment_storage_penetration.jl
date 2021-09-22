@@ -52,7 +52,7 @@ md"""
 
 # ╔═╡ 257a6f74-d3c3-42eb-8076-80d26cf164ca
 theme(:default, label=nothing, 
-		tickfont=(:Times, 8), guidefont=(:Times, 8), legendfont=(:Times, 8))
+		tickfont=(:Times, 8), guidefont=(:Times, 8), legendfont=(:Times, 8), titlefont=(:Times,8))
 
 # ╔═╡ 9bd515d4-c7aa-4a3d-a4fb-28686290a134
 md"""
@@ -490,6 +490,9 @@ total_mefs = [sum(results[i], dims=2)[:, 1, :, :] for i in 1:length(η_vals)];
 @bind idx_η Slider(1:1:length(η_vals))
 
 
+# ╔═╡ 75d956fc-bcf6-40fe-acd5-b5eef0fc7902
+crt_η_ = η_vals[idx_η]
+
 # ╔═╡ c6ee857d-8019-4c4f-bb07-a370a88ea3cf
 md"""
 MEFs as a function of time, for different charge/discharge efficiencies
@@ -518,7 +521,7 @@ end
 
 # ╔═╡ d27ef0d8-70b2-4897-9000-8fa70b1862fc
 begin
-	crt_η_ = η_vals[idx_η]
+	
 	highlighted_node = 5
 	plt_dynamic_mef = plot(subplots[highlighted_node])
 	plot!(size=(600, 200), legend=:outertopright)
@@ -530,6 +533,11 @@ begin
 	plt_dynamic_mef
 end
 
+# ╔═╡ 6fc320b1-b60d-4f49-89ab-bf029ead6b55
+md"""
+MEF as a function of consumption and emission times
+"""
+
 # ╔═╡ f7e0d09c-40bf-4936-987a-a3bcadae5487
 begin
 	node = interesting_nodes[highlighted_node]
@@ -537,10 +545,12 @@ begin
 	heatmap_subplts = []
 	for s_idx in 1:length(storage_penetrations)
 		
-		subplt = heatmap(results[idx_η][node, :, :, s_idx]', 
-			c=:grayC, clim=(0, 2000), colorbar=false,
+		crt_results = results[idx_η][node, :, :, s_idx]'
+		@show maximum(crt_results)
+		subplt = heatmap(log10.(max.(crt_results, δ)), 
+			c=:Blues_9, clim=(0, 4), colorbar=false,
 			xlabel="consumption time",
-			title="$(100*storage_penetrations[s_idx])% storage"
+			title="$(100*storage_penetrations[s_idx])% storage, η=$crt_η_"
 		)
 		
 		s_idx == 1 && plot!(ylabel="emissions time")
@@ -550,52 +560,16 @@ begin
 	end
 	
 	plt_emissions_heatmap = plot(heatmap_subplts..., 
-		layout=Plots.grid(1, 3, widths=[0.3, 0.3, 0.4]), 
+		layout=Plots.grid(1, 3, widths=[.3, 0.3, 0.4]), 
 		size=(650, 200), 
 		bottom_margin=8Plots.pt
 	)
 	savefig(plt_emissions_heatmap, 
 		"../img/storage_penetration_emissions_heatmap.png")
 	plt_emissions_heatmap
-end
-
-# ╔═╡ 418861e0-a35e-47db-9f00-a6a7fcf733fe
-md"""
-## Appendix
-"""
-
-# ╔═╡ 0d07df73-89e1-4dbf-8f8c-82c202ad84c7
-md"""
-### Solve static problem
-
-Solve the static optimal power flow problem and display the LMPs.
-"""
-
-# ╔═╡ 43ab37f7-bf1f-44fb-8858-e3bf7d4e8880
-begin
-	for t in 1:T
-		opf_t = PowerManagementProblem(net, d_dyn[t])
-		solve!(opf_t, OPT, verbose=true)
-		@assert opf_t.problem.status == Convex.MOI.OPTIMAL
-	end
-		
-	opf = PowerManagementProblem(net, d_dyn[18])
-	solve!(opf, OPT, verbose=true)
 	
-	opf.problem.status
+	
 end
-
-# ╔═╡ e1ef0db3-3130-45b0-9f07-c5776d72c31a
-begin
-	λ = get_lmps(opf)
-	bar(λ, size=(600, 200), ylim=(100, Inf), title="locational marginal prices")
-end
-
-# ╔═╡ 08cce787-8118-4792-829a-153d2b637a78
-bar(abs.(evaluate(opf.p)) ./ (net.pmax), size=(600, 100), title="line flows")
-
-# ╔═╡ 67ef9083-dbfe-48e8-a741-2a5fb035b8d7
-bar(evaluate(opf.g)[1:6], size=(600, 100))
 
 # ╔═╡ Cell order:
 # ╠═c39005df-61e0-4c08-8321-49cc5fe71ef3
@@ -648,13 +622,9 @@ bar(evaluate(opf.g)[1:6], size=(600, 100))
 # ╠═cd5fe410-6264-4381-b19f-31d050bc3930
 # ╠═0740dc70-a532-4818-b09d-b3b8d60fa6ba
 # ╠═19f4e0cc-0c93-42dc-8ee4-17f52d4e5e90
+# ╠═75d956fc-bcf6-40fe-acd5-b5eef0fc7902
 # ╟─c6ee857d-8019-4c4f-bb07-a370a88ea3cf
 # ╟─6186798f-6711-4222-94bb-f53b2d0fad7d
 # ╟─d27ef0d8-70b2-4897-9000-8fa70b1862fc
-# ╠═f7e0d09c-40bf-4936-987a-a3bcadae5487
-# ╟─418861e0-a35e-47db-9f00-a6a7fcf733fe
-# ╟─0d07df73-89e1-4dbf-8f8c-82c202ad84c7
-# ╠═43ab37f7-bf1f-44fb-8858-e3bf7d4e8880
-# ╟─e1ef0db3-3130-45b0-9f07-c5776d72c31a
-# ╟─08cce787-8118-4792-829a-153d2b637a78
-# ╟─67ef9083-dbfe-48e8-a741-2a5fb035b8d7
+# ╟─6fc320b1-b60d-4f49-89ab-bf029ead6b55
+# ╟─f7e0d09c-40bf-4936-987a-a3bcadae5487
