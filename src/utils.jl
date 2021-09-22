@@ -12,7 +12,7 @@ function generate_random_data(n, l, T)
     Random.seed!(2)
 
     # Make graph
-    G = watts_strogatz(n, 3, 0.2)
+    G = watts_strogatz(n, 3, 0.3)
 
     # Convert to incidence matrix
     A = incidence_matrix(G, oriented=true)
@@ -41,8 +41,9 @@ function generate_random_data(n, l, T)
     gmax_dyn = [gmax for _ in 1:T]
     d_dyn = [d for _ in 1:T]
 
-    P = rand(Exponential(2), n)
-    C = rand(Exponential(2), n)
+    
+    C = rand(Exponential(10), n)
+    P = 0.25 * C
     ;
     
     return A, B, cq_dyn, cl_dyn, d_dyn, gmax_dyn, pmax_dyn, P, C
