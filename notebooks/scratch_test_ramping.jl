@@ -58,9 +58,11 @@ md"""
 """
 
 # ╔═╡ 488cbe38-c106-4d19-ad34-363d763a4a15
-α = 0.9
+α = 0.95 #+ sqrt(eps())
 # Weird values...
-#0.79999999
+# 0.79999999
+# 0.9
+# Others...
 
 # ╔═╡ 26345b70-ae32-423f-9aa3-a61a78857ca0
 ρ = α * gmax[1]
@@ -127,10 +129,10 @@ err.nzval
 findall(!=(0), err)
 
 # ╔═╡ 1f8a655e-a914-468b-98df-f9a3cfd19171
-∂K[1643, :].nzval
+∂K[2138, :].nzval
 
 # ╔═╡ 668a9da8-41b7-4931-9637-c38e299265cd
-∂K_zyg[1652, :].nzval
+∂K_zyg[2138, :].nzval
 
 # ╔═╡ 0661ea23-a9ce-4530-aa19-9040d4296c25
 kkt_dims(n,m,l)*T + storage_kkt_dims(n,l)*4
@@ -139,10 +141,10 @@ kkt_dims(n,m,l)*T + storage_kkt_dims(n,l)*4
 kkt_dims(n,m,l)*T + storage_kkt_dims(n,l)*4 + 3n
 
 # ╔═╡ 5d0da605-8cc5-46be-91d3-e004c31d05bc
-heatmap(Matrix(∂K[2121:2140, 2181:2200]), yflip=true)
-
-# ╔═╡ 1c1b648e-99b7-440a-8b7b-74335975701b
-heatmap(Matrix(∂K_zyg[2121:2140, 2181:2200]), yflip=true)
+plot(
+	heatmap(Matrix(∂K[2121:2140, 2181:2200]), yflip=true),
+	heatmap(Matrix(∂K_zyg[2121:2140, 2181:2200]), yflip=true),
+)
 
 # ╔═╡ Cell order:
 # ╠═ef1bccb8-1b11-11ec-02b5-af1e0e589de0
@@ -185,4 +187,3 @@ heatmap(Matrix(∂K_zyg[2121:2140, 2181:2200]), yflip=true)
 # ╠═0661ea23-a9ce-4530-aa19-9040d4296c25
 # ╠═3561ab12-574f-4a57-b60c-432532df49e5
 # ╠═5d0da605-8cc5-46be-91d3-e004c31d05bc
-# ╠═1c1b648e-99b7-440a-8b7b-74335975701b
