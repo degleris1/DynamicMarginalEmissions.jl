@@ -164,24 +164,64 @@ sum(abs, ∂K*v1 - b)
 # ╔═╡ 5edb6c01-66fe-4c18-a8ee-6078e8255fe8
 v2 = ∂K_zyg \ b;
 
+# ╔═╡ 2208d31a-158f-472a-a600-577f4c6110f3
+md"""
+## Are sensitivities accurate?
+"""
+
+# ╔═╡ c4c12671-5148-4e51-9252-63e3b9cb379c
+dx = -0.5 : 0.001 : 0.5
+
+# ╔═╡ 38a92e7d-fe51-4bb2-80da-18c9da30afc7
+input_ind = 960
+
+# ╔═╡ 08fcbe21-8a25-4826-930c-d102bfb65c7f
+output_ind = 705
+
+# ╔═╡ cc09d9b2-401e-487a-aee4-89c944229f23
+function get_kkt_dx(dx)
+	xp = deepcopy(x)
+	xp[input_ind] += dx
+	return kkt_dyn(xp, dnet, d)[output_ind]
+end
+
+# ╔═╡ 699f1e57-ed51-463d-8a89-7832b4326028
+let
+	plot(size=(600, 200), legend=:outertopright)
+	plot!(xlabel="input $input_ind", ylabel="output $output_ind")
+	plot!(bottom_margin=10Plots.pt, left_margin=10Plots.pt)
+	
+	
+	plot!(dx, get_kkt_dx.(dx),
+		lw=4, label="true", alpha=0.75, c=:Gray
+	)
+	
+	plot!(dx, K[output_ind] .+ ∂K[output_ind, input_ind]*dx, 
+		lw=4, label="manual", ls=:dot, c=:Green
+	)
+	plot!(dx, K[output_ind] .+ ∂K_zyg[output_ind, input_ind]*dx, 
+		lw=4, label="zygote", ls=:dot, c=:Red
+	)
+end
+
 # ╔═╡ Cell order:
 # ╠═ef1bccb8-1b11-11ec-02b5-af1e0e589de0
 # ╠═589ab2e5-319a-487c-855d-508af37a277f
 # ╠═cab7047e-8b71-4652-a668-4016349b0f3c
 # ╠═f5afa002-63d8-4b8a-81a2-a867aeb8d612
-# ╠═d0f3079b-d3db-48a4-923f-c977c7ce0c34
+# ╟─d0f3079b-d3db-48a4-923f-c977c7ce0c34
 # ╠═0b98c228-3413-49ef-805e-0e0bd46f7373
 # ╠═df56e6de-d953-47c4-b846-5338e98cf597
 # ╠═c62d92b0-b850-47fe-b521-0ad63609e5f0
 # ╠═26345b70-ae32-423f-9aa3-a61a78857ca0
 # ╠═681e1106-e41b-4417-a958-c5a23b734fe3
 # ╠═837f4451-f246-436a-bf30-5d5d70791d34
-# ╠═024d1409-ba5f-401e-b28d-ace0b8c024b4
+# ╟─024d1409-ba5f-401e-b28d-ace0b8c024b4
 # ╠═fb761e75-9607-4675-b91c-807e4ba4495e
 # ╠═838ade3d-8a86-4683-8f13-49a48292338d
 # ╠═d5876c0e-024d-4fe0-a7d7-c12a1b9d96e8
 # ╠═97d40580-6dbe-46dc-912e-e9412d94227d
-# ╠═f10c1627-3578-41e0-993f-3f3c313c2372
+# ╟─f10c1627-3578-41e0-993f-3f3c313c2372
 # ╠═78dff8f2-9454-414d-8767-02b928d6daa6
 # ╠═575745b0-7b13-47b7-8021-63fa29c80b34
 # ╠═f84b6daf-ade9-4ef0-b0d9-88a93d27ea1a
@@ -209,3 +249,9 @@ v2 = ∂K_zyg \ b;
 # ╠═df67d1b6-71bf-4792-80e3-6eac11312e24
 # ╠═2bf3d695-ffed-4745-9277-d4668b3d7ae0
 # ╠═5edb6c01-66fe-4c18-a8ee-6078e8255fe8
+# ╟─2208d31a-158f-472a-a600-577f4c6110f3
+# ╠═c4c12671-5148-4e51-9252-63e3b9cb379c
+# ╠═38a92e7d-fe51-4bb2-80da-18c9da30afc7
+# ╠═08fcbe21-8a25-4826-930c-d102bfb65c7f
+# ╠═cc09d9b2-401e-487a-aee4-89c944229f23
+# ╠═699f1e57-ed51-463d-8a89-7832b4326028
