@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.15.1
+# v0.16.1
 
 using Markdown
 using InteractiveUtils
@@ -32,6 +32,23 @@ begin
 	using Revise
 	using CarbonNetworks
 end
+
+# ╔═╡ c39005df-61e0-4c08-8321-49cc5fe71ef3
+md"""
+## Description
+"""
+
+# ╔═╡ 5867a4eb-470a-4a8a-84e1-6f150de1dcde
+md"""
+## ToDo
+- Integrate ramping constraints
+- Generate the first figures
+"""
+
+# ╔═╡ 44275f74-7e7c-48d5-80a0-0f24609ef327
+md"""
+## Loading
+"""
 
 # ╔═╡ 257a6f74-d3c3-42eb-8076-80d26cf164ca
 theme(:default, label=nothing, 
@@ -107,8 +124,9 @@ T, n_demand = size(demand_data)
 
 # ╔═╡ cfcba5ad-e516-4223-860e-b1f18a6449ba
 begin
-	plt1 = plot(demand_data[:, rand(1:n_demand, 5)], lw=2, palette=:Blues)
-	plt2 = plot(renew_data, lw=2, palette=:Reds)
+	plt1 = plot(
+		demand_data[:, rand(1:n_demand, 5)], lw=2, palette=:Blues, title="Demand Data", xlabel="Hour", ylabel="Energy [?]")
+	plt2 = plot(renew_data, lw=2, palette=:Reds, title="Renewable Data", xlabel="Hour", ylabel="Energy [?]")
 	
 	plt_time_series = plot(plt1, plt2, layout=(2, 1), size=(600, 300))
 	
@@ -132,7 +150,7 @@ begin
 	total_demands = [sum([d[i] for d in d_dyn]) for i in 1:n] 
 end;
 
-# ╔═╡ c75d996b-0847-4cc7-bc93-3d42db39f1bd
+# ╔═╡ 9e5a1672-d452-42f5-ba5a-a2fa0b1eaada
 n_renew = size(renew_data, 2)
 
 # ╔═╡ 522e95d5-15a8-47ec-a79c-c4cc17cf86fd
@@ -177,10 +195,10 @@ md"""
 """
 
 # ╔═╡ 57a37eb0-a547-428c-9f8c-e5f3e30f5260
-c_rate = 0.25
+c_rate = 0.25 #charging rate
 
 # ╔═╡ 491da4e6-03e6-49d3-907d-43ddcffdfb42
-s_rel = .1
+s_rel = .1 #storage penetration
 
 # ╔═╡ 9a45c280-d8a4-4849-8977-2dc763ed633b
 @bind η_c Slider(0.8:0.01:1.0)
@@ -202,16 +220,19 @@ end
 
 # ╔═╡ af6d4ef0-f59f-42be-af36-7cf447478e4c
 begin
-	s_vals = zeros(n, T)
+	s_vals = zeros(n, T+1)
 	for t in 1:T
-    	s_vals[:, t] = opf_dyn.s[t].value./C
+    	s_vals[:, t+1] = evaluate(opf_dyn.s[t])./C
 	end
 end
 
 # ╔═╡ dd9efed9-f6ed-43fb-93f2-4d21d1360091
 begin
-	plot(s_vals', ylim=(0, 1))
+	t_axis = [t for t in 0:T]
+	plot(t_axis, s_vals', ylim=(0, 1))
 	title!("Relative SOC \n η_c = $η_c, η_d = $η_d")
+	xlabel!("Hour")
+	ylabel!("SOC")
 end
 
 # ╔═╡ 3f9eb091-059c-44a5-9b50-ae3cabe24060
@@ -219,28 +240,17 @@ md"""
 ## How does charging efficiency affect MEFs
 """
 
-# ╔═╡ 4a8c7752-6de8-4ea7-aafe-702b17507185
-storage_pen = .05
-
-# ╔═╡ 6e6b15b1-7685-4a20-9d94-dd703caa2fe9
-η_vals = [0.9, 0.95, 0.99]
-
-# ╔═╡ dfa2a03b-6925-4be0-aeac-076c4cf25969
-interesting_nodes = 2 : 2 : 30 
-
-# ╔═╡ 30ec492c-8d21-43f6-bb09-32810494f21e
-md"""
-## How does storage penetration affect MEFs?
-"""
-
-# ╔═╡ 98a0d7c5-b1a8-4ebe-bb73-7ca88b475592
-storage_penetrations = [0.0, 0.05, 0.10]
-
-# ╔═╡ 8fc06205-0227-4b46-a2e9-72bdf9d57926
+# ╔═╡ 355ebed2-42e6-41bb-b1db-a72d1aaae56f
 mef_times = 1:24
 
-# ╔═╡ 008ed573-67ec-4908-a51a-c5d2a01e5b0e
+# ╔═╡ 7bc3de9b-45e8-4a5b-a6b9-d816ee695bd9
 refresh = true
+
+# ╔═╡ 4a8c7752-6de8-4ea7-aafe-702b17507185
+storage_pen = s_rel
+
+# ╔═╡ 6e6b15b1-7685-4a20-9d94-dd703caa2fe9
+η_vals = [0.9, 0.95, 0.99, 1.] #charge-discharge efficiency values
 
 # ╔═╡ 47e2e177-3701-471f-ae3c-38276ec69370
 begin
@@ -261,19 +271,22 @@ begin
 		
 		results_η = zeros(n, T, length(mef_times), length(η_vals))
 		for (ind_η, η) in enumerate(η_vals)
-
+			
+			println("...computing for η=$η")
 			# Construct dynamic network
-			C = total_demands * (storage_pen + δ)
+			C = total_demands * (storage_pen + δ) #δ is to avoid inversion errors
 			P = C * c_rate
 			net_dyn = make_dynamic(net, T, P, C, dyn_gmax, η, η)
 
 			# Construct and solve OPF problem
 			opf_dyn = DynamicPowerManagementProblem(net_dyn, d_dyn)
 			solve!(opf_dyn, OPT, verbose=false)
+			println("...The objective value is:")
 			@show opf_dyn.problem.optval / T
 			
 			# Compute MEFs
-			@time mefs = compute_mefs(opf_dyn, net_dyn, d_dyn, emissions_rates)
+			mefs = compute_mefs(opf_dyn, net_dyn, d_dyn, emissions_rates)
+			println("...MEFs computed")
 			for ind_t in 1:length(mef_times)
 				results_η[:, :, ind_t, ind_η] .= mefs[ind_t]
 			end
@@ -298,6 +311,9 @@ end
 
 # ╔═╡ 457c1959-94fa-4267-8645-3ed1409cd0a0
 total_mefs_η = sum(results_η, dims=2)[:, 1, :, :];
+
+# ╔═╡ dfa2a03b-6925-4be0-aeac-076c4cf25969
+interesting_nodes = 2 : 2 : 30 
 
 # ╔═╡ a7e75e49-5031-4cc4-b96e-6227277ec3ba
 begin
@@ -333,11 +349,49 @@ begin
 	plt_dyn_mef_eta
 end
 
+# ╔═╡ fb43471f-6aed-4fd6-a9e0-b165f6c77003
+md"""
+we also have to look into what *emissions* are, not only marginal emissions
+"""
+
+# ╔═╡ 9aded04b-e55f-4ebd-97c4-90c3adf62547
+begin
+	total_emissions_η = []
+	for s in 1:length(η_vals)
+		E = zeros(T)
+		for t in 1:T
+			E[t] = evaluate(meta_η[s].opf.g[t])' * emissions_rates
+		end
+		push!(total_emissions_η, E)
+	end
+	
+	plt_total_emissions_η = plot()
+	for (ind_η, η) in enumerate(η_vals)
+		plot!(total_emissions_η[ind_η], label="η=$η", legend=:topleft)
+	end
+	xlabel!("Hour")
+	ylabel!("Total emissions")
+	# legend!(:topleft)
+	tot_emissions_vs_η = plot(η_vals, [sum(total_emissions_η[i]) for i in 1:length(η_vals)], xlabel="η", ylabel="Total Emissions")
+	
+	plt_ = plot(plt_total_emissions_η, tot_emissions_vs_η, layout=(2, 1), size=(600, 300))
+	
+	plt_
+end
+
+# ╔═╡ 30ec492c-8d21-43f6-bb09-32810494f21e
+md"""
+## How does storage penetration affect MEFs?
+"""
+
+# ╔═╡ 98a0d7c5-b1a8-4ebe-bb73-7ca88b475592
+storage_penetrations = [0.0, 0.05, 0.10]
+
 # ╔═╡ 3dce8c04-8a5c-41a7-b18a-be06caa628d3
 begin
 	#fix values to avoid rerunning the whole cell whenever playing with the sliders
-	η_c_ = 1.0
-	η_d_ = 1.0
+	η_c_ = 1.
+	η_d_ = 1.
 end
 
 # ╔═╡ 6f08828b-4c4b-4f50-bd40-35805a37aae0
@@ -352,19 +406,24 @@ begin
 			mef_times=mef_times,
 			emissions_rates=emissions_rates,
 			d_dyn=d_dyn,
-			η_c=η_c_,
-			η_d=η_d_
+			η_vals=η_vals
 		)
 		
 		meta = Dict()
 		
-		results = zeros(n, T, length(mef_times), length(storage_penetrations))
+		results = Dict()
+		
+		for (ind_η, η) in enumerate(η_vals)
+			meta[ind_η]	= Dict()
+			results[ind_η] = zeros(
+				n, T, length(mef_times), length(storage_penetrations)
+			)
 		for (ind_s, s_rel) in enumerate(storage_penetrations)
-
+		
 			# Construct dynamic network
 			C = total_demands * (s_rel + δ)
 			P = C * c_rate
-			net_dyn = make_dynamic(net, T, P, C, dyn_gmax, η_c_, η_d_)
+			net_dyn = make_dynamic(net, T, P, C, dyn_gmax, η, η)
 
 			# Construct and solve OPF problem
 			opf_dyn = DynamicPowerManagementProblem(net_dyn, d_dyn)
@@ -372,12 +431,13 @@ begin
 			@show opf_dyn.problem.optval / T
 			
 			# Compute MEFs
-			@time mefs = compute_mefs(opf_dyn, net_dyn, d_dyn, emissions_rates)
+			mefs = compute_mefs(opf_dyn, net_dyn, d_dyn, emissions_rates)
 			for ind_t in 1:length(mef_times)
-				results[:, :, ind_t, ind_s] .= mefs[ind_t]
+				results[ind_η][:, :, ind_t, ind_s] .= mefs[ind_t]
 			end
 			
-			meta[ind_s] = (opf=opf_dyn, net=net_dyn)
+			meta[ind_η][ind_s] = (opf=opf_dyn, net=net_dyn)
+		end
 		end
 		
 		println("")
@@ -395,27 +455,25 @@ begin
 	"Results loaded."
 end
 
-# ╔═╡ ec676d81-d56e-452b-b739-3c3040bf6c8d
-begin
-	test_t = 18
-	test_s = 1
-	bar(evaluate(meta[test_s].opf.g[test_t]) ./ meta[test_s].net.gmax[test_t])
-	plot!(size=(700, 150))
-end
-
 # ╔═╡ cd5fe410-6264-4381-b19f-31d050bc3930
 begin
-	total_emissions = []
+	
+	plt_total_emissions = plot()
+	for i in 1:length(η_vals)
+		total_emissions = []
 	for s in 1:length(storage_penetrations)
 		E = 0
 		for t in 1:T
-			E += evaluate(meta[s].opf.g[t])' * emissions_rates
+			E += evaluate(meta[i][s].opf.g[t])' * emissions_rates
 		end
 		push!(total_emissions, E)
 	end
+		crt_η = η_vals[i]
+		plot!(storage_penetrations, total_emissions, lw=4, label="η=$crt_η")
+	end
 	
-	plt_total_emissions = plot()
-	plot!(storage_penetrations, total_emissions, lw=4)
+	
+	
 	plot!(size=(650, 150), xlabel="storage capacity (% total demand)")
 	plot!(ylabel="co2 emissions", xlim=(0, Inf))
 	plot!(bottom_margin=5Plots.mm, left_margin=5Plots.mm)
@@ -424,11 +482,18 @@ begin
 	plt_total_emissions
 end
 
-# ╔═╡ f5b6479f-3bc8-4b86-987a-a14968d60e25
-"PC Renewable: $(sum(evaluate(meta[test_s].opf.g[test_t])[7:end]) / sum(d_dyn[test_t]))"
-
 # ╔═╡ 0740dc70-a532-4818-b09d-b3b8d60fa6ba
-total_mefs = sum(results, dims=2)[:, 1, :, :];
+total_mefs = [sum(results[i], dims=2)[:, 1, :, :] for i in 1:length(η_vals)];
+
+# ╔═╡ 19f4e0cc-0c93-42dc-8ee4-17f52d4e5e90
+
+@bind idx_η Slider(1:1:length(η_vals))
+
+
+# ╔═╡ c6ee857d-8019-4c4f-bb07-a370a88ea3cf
+md"""
+MEFs as a function of time, for different charge/discharge efficiencies
+"""
 
 # ╔═╡ 6186798f-6711-4222-94bb-f53b2d0fad7d
 begin
@@ -438,7 +503,7 @@ begin
 	for (ind_plt, i) in enumerate(interesting_nodes)
 		plt = plot(xticks=[6, 12, 18, 24], xlim=(1, 24))
 		plot!(legend=nothing)
-		plot!(mef_times, total_mefs[i, :, curves], lw=4, alpha=0.8,
+		plot!(mef_times, total_mefs[idx_η][i, :, curves], lw=4, alpha=0.8,
 			labels=storage_penetrations[curves]')
 		
 		ind_plt in [1, 6, 11] && plot!(ylabel="Δco2 (lbs) / Δmwh")
@@ -447,16 +512,17 @@ begin
 		
 		push!(subplots, plt)
 	end
-	
+
 	plot(subplots..., layout=(3, 5), leftmargin=4Plots.mm, size=(800, 400))
 end
 
 # ╔═╡ d27ef0d8-70b2-4897-9000-8fa70b1862fc
 begin
+	crt_η_ = η_vals[idx_η]
 	highlighted_node = 5
 	plt_dynamic_mef = plot(subplots[highlighted_node])
 	plot!(size=(600, 200), legend=:outertopright)
-	plot!(title="node $(interesting_nodes[highlighted_node])", bottommargin=3Plots.mm)
+	plot!(title="node $(interesting_nodes[highlighted_node]), η=$crt_η_", bottommargin=3Plots.mm)
 	plot!(ylabel="Δco2 (lbs) / Δmwh", xlabel="hour")
 	
 	savefig(plt_dynamic_mef, 
@@ -471,7 +537,7 @@ begin
 	heatmap_subplts = []
 	for s_idx in 1:length(storage_penetrations)
 		
-		subplt = heatmap(results[node, :, :, s_idx]', 
+		subplt = heatmap(results[idx_η][node, :, :, s_idx]', 
 			c=:grayC, clim=(0, 2000), colorbar=false,
 			xlabel="consumption time",
 			title="$(100*storage_penetrations[s_idx])% storage"
@@ -532,6 +598,9 @@ bar(abs.(evaluate(opf.p)) ./ (net.pmax), size=(600, 100), title="line flows")
 bar(evaluate(opf.g)[1:6], size=(600, 100))
 
 # ╔═╡ Cell order:
+# ╠═c39005df-61e0-4c08-8321-49cc5fe71ef3
+# ╠═5867a4eb-470a-4a8a-84e1-6f150de1dcde
+# ╠═44275f74-7e7c-48d5-80a0-0f24609ef327
 # ╠═db59921e-e998-11eb-0307-e396d43191b5
 # ╠═0aac9a3f-a477-4095-9be1-f4babe1e2803
 # ╠═257a6f74-d3c3-42eb-8076-80d26cf164ca
@@ -547,7 +616,7 @@ bar(evaluate(opf.g)[1:6], size=(600, 100))
 # ╠═b7476391-30b9-4817-babf-7c9078531ee7
 # ╠═c82ef027-740a-49b1-93d2-1554c411a896
 # ╠═0239e1da-caf5-4593-af1b-5d1e8d2f2b3e
-# ╠═c75d996b-0847-4cc7-bc93-3d42db39f1bd
+# ╠═9e5a1672-d452-42f5-ba5a-a2fa0b1eaada
 # ╠═522e95d5-15a8-47ec-a79c-c4cc17cf86fd
 # ╠═bfa4a8f9-cfcd-4e22-b2dc-751226f3a73c
 # ╟─a8ccbc8e-24e6-4214-a179-4edf3cf26dad
@@ -561,25 +630,27 @@ bar(evaluate(opf.g)[1:6], size=(600, 100))
 # ╠═af6d4ef0-f59f-42be-af36-7cf447478e4c
 # ╠═dd9efed9-f6ed-43fb-93f2-4d21d1360091
 # ╟─3f9eb091-059c-44a5-9b50-ae3cabe24060
-# ╠═4a8c7752-6de8-4ea7-aafe-702b17507185
+# ╠═355ebed2-42e6-41bb-b1db-a72d1aaae56f
+# ╠═7bc3de9b-45e8-4a5b-a6b9-d816ee695bd9
+# ╟─4a8c7752-6de8-4ea7-aafe-702b17507185
 # ╠═6e6b15b1-7685-4a20-9d94-dd703caa2fe9
 # ╠═47e2e177-3701-471f-ae3c-38276ec69370
 # ╠═457c1959-94fa-4267-8645-3ed1409cd0a0
 # ╟─dfa2a03b-6925-4be0-aeac-076c4cf25969
 # ╟─a7e75e49-5031-4cc4-b96e-6227277ec3ba
 # ╟─d9617524-76c3-447d-9b94-0a690f83a7b9
+# ╟─fb43471f-6aed-4fd6-a9e0-b165f6c77003
+# ╠═9aded04b-e55f-4ebd-97c4-90c3adf62547
 # ╟─30ec492c-8d21-43f6-bb09-32810494f21e
 # ╠═98a0d7c5-b1a8-4ebe-bb73-7ca88b475592
-# ╠═8fc06205-0227-4b46-a2e9-72bdf9d57926
-# ╠═008ed573-67ec-4908-a51a-c5d2a01e5b0e
 # ╠═3dce8c04-8a5c-41a7-b18a-be06caa628d3
 # ╠═6f08828b-4c4b-4f50-bd40-35805a37aae0
-# ╠═ec676d81-d56e-452b-b739-3c3040bf6c8d
 # ╠═cd5fe410-6264-4381-b19f-31d050bc3930
-# ╟─f5b6479f-3bc8-4b86-987a-a14968d60e25
 # ╠═0740dc70-a532-4818-b09d-b3b8d60fa6ba
-# ╠═6186798f-6711-4222-94bb-f53b2d0fad7d
-# ╠═d27ef0d8-70b2-4897-9000-8fa70b1862fc
+# ╠═19f4e0cc-0c93-42dc-8ee4-17f52d4e5e90
+# ╟─c6ee857d-8019-4c4f-bb07-a370a88ea3cf
+# ╟─6186798f-6711-4222-94bb-f53b2d0fad7d
+# ╟─d27ef0d8-70b2-4897-9000-8fa70b1862fc
 # ╠═f7e0d09c-40bf-4936-987a-a3bcadae5487
 # ╟─418861e0-a35e-47db-9f00-a6a7fcf733fe
 # ╟─0d07df73-89e1-4dbf-8f8c-82c202ad84c7

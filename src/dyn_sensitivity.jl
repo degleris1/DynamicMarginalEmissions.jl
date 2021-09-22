@@ -36,11 +36,7 @@ function sensitivity_demand_dyn(P::PowerManagementProblem, net::DynamicPowerNetw
 
     # Get partial Jacobians of KKT operator
 
-    #@show size(x)
-
-    _, ∂K_xT = Zygote.forward_jacobian(x -> kkt_dyn(x, net, d), x)
-
-    #@show size(∂K_xT)
+    ∂K_xT = compute_jacobian_kkt_dyn(x, net, d)
 
     v = sparse(∂K_xT) \ ∇C
 
@@ -426,8 +422,8 @@ function compute_jacobian_kkt_dyn_t(
             spzeros(l, (t-2)*kdims) -Diagonal(λrampu) spzeros(l, kdims-l) Diagonal(λrampu) spzeros(l, kdims-l+(T-t)*kdims)
         ]
     )
-    @show T*kdims
-    @show size(Dλramp)
+    # @show T*kdims
+    # @show size(Dλramp)
     K_static = [
         spzeros(n, T*kdims);
         spzeros(n, t*kdims-n) I(n) spzeros(n, (T-t)*kdims);
