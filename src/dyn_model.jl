@@ -48,6 +48,9 @@ function DynamicPowerNetwork(
     fq, fl, pmax, gmax, A, B, P, C, T; 
     τ=TAU, η_c=1.0, η_d=1.0, ρ=nothing
 )
+    # The generator will never change by more than `gmax` MW per timestep
+    # Therefore, if no ramping constraint is specified, we can set the
+    # ramping limit to ρ > gmax, and the constraint will never be binding
     ρ = something(ρ, 2*[maximum(x -> x[i], gmax) for i in 1:length(gmax[1])])
     return DynamicPowerNetwork(fq, fl, pmax, gmax, A, B, P, C, T, τ, η_c, η_d, ρ)
 end

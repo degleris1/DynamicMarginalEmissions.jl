@@ -191,7 +191,8 @@ end
     compute_jacobian_kkt_charge_discharge(dims, n)
 
 Compute the part of the Jacobian associated with charge and discharge, 
-with `dims` being the dimension of the static system and `n` the number of nodes.
+with `dims` being the dimension of the static system, `n` the number of nodes, and `l` 
+the number of generators.
 """
 function compute_jacobian_kkt_charge_discharge_ramp(dims, n, l)
     dKdch = [spzeros(dims-n, n); Diagonal(ones(n))]
@@ -202,6 +203,14 @@ function compute_jacobian_kkt_charge_discharge_ramp(dims, n, l)
     return [spzeros(dims, n) dKdch dKddis spzeros(dims, 6n) dKdλl dKdλu spzeros(dims, n)]
 end
 
+
+"""
+    compute_jacobian_kkt_future_ramp(dims, n, l)
+
+Compute the part of the Jacobian (dStatic / dRamp), where `dims` is the 
+dimension of the static system, `n` is the number of nodes, and `l` is
+the number of generators.
+"""
 function compute_jacobian_kkt_future_ramp(dims, n, l)
     dKdλl = [I(l); spzeros(dims-l, l)]
     dKdλu = [-I(l); spzeros(dims-l, l)]
