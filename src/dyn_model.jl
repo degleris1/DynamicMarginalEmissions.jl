@@ -249,12 +249,6 @@ function kkt_storage(
     s, s_prev, ch, dis, λsu, λsl, λchu, λchl, λdisu, λdisl, λrampl, λrampu, ν, νs_t, νs_next, P, C, η_c, η_d,
     ρ, gt, gt_prev
 )
-    # ch[t] >= 0, #λchl
-    # ch[t] <= P, # λchu
-    # dis[t] >= 0, #λdisl
-    # dis[t] <= P, # λdisu
-    # 0 == - s[t] + s[t-1] + ch[t] * η_c - dis[t]/η_d, #νs (ν for storage)
-
     return [
         (λsu - λsl) + (νs_next - νs_t);  # ∇_s L
         (λchu - λchl) + ν + νs_t * η_c ;  # ∇_ch L

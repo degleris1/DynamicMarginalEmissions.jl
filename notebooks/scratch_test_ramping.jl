@@ -13,11 +13,17 @@ end
 # ╔═╡ 589ab2e5-319a-487c-855d-508af37a277f
 using Revise; using CarbonNetworks
 
+# ╔═╡ f5afa002-63d8-4b8a-81a2-a867aeb8d612
+using Plots
+
 # ╔═╡ 78dff8f2-9454-414d-8767-02b928d6daa6
 using SparseArrays
 
 # ╔═╡ 575745b0-7b13-47b7-8021-63fa29c80b34
 using Zygote
+
+# ╔═╡ f84b6daf-ade9-4ef0-b0d9-88a93d27ea1a
+using ForwardDiff
 
 # ╔═╡ cab7047e-8b71-4652-a668-4016349b0f3c
 solve_ecos!(p) = solve!(p, () -> ECOS.Optimizer(verbose=true))
@@ -28,7 +34,7 @@ md"""
 """
 
 # ╔═╡ 0b98c228-3413-49ef-805e-0e0bd46f7373
-n, l, T = 5, 20, 3
+n, l, T = 20, 40, 5
 
 # ╔═╡ df56e6de-d953-47c4-b846-5338e98cf597
 A, B, fq, fl, d, gmax, pmax, P, C = generate_random_data(n, l, T);
@@ -36,11 +42,28 @@ A, B, fq, fl, d, gmax, pmax, P, C = generate_random_data(n, l, T);
 # ╔═╡ c62d92b0-b850-47fe-b521-0ad63609e5f0
 m = size(A, 2)
 
-# ╔═╡ 26345b70-ae32-423f-9aa3-a61a78857ca0
-ρ = 0.05 * gmax[1]
+# ╔═╡ 024d1409-ba5f-401e-b28d-ace0b8c024b4
+md"""
+## Check KKT conditions
+"""
 
-# ╔═╡ c9fd438b-d43a-4a84-be49-12d048ee7e72
-size(ρ)
+# ╔═╡ f10c1627-3578-41e0-993f-3f3c313c2372
+md"""
+## Check Jacobian
+"""
+
+# ╔═╡ e1519269-475b-409f-9f34-a45769877f5b
+md"""
+## Look at error
+"""
+
+# ╔═╡ 488cbe38-c106-4d19-ad34-363d763a4a15
+α = 0.9
+# Weird values...
+#0.79999999
+
+# ╔═╡ 26345b70-ae32-423f-9aa3-a61a78857ca0
+ρ = α * gmax[1]
 
 # ╔═╡ 681e1106-e41b-4417-a958-c5a23b734fe3
 dnet = DynamicPowerNetwork(fq, fl, pmax, gmax, A, B, P, C, T; 
@@ -51,14 +74,6 @@ begin
 	dmin = DynamicPowerManagementProblem(dnet, d)
 	solve_ecos!(dmin)
 end;
-
-# ╔═╡ 9edb5562-3fc0-4abe-aea6-d2dd859ecf5c
-dmin.problem.status
-
-# ╔═╡ 024d1409-ba5f-401e-b28d-ace0b8c024b4
-md"""
-## Check KKT conditions
-"""
 
 # ╔═╡ fb761e75-9607-4675-b91c-807e4ba4495e
 x = flatten_variables_dyn(dmin);
@@ -72,30 +87,75 @@ length(K)
 # ╔═╡ 97d40580-6dbe-46dc-912e-e9412d94227d
 sum(abs, K)
 
-# ╔═╡ f10c1627-3578-41e0-993f-3f3c313c2372
-md"""
-## Check Jacobian
-"""
+# ╔═╡ d55c0cbe-8463-4d97-b75c-614a902728ea
+∂K_fwd = ForwardDiff.jacobian(x -> kkt_dyn(x, dnet, d), x);
 
 # ╔═╡ ddbc75b5-9dc4-4fb4-81e7-be2aafb556cd
 y, ∂KT_zyg = Zygote.forward_jacobian(x -> kkt_dyn(x, dnet, d), x);
 
 # ╔═╡ d5021fd3-064d-4d56-ae7c-a2a13b468f05
-∂K_zyg = sparse(adjoint(∂KT_zyg))
+∂K_zyg = sparse(adjoint(∂KT_zyg));
+
+# ╔═╡ b4b13c32-9572-4411-90e7-e7ff4667737b
+sum(abs, ∂K_fwd - ∂K_zyg)
+
+# ╔═╡ 3e9e7c0c-643a-4ad9-bbb8-d02a09d0fde8
+∂K = compute_jacobian_kkt_dyn(x, dnet, d);
+
+# ╔═╡ 9edb5562-3fc0-4abe-aea6-d2dd859ecf5c
+dmin.problem.status
+
+# ╔═╡ f5eb20a0-6468-411f-8569-42969c8cf2be
+err = ∂K - ∂K_zyg;
+
+# ╔═╡ 5f91864e-8469-4b78-92c9-80337c23eea5
+norm(∂K, 1)
+
+# ╔═╡ c523ce28-f026-4b67-bde2-d0dac3e9eeec
+norm(∂K_zyg, 1)
+
+# ╔═╡ 79c24ade-65b1-4ac9-8162-4bed95bb85bf
+sum(abs, err)
+
+# ╔═╡ be6e4906-e560-4258-98f9-a273fea2bba9
+sum(!=(0), err)
+
+# ╔═╡ 835d31ae-03a7-4839-84e2-d5e21e3a15cd
+err.nzval
+
+# ╔═╡ 5873ffa5-5962-471f-a579-32470d555f7a
+findall(!=(0), err)
+
+# ╔═╡ 1f8a655e-a914-468b-98df-f9a3cfd19171
+∂K[1643, :].nzval
+
+# ╔═╡ 668a9da8-41b7-4931-9637-c38e299265cd
+∂K_zyg[1652, :].nzval
+
+# ╔═╡ 0661ea23-a9ce-4530-aa19-9040d4296c25
+kkt_dims(n,m,l)*T + storage_kkt_dims(n,l)*4
+
+# ╔═╡ 3561ab12-574f-4a57-b60c-432532df49e5
+kkt_dims(n,m,l)*T + storage_kkt_dims(n,l)*4 + 3n
+
+# ╔═╡ 5d0da605-8cc5-46be-91d3-e004c31d05bc
+heatmap(Matrix(∂K[2121:2140, 2181:2200]), yflip=true)
+
+# ╔═╡ 1c1b648e-99b7-440a-8b7b-74335975701b
+heatmap(Matrix(∂K_zyg[2121:2140, 2181:2200]), yflip=true)
 
 # ╔═╡ Cell order:
 # ╠═ef1bccb8-1b11-11ec-02b5-af1e0e589de0
 # ╠═589ab2e5-319a-487c-855d-508af37a277f
 # ╠═cab7047e-8b71-4652-a668-4016349b0f3c
+# ╠═f5afa002-63d8-4b8a-81a2-a867aeb8d612
 # ╠═d0f3079b-d3db-48a4-923f-c977c7ce0c34
 # ╠═0b98c228-3413-49ef-805e-0e0bd46f7373
 # ╠═df56e6de-d953-47c4-b846-5338e98cf597
 # ╠═c62d92b0-b850-47fe-b521-0ad63609e5f0
 # ╠═26345b70-ae32-423f-9aa3-a61a78857ca0
-# ╠═c9fd438b-d43a-4a84-be49-12d048ee7e72
 # ╠═681e1106-e41b-4417-a958-c5a23b734fe3
 # ╠═837f4451-f246-436a-bf30-5d5d70791d34
-# ╠═9edb5562-3fc0-4abe-aea6-d2dd859ecf5c
 # ╠═024d1409-ba5f-401e-b28d-ace0b8c024b4
 # ╠═fb761e75-9607-4675-b91c-807e4ba4495e
 # ╠═838ade3d-8a86-4683-8f13-49a48292338d
@@ -104,5 +164,25 @@ y, ∂KT_zyg = Zygote.forward_jacobian(x -> kkt_dyn(x, dnet, d), x);
 # ╠═f10c1627-3578-41e0-993f-3f3c313c2372
 # ╠═78dff8f2-9454-414d-8767-02b928d6daa6
 # ╠═575745b0-7b13-47b7-8021-63fa29c80b34
+# ╠═f84b6daf-ade9-4ef0-b0d9-88a93d27ea1a
+# ╠═d55c0cbe-8463-4d97-b75c-614a902728ea
 # ╠═ddbc75b5-9dc4-4fb4-81e7-be2aafb556cd
 # ╠═d5021fd3-064d-4d56-ae7c-a2a13b468f05
+# ╠═b4b13c32-9572-4411-90e7-e7ff4667737b
+# ╠═3e9e7c0c-643a-4ad9-bbb8-d02a09d0fde8
+# ╟─e1519269-475b-409f-9f34-a45769877f5b
+# ╠═488cbe38-c106-4d19-ad34-363d763a4a15
+# ╠═9edb5562-3fc0-4abe-aea6-d2dd859ecf5c
+# ╠═f5eb20a0-6468-411f-8569-42969c8cf2be
+# ╠═5f91864e-8469-4b78-92c9-80337c23eea5
+# ╠═c523ce28-f026-4b67-bde2-d0dac3e9eeec
+# ╠═79c24ade-65b1-4ac9-8162-4bed95bb85bf
+# ╠═be6e4906-e560-4258-98f9-a273fea2bba9
+# ╠═835d31ae-03a7-4839-84e2-d5e21e3a15cd
+# ╠═5873ffa5-5962-471f-a579-32470d555f7a
+# ╠═1f8a655e-a914-468b-98df-f9a3cfd19171
+# ╠═668a9da8-41b7-4931-9637-c38e299265cd
+# ╠═0661ea23-a9ce-4530-aa19-9040d4296c25
+# ╠═3561ab12-574f-4a57-b60c-432532df49e5
+# ╠═5d0da605-8cc5-46be-91d3-e004c31d05bc
+# ╠═1c1b648e-99b7-440a-8b7b-74335975701b
