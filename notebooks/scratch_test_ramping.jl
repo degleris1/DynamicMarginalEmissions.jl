@@ -34,7 +34,7 @@ md"""
 """
 
 # ╔═╡ 0b98c228-3413-49ef-805e-0e0bd46f7373
-n, l, T = 20, 40, 5
+n, l, T = 5, 40, 5
 
 # ╔═╡ df56e6de-d953-47c4-b846-5338e98cf597
 A, B, fq, fl, d, gmax, pmax, P, C = generate_random_data(n, l, T);
@@ -58,10 +58,16 @@ md"""
 """
 
 # ╔═╡ 488cbe38-c106-4d19-ad34-363d763a4a15
-α = 0.95 #+ sqrt(eps())
+α = 0.2 #+ eps()
+
 # Weird values...
-# 0.79999999
-# 0.9
+
+# n =5 and 
+# α = 0.2
+
+# n=20 and
+# α = 0.79999999 OR
+
 # Others...
 
 # ╔═╡ 26345b70-ae32-423f-9aa3-a61a78857ca0
@@ -111,10 +117,10 @@ dmin.problem.status
 err = ∂K - ∂K_zyg;
 
 # ╔═╡ 5f91864e-8469-4b78-92c9-80337c23eea5
-norm(∂K, 1)
+sum(abs, ∂K)
 
 # ╔═╡ c523ce28-f026-4b67-bde2-d0dac3e9eeec
-norm(∂K_zyg, 1)
+sum(abs, ∂K_zyg)
 
 # ╔═╡ 79c24ade-65b1-4ac9-8162-4bed95bb85bf
 sum(abs, err)
@@ -129,22 +135,34 @@ err.nzval
 findall(!=(0), err)
 
 # ╔═╡ 1f8a655e-a914-468b-98df-f9a3cfd19171
-∂K[2138, :].nzval
+∂K[705, :].nzval
 
 # ╔═╡ 668a9da8-41b7-4931-9637-c38e299265cd
-∂K_zyg[2138, :].nzval
+∂K_zyg[705, :].nzval
 
 # ╔═╡ 0661ea23-a9ce-4530-aa19-9040d4296c25
-kkt_dims(n,m,l)*T + storage_kkt_dims(n,l)*4
+kkt_dims(n,m,l)*T
 
 # ╔═╡ 3561ab12-574f-4a57-b60c-432532df49e5
-kkt_dims(n,m,l)*T + storage_kkt_dims(n,l)*4 + 3n
+kkt_dims(n,m,l)*T + 3n
 
 # ╔═╡ 5d0da605-8cc5-46be-91d3-e004c31d05bc
 plot(
-	heatmap(Matrix(∂K[2121:2140, 2181:2200]), yflip=true),
-	heatmap(Matrix(∂K_zyg[2121:2140, 2181:2200]), yflip=true),
+	heatmap(Matrix(∂K[701:705, 716:720]), yflip=true),
+	heatmap(Matrix(∂K_zyg[701:705, 716:720]), yflip=true),
 )
+
+# ╔═╡ c449e275-3353-4296-8a2f-7f8bfa6132c9
+b = rand(size(∂K, 2));
+
+# ╔═╡ df67d1b6-71bf-4792-80e3-6eac11312e24
+v1 = ∂K \ b;
+
+# ╔═╡ 2bf3d695-ffed-4745-9277-d4668b3d7ae0
+sum(abs, ∂K*v1 - b)
+
+# ╔═╡ 5edb6c01-66fe-4c18-a8ee-6078e8255fe8
+v2 = ∂K_zyg \ b;
 
 # ╔═╡ Cell order:
 # ╠═ef1bccb8-1b11-11ec-02b5-af1e0e589de0
@@ -187,3 +205,7 @@ plot(
 # ╠═0661ea23-a9ce-4530-aa19-9040d4296c25
 # ╠═3561ab12-574f-4a57-b60c-432532df49e5
 # ╠═5d0da605-8cc5-46be-91d3-e004c31d05bc
+# ╠═c449e275-3353-4296-8a2f-7f8bfa6132c9
+# ╠═df67d1b6-71bf-4792-80e3-6eac11312e24
+# ╠═2bf3d695-ffed-4745-9277-d4668b3d7ae0
+# ╠═5edb6c01-66fe-4c18-a8ee-6078e8255fe8
