@@ -15,7 +15,8 @@ end
 
 # ╔═╡ db59921e-e998-11eb-0307-e396d43191b5
 begin
-	using Pkg; Pkg.activate()
+	import Pkg
+	Pkg.activate();
 	using Random
 	using Convex, ECOS
 	using Plots
@@ -42,7 +43,9 @@ md"""
 md"""
 ## ToDo
 - Integrate ramping constraints
-- Generate the first figures
+- Add a curve with 0% storage in the emissions vs time for different values of η plot
+- Discuss validity of results of delayed and EARLY (i.e. impact before) emissions
+- Discuss why there is this cross pattern
 """
 
 # ╔═╡ 44275f74-7e7c-48d5-80a0-0f24609ef327
@@ -52,7 +55,10 @@ md"""
 
 # ╔═╡ 257a6f74-d3c3-42eb-8076-80d26cf164ca
 theme(:default, label=nothing, 
-		tickfont=(:Times, 8), guidefont=(:Times, 8), legendfont=(:Times, 8), titlefont=(:Times,8))
+		tickfont=(:Times, 8), guidefont=(:Times, 8), legendfont=(:Times, 8), titlefont=(:Times,8), framestyle=:box)
+
+# ╔═╡ 113e61a9-3b21-48d0-9854-a2fcce904e8a
+xticks_hr = [0, 6, 12, 18, 24]
 
 # ╔═╡ 9bd515d4-c7aa-4a3d-a4fb-28686290a134
 md"""
@@ -125,8 +131,8 @@ T, n_demand = size(demand_data)
 # ╔═╡ cfcba5ad-e516-4223-860e-b1f18a6449ba
 begin
 	plt1 = plot(
-		demand_data[:, rand(1:n_demand, 5)], lw=2, palette=:Blues, title="Demand Data", xlabel="Hour", ylabel="Energy [?]")
-	plt2 = plot(renew_data, lw=2, palette=:Reds, title="Renewable Data", xlabel="Hour", ylabel="Energy [?]")
+		demand_data[:, rand(1:n_demand, 5)], lw=2, palette=:Blues, title="Demand Data", xlabel="Hour", ylabel="Energy [?]", xticks=xticks_hr)
+	plt2 = plot(renew_data, lw=2, palette=:Reds, title="Renewable Data", xlabel="Hour", ylabel="Energy [?]", xticks=xticks_hr)
 	
 	plt_time_series = plot(plt1, plt2, layout=(2, 1), size=(600, 300))
 	
@@ -254,59 +260,46 @@ storage_pen = s_rel
 
 # ╔═╡ 47e2e177-3701-471f-ae3c-38276ec69370
 begin
-	# Recompute results
-	if refresh || !isfile("../results/storage_eta.jld")
-		println("Recomputing results")
-		options_η = (
-			c_rate=c_rate,
-			renewable_penetration=renewable_penetration,
-			storage_penetrations=storage_pen,
-			mef_times=mef_times,
-			emissions_rates=emissions_rates,
-			d_dyn=d_dyn,
-			η_vals=η_vals
-		)
-		
-		meta_η = Dict()
-		
-		results_η = zeros(n, T, length(mef_times), length(η_vals))
-		for (ind_η, η) in enumerate(η_vals)
-			
-			println("...computing for η=$η")
-			# Construct dynamic network
-			C = total_demands * (storage_pen + δ) #δ is to avoid inversion errors
-			P = C * c_rate
-			net_dyn = make_dynamic(net, T, P, C, dyn_gmax, η, η)
 
-			# Construct and solve OPF problem
-			opf_dyn = DynamicPowerManagementProblem(net_dyn, d_dyn)
-			solve!(opf_dyn, OPT, verbose=false)
-			println("...The objective value is:")
-			@show opf_dyn.problem.optval / T
-			
-			# Compute MEFs
-			mefs = compute_mefs(opf_dyn, net_dyn, d_dyn, emissions_rates)
-			println("...MEFs computed")
-			for ind_t in 1:length(mef_times)
-				results_η[:, :, ind_t, ind_η] .= mefs[ind_t]
-			end
-			
-			meta_η[ind_η] = (opf=opf_dyn, net=net_dyn)
+	println("Recomputing results")
+	options_η = (
+		c_rate=c_rate,
+		renewable_penetration=renewable_penetration,
+		storage_penetrations=storage_pen,
+		mef_times=mef_times,
+		emissions_rates=emissions_rates,
+		d_dyn=d_dyn,
+		η_vals=η_vals
+	)
+
+	meta_η = Dict()
+
+	results_η = zeros(n, T, length(mef_times), length(η_vals))
+	for (ind_η, η) in enumerate(η_vals)
+
+		println("...computing for η=$η")
+		# Construct dynamic network
+		C = total_demands * (storage_pen + δ) #δ is to avoid inversion errors
+		P = C * c_rate
+		net_dyn = make_dynamic(net, T, P, C, dyn_gmax, η, η)
+
+		# Construct and solve OPF problem
+		opf_dyn = DynamicPowerManagementProblem(net_dyn, d_dyn)
+		solve!(opf_dyn, OPT, verbose=false)
+		println("...The objective value is:")
+		@show opf_dyn.problem.optval / T
+
+		# Compute MEFs
+		mefs = compute_mefs(opf_dyn, net_dyn, d_dyn, emissions_rates)
+		println("...MEFs computed")
+		for ind_t in 1:length(mef_times)
+			results_η[:, :, ind_t, ind_η] .= mefs[ind_t]
 		end
-		
-		println("")
 
-		JLD.save("../results/storage_eta.jld", 
-			"results", results_η, "options", options_η)
-		
-	else
-		
-		jld_file_η = JLD.load("../results/storage_eta.jld")
-		results_η, options_η = jld_file_η["results"], jld_file_η["options"]
-		
+		meta_η[ind_η] = (opf=opf_dyn, net=net_dyn)
 	end
-	
-	"Results loaded."
+		
+
 end
 
 # ╔═╡ 457c1959-94fa-4267-8645-3ed1409cd0a0
@@ -339,7 +332,7 @@ end
 # ╔═╡ d9617524-76c3-447d-9b94-0a690f83a7b9
 begin
 	highlighted_node_ = 5
-	plt_dyn_mef_eta = plot(subplots_η[highlighted_node_])
+	plt_dyn_mef_eta = plot(subplots_η[highlighted_node_], xticks=xticks_hr)
 	plot!(size=(600, 200), legend=:outertopright)
 	plot!(title="node $(interesting_nodes[highlighted_node_])", bottommargin=3Plots.mm)
 	plot!(ylabel="Δco2 (lbs) / Δmwh", xlabel="hour")
@@ -367,16 +360,18 @@ begin
 	
 	plt_total_emissions_η = plot()
 	for (ind_η, η) in enumerate(η_vals)
-		plot!(total_emissions_η[ind_η], label="η=$η", legend=:topleft)
+		plot!(total_emissions_η[ind_η], label="η=$η", legend=:topleft, xticks=xticks_hr)
 	end
 	xlabel!("Hour")
 	ylabel!("Total emissions")
 	# legend!(:topleft)
-	tot_emissions_vs_η = plot(η_vals, [sum(total_emissions_η[i]) for i in 1:length(η_vals)], xlabel="η", ylabel="Total Emissions")
+	tot_emissions_vs_η = plot(η_vals, [sum(total_emissions_η[i]) for i in 1:length(η_vals)], xlabel="η", ylabel="Total Emissions", xticks=xticks_hr)
 	
-	plt_ = plot(plt_total_emissions_η, tot_emissions_vs_η, layout=(2, 1), size=(600, 300))
+	# plt_tot_emissions_vs_η = plot(plt_total_emissions_η, tot_emissions_vs_η, layout=(2, 1), size=(600, 300))
 	
-	plt_
+	plt_tot_emissions_vs_η = plt_total_emissions_η
+	
+	plt_tot_emissions_vs_η
 end
 
 # ╔═╡ 30ec492c-8d21-43f6-bb09-32810494f21e
@@ -396,30 +391,28 @@ end
 
 # ╔═╡ 6f08828b-4c4b-4f50-bd40-35805a37aae0
 begin
-	# Recompute results
-	if refresh || !isfile("../results/storage.jld")
-		println("Recomputing results")
-		options = (
-			c_rate=c_rate,
-			renewable_penetration=renewable_penetration,
-			storage_penetrations=storage_penetrations,
-			mef_times=mef_times,
-			emissions_rates=emissions_rates,
-			d_dyn=d_dyn,
-			η_vals=η_vals
+	println("Recomputing results")
+	options = (
+		c_rate=c_rate,
+		renewable_penetration=renewable_penetration,
+		storage_penetrations=storage_penetrations,
+		mef_times=mef_times,
+		emissions_rates=emissions_rates,
+		d_dyn=d_dyn,
+		η_vals=η_vals
+	)
+
+	meta = Dict()
+
+	results = Dict()
+
+	for (ind_η, η) in enumerate(η_vals)
+		meta[ind_η]	= Dict()
+		results[ind_η] = zeros(
+			n, T, length(mef_times), length(storage_penetrations)
 		)
-		
-		meta = Dict()
-		
-		results = Dict()
-		
-		for (ind_η, η) in enumerate(η_vals)
-			meta[ind_η]	= Dict()
-			results[ind_η] = zeros(
-				n, T, length(mef_times), length(storage_penetrations)
-			)
 		for (ind_s, s_rel) in enumerate(storage_penetrations)
-		
+
 			# Construct dynamic network
 			C = total_demands * (s_rel + δ)
 			P = C * c_rate
@@ -429,30 +422,17 @@ begin
 			opf_dyn = DynamicPowerManagementProblem(net_dyn, d_dyn)
 			solve!(opf_dyn, OPT, verbose=false)
 			@show opf_dyn.problem.optval / T
-			
+
 			# Compute MEFs
 			mefs = compute_mefs(opf_dyn, net_dyn, d_dyn, emissions_rates)
 			for ind_t in 1:length(mef_times)
 				results[ind_η][:, :, ind_t, ind_s] .= mefs[ind_t]
 			end
-			
+
 			meta[ind_η][ind_s] = (opf=opf_dyn, net=net_dyn)
 		end
-		end
-		
-		println("")
-
-		JLD.save("../results/storage.jld", 
-			"results", results, "options", options)
-		
-	else
-		
-		jld_file = JLD.load("../results/storage.jld")
-		results, options = jld_file["results"], jld_file["options"]
-		
 	end
-	
-	"Results loaded."
+		
 end
 
 # ╔═╡ cd5fe410-6264-4381-b19f-31d050bc3930
@@ -523,7 +503,7 @@ end
 begin
 	
 	highlighted_node = 5
-	plt_dynamic_mef = plot(subplots[highlighted_node])
+	plt_dynamic_mef = plot(subplots[highlighted_node], xticks=xticks_hr)
 	plot!(size=(600, 200), legend=:outertopright)
 	plot!(title="node $(interesting_nodes[highlighted_node]), η=$crt_η_", bottommargin=3Plots.mm)
 	plot!(ylabel="Δco2 (lbs) / Δmwh", xlabel="hour")
@@ -549,18 +529,18 @@ begin
 		@show maximum(crt_results)
 		subplt = heatmap(log10.(max.(crt_results, δ)), 
 			c=:Blues_9, clim=(0, 4), colorbar=false,
-			xlabel="consumption time",
-			title="$(100*storage_penetrations[s_idx])% storage, η=$crt_η_"
+			xlabel="Consumption Time",
+			title="$(100*storage_penetrations[s_idx])% storage, η=$crt_η_", 					xticks=xticks_hr, yticks=xticks=xticks_hr
 		)
 		
-		s_idx == 1 && plot!(ylabel="emissions time")
+		s_idx == 1 && plot!(ylabel="Emissions Time")
 		s_idx == 3 && plot!(colorbar=true)
 		
 		push!(heatmap_subplts, subplt)
 	end
 	
 	plt_emissions_heatmap = plot(heatmap_subplts..., 
-		layout=Plots.grid(1, 3, widths=[.3, 0.3, 0.4]), 
+		layout=Plots.grid(1, 3, widths=[.29, 0.29, 0.42]), 
 		size=(650, 200), 
 		bottom_margin=8Plots.pt
 	)
@@ -571,13 +551,36 @@ begin
 	
 end
 
+# ╔═╡ d8d1fb74-0018-4685-a283-e768ae877fe4
+md"""
+## Complete figure
+"""
+
+# ╔═╡ 5f73f4e6-4eff-41b9-b68d-3baa5e77e924
+begin
+l_ = @layout [
+		a [b; c]
+		d{.3h}
+		]
+Fig = plot(
+		plt_time_series, plt_dynamic_mef, plt_tot_emissions_vs_η, plt_emissions_heatmap,  
+		layout = l_, size=(800, 600), lw=2, legend=:outertopright, title = ["($i)" for j in 1:1, i in 1:7], titleloc = :right
+	)
+	
+#save
+savefig(Fig, 
+	"../img/Fig_storage.png")
+Fig
+end
+
 # ╔═╡ Cell order:
-# ╠═c39005df-61e0-4c08-8321-49cc5fe71ef3
+# ╟─c39005df-61e0-4c08-8321-49cc5fe71ef3
 # ╠═5867a4eb-470a-4a8a-84e1-6f150de1dcde
 # ╠═44275f74-7e7c-48d5-80a0-0f24609ef327
 # ╠═db59921e-e998-11eb-0307-e396d43191b5
 # ╠═0aac9a3f-a477-4095-9be1-f4babe1e2803
 # ╠═257a6f74-d3c3-42eb-8076-80d26cf164ca
+# ╠═113e61a9-3b21-48d0-9854-a2fcce904e8a
 # ╟─9bd515d4-c7aa-4a3d-a4fb-28686290a134
 # ╟─75dfaefd-abec-47e2-acc3-c0ff3a01048e
 # ╠═f999d732-14b3-4ac5-b803-3df7a96ef898
@@ -612,7 +615,7 @@ end
 # ╠═457c1959-94fa-4267-8645-3ed1409cd0a0
 # ╟─dfa2a03b-6925-4be0-aeac-076c4cf25969
 # ╟─a7e75e49-5031-4cc4-b96e-6227277ec3ba
-# ╟─d9617524-76c3-447d-9b94-0a690f83a7b9
+# ╠═d9617524-76c3-447d-9b94-0a690f83a7b9
 # ╟─fb43471f-6aed-4fd6-a9e0-b165f6c77003
 # ╠═9aded04b-e55f-4ebd-97c4-90c3adf62547
 # ╟─30ec492c-8d21-43f6-bb09-32810494f21e
@@ -625,6 +628,8 @@ end
 # ╠═75d956fc-bcf6-40fe-acd5-b5eef0fc7902
 # ╟─c6ee857d-8019-4c4f-bb07-a370a88ea3cf
 # ╟─6186798f-6711-4222-94bb-f53b2d0fad7d
-# ╟─d27ef0d8-70b2-4897-9000-8fa70b1862fc
+# ╠═d27ef0d8-70b2-4897-9000-8fa70b1862fc
 # ╟─6fc320b1-b60d-4f49-89ab-bf029ead6b55
-# ╟─f7e0d09c-40bf-4936-987a-a3bcadae5487
+# ╠═f7e0d09c-40bf-4936-987a-a3bcadae5487
+# ╟─d8d1fb74-0018-4685-a283-e768ae877fe4
+# ╠═5f73f4e6-4eff-41b9-b68d-3baa5e77e924
