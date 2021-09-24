@@ -14,10 +14,6 @@ function sensitivity_demand_dyn(P::PowerManagementProblem, net::DynamicPowerNetw
 
     # Get partial Jacobians of KKT operator
     _, ∂K_xT = Zygote.forward_jacobian(x -> kkt_dyn(x, net, d), x)
-    _, ∂K_θT = Zygote.forward_jacobian(
-        dt -> kkt_dyn(x, net, [tp == t ? dt : d[tp] for tp in 1:T]), 
-        d[t]
-    )
 
     # Now compute ∇C(g*(θ)) = -∂K_θ' * inv(∂K_x') * ∇C 
     v = ∂K_xT \ ∇C
@@ -35,10 +31,9 @@ function sensitivity_demand_dyn(P::PowerManagementProblem, net::DynamicPowerNetw
     x = flatten_variables_dyn(P)
 
     # Get partial Jacobians of KKT operator
+    ∂K_xT = sparse(adjoint(compute_jacobian_kkt_dyn(x, net, d)))
 
-    ∂K_xT = compute_jacobian_kkt_dyn(x, net, d)
-
-    v = sparse(∂K_xT) \ ∇C
+    v = ∂K_xT \ ∇C
 
     ∇C_θ = []
     for t in 1:T
