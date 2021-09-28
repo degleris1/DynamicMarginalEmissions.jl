@@ -10,7 +10,7 @@ end
 
 DEFAULT_CONFIG = Dict(
     :datadir => "~/Data/carbon_networks/",
-    :multithread => false,
+    :multithread => true,
     :storage_percentage => 0.001,
     :charge_rate => 0.25,
     :charge_efficiency => 0.95,

@@ -79,11 +79,11 @@ function run_rodm_dynamic(config, savename)
 
     if config[:multithread]
         Threads.@threads for i in 1:length(dynamic_data)
-            @time results[i] = formulate_and_solve_problem_dynamic(dynamic_data[i], config, df.gen.is_coal) 
+            results[i] = formulate_and_solve_problem_dynamic(dynamic_data[i], config, df.gen.is_coal) 
         end
     else
         for i in 1:length(dynamic_data)
-            @time results[i] = formulate_and_solve_problem_dynamic(dynamic_data[i], config, df.gen.is_coal) 
+            results[i] = formulate_and_solve_problem_dynamic(dynamic_data[i], config, df.gen.is_coal) 
         end
     end
 
