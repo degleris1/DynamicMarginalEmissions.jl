@@ -284,8 +284,6 @@ function extract_vars_t(P::PowerManagementProblem, t)
     n, m = size(P.params.A)
     _, l = size(P.params.B)
     T = length(P.g)
-
-    @show n, m, l, T, t
     
     n_constraints_static = 5
     n_constraints_storage = 9

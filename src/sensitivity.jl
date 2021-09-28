@@ -47,9 +47,7 @@ function sensitivity_demand(P::PowerManagementProblem, ∇C, fq, fl, d, pmax, gm
 
     # Get partial Jacobians of KKT operator
     #_, ∂K_xT2 = Zygote.forward_jacobian(x -> kkt(x, fq, fl, d, pmax, gmax, A, B), x)
-    ∂K_x = compute_jacobian_kkt(fq, fl, d, pmax, gmax, A, B, x)
-    ∂K_xT = ∂K_x'
-    #@show norm(∂K_xT - ∂K_xT2)
+    ∂K_xT = sparse(adjoint(compute_jacobian_kkt(fq, fl, d, pmax, gmax, A, B, x)))
 
     _, ∂K_θT = Zygote.forward_jacobian(d -> kkt(x, fq, fl, d, pmax, gmax, A, B), d)
 
@@ -75,8 +73,8 @@ function compute_mefs(P::PowerManagementProblem, net::PowerNetwork, d, c)
     n, m, l = get_problem_dims(net)
 
     # Construct ∇_x C(x)
-    ∇C = zeros(kkt_dims(n, m, l))
-	∇C[1:l] .= c
+    ∇C = zeros(kkt_dims(n, m, l), size(c, 2))
+	∇C[1:l, :] .= c
 
     # Return sensitivity
 	return sensitivity_demand(P, ∇C, net, d)

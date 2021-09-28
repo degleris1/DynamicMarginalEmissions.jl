@@ -33,6 +33,9 @@ end
 # ╔═╡ 883eca64-7507-4c17-bf30-4c7198e39091
 using Plots
 
+# ╔═╡ 5c4ef9bc-2f95-400f-b4ce-45796369eff7
+using Statistics
+
 # ╔═╡ 03270f7c-0653-4b2e-a0fe-e0945adeceae
 theme(:default, label=nothing)
 
@@ -40,7 +43,7 @@ theme(:default, label=nothing)
 OPT = () -> ECOS.Optimizer(verbose=false)
 
 # ╔═╡ de200dab-4758-4338-aca9-b2778fabd417
-@bind datapath TextField((50, 1))
+@bind datapath TextField((50, 1); default="~/Data/carbon_networks/")
 
 # ╔═╡ 1eaa75e5-6664-4abf-8aba-42ccdd053492
 datapath
@@ -85,6 +88,9 @@ node_label_ids = Dict(label => i for (i, label) in enumerate(node_labels))
 
 # ╔═╡ 097bab7d-5e94-43a8-93e1-5b693cc42f6d
 node_label_to_id = label -> node_label_ids[label]
+
+# ╔═╡ da0bf30f-1869-4415-a907-5141effe0134
+nrow(df_gen)
 
 # ╔═╡ b64137cf-3c29-472b-b2b2-f01705f4c9ce
 l = length(df_gen.nerc)
@@ -186,6 +192,12 @@ get_Δco2 = τ -> begin
 	w = week_time[τ]
 	return compute_mefs(opfs[τ], net_week[w], [demand[τ]], co2_week[w])[1]
 end
+
+# ╔═╡ 01e04ca5-03e4-4deb-9ae9-964ef3642bb6
+[co2_week[1] so2_week[1]]
+
+# ╔═╡ b74cd811-9880-4685-8e9f-35db4b1c603e
+compute_mefs(opfs[1], net_week[1], [demand[1]], [co2_week[1] so2_week[1]])
 
 # ╔═╡ da42dca1-257d-4624-9bcc-9885480bd808
 Δco2_diff = get_Δco2.(times)
@@ -570,6 +582,7 @@ dyn_opf_red, net_red, co2_red = zip(reduce_problem.(
 
 # ╔═╡ 2a47df56-d56b-4ea6-b9b9-fb501b2f8a30
 get_Δco2_dyn = day -> begin
+	println(day)
 	return compute_mefs(
 		dyn_opf_red[day], 
 		net_red[day], 
@@ -618,6 +631,7 @@ end
 # ╠═c56a6e96-5483-4619-99dc-f47db24a8545
 # ╠═e9ed83b1-779e-4381-830d-c269e6fca29a
 # ╠═097bab7d-5e94-43a8-93e1-5b693cc42f6d
+# ╠═da0bf30f-1869-4415-a907-5141effe0134
 # ╠═b64137cf-3c29-472b-b2b2-f01705f4c9ce
 # ╠═6f1609c5-e35d-4d29-8f6b-0d49f7485c68
 # ╠═f96577db-ad64-4b3d-8e3b-79d647d6dd7b
@@ -645,6 +659,8 @@ end
 # ╠═7c3bdd70-5879-4bd6-9fad-8e3dee00d265
 # ╠═4c97c2af-be2a-4010-b26a-5c1a66cb8246
 # ╠═3fe5d64d-2a9d-441a-8568-bfa80fa3521b
+# ╠═01e04ca5-03e4-4deb-9ae9-964ef3642bb6
+# ╠═b74cd811-9880-4685-8e9f-35db4b1c603e
 # ╠═da42dca1-257d-4624-9bcc-9885480bd808
 # ╟─ba1c65bd-f4c3-438f-8697-2f58a579b134
 # ╟─798df6bc-553f-454c-878f-a007d8b93928
@@ -652,6 +668,7 @@ end
 # ╟─ebe751b0-04f7-4f64-ab00-3454d28fa204
 # ╠═3a6f7a93-b116-4974-b992-f843b9ad7cac
 # ╠═735e95e9-6a3d-41ef-813c-b83a0cb2ab7d
+# ╠═5c4ef9bc-2f95-400f-b4ce-45796369eff7
 # ╠═9b40aec8-fecd-4089-99b1-c61dcb74d774
 # ╠═1040aa20-dff5-453f-991a-f00ce9098b5f
 # ╠═2f8194e1-73c5-4342-9b18-613df39f91f6
@@ -689,7 +706,7 @@ end
 # ╠═5f152c7a-9e3a-42d1-96fd-ea0b25399e1c
 # ╠═548e3481-80ad-4248-9823-650254f5218f
 # ╠═903995a5-143c-40b4-a9bf-7a999775cbfd
-# ╟─eee98608-292a-4828-b647-b48d8792a8ab
+# ╠═eee98608-292a-4828-b647-b48d8792a8ab
 # ╠═480b023a-3aac-4dba-8157-663cb1eae539
 # ╠═2a47df56-d56b-4ea6-b9b9-fb501b2f8a30
 # ╠═698b6698-3837-4305-b16e-6af70b26ed1b
