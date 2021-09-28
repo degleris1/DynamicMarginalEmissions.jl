@@ -2,10 +2,10 @@
 #
 #SBATCH --job-name=carbon_rodm
 #
-#SBATCH --time=01:00:00
+#SBATCH --time=02:00:00
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
-#SBATCH --mem-per-cpu=8G
+#SBATCH --mem-per-cpu=16G
 
 SCIPT_DIR=/home/users/degleris/CarbonNetworks.jl/experiments/rodm/
 
