@@ -34,6 +34,9 @@ begin
 	using CarbonNetworks
 end
 
+# ╔═╡ 1a7af4e0-2608-422c-bafe-d200f30bc4f3
+using Statistics
+
 # ╔═╡ c39005df-61e0-4c08-8321-49cc5fe71ef3
 md"""
 ## Description
@@ -590,7 +593,7 @@ md"""
 @show storage_penetrations
 
 # ╔═╡ ac6479c1-0cd9-4164-98e2-7081033f83e6
-s_idx_ = 2
+@bind s_idx_ Slider(1:1:length(storage_penetrations))
 
 # ╔═╡ b5d3320e-0033-46b5-9aec-02b120a96cdc
 md"""
@@ -672,29 +675,37 @@ Therefore, if we change the demand at `cons_time`, the emissions at those `em_ti
 """
 
 # ╔═╡ b4c36ce0-7f31-453d-b3d5-ee54fcab7398
-ref_mefs[em_times, cons_time]
+mefs_crt = ref_mefs[em_times, cons_time]
 
 # ╔═╡ 4aed3df5-441b-445b-9277-a38690eb8603
 npoints = 10
 
 # ╔═╡ 0113ed6f-a39f-4167-a3c3-429bedbed7b0
-ε = 1e-2
+ε = 1e-4
+
+# ╔═╡ 0eac1f8d-2671-431c-84cc-a97225bb3120
+evaluate(opf_dyn.g[1]).*emissions_rates
+
+# ╔═╡ 87aa4097-62c5-439a-b5af-88a4cb5eb697
+evaluate(opf_dyn.g[1])
 
 # ╔═╡ 91f7d63c-9e30-4fd4-ab39-9fbf58d101dc
 begin
-	E_sensitivity = zeros(2npoints+1, length(em_times));
+	E_sensitivity = zeros(2npoints+1, length(emissions_rates), T);
+	s_sensitivity = zeros(2npoints+1, n, T)
+	g_sensitivity = zeros(2npoints+1, length(emissions_rates), T);
 	crt_net = meta[idx_η][s_idx_].net;
 	for i in -npoints:npoints
 		d_crt = copy(d_dyn)
 		d_crt[cons_time][node] = d_dyn[cons_time][node] * (1+i*ε)
 		opf_ = DynamicPowerManagementProblem(crt_net, d_dyn)
 		solve!(opf_, OPT, verbose=false)
-		# @show opf_.problem.status
-		E_ = zeros(T)
+
 		for t in 1:T
-			E_[t] = evaluate(opf_.g[t])' * emissions_rates
+			s_sensitivity[i+npoints+1, :, t] = evaluate(opf_.s[t])
+			g_sensitivity[i+npoints+1, :, t] = evaluate(opf_.g[t])
+			E_sensitivity[i+npoints+1, :, t] = evaluate(opf_.g[t]).*emissions_rates
 		end
-		E_sensitivity[i+npoints+1, :] = E_[em_times]
 	end
 end
 
@@ -708,11 +719,8 @@ begin
 
 end
 
-# ╔═╡ cc3e87fb-1214-4f85-a864-0c8348033273
-E_sensitivity
-
 # ╔═╡ 6fcd6e19-58c3-462d-964f-8cd3127b47a4
-E_sensitivity[npoints+1, :]
+sum(E_sensitivity[npoints+1, :, em_times], dims=1)
 
 # ╔═╡ 5c3117b3-7555-4366-9b43-bdba592a0877
 md"""
@@ -728,37 +736,83 @@ I have the feeling that the code does not result always in the same solution. On
 # ╔═╡ 2973af52-0bd0-4ba8-855d-297427627e22
 E_ref[em_times]
 
-# ╔═╡ 75609e75-4bda-4193-a914-6243db91bd1a
-plot([1-i*ε for i in -npoints:npoints], E_sensitivity./repeat(E_ref[em_times]', 2npoints+1, 1))
-
-# ╔═╡ 7b822106-48f8-4337-a3f9-e4a2645d3caa
+# ╔═╡ 0c066c4c-2e9f-4bd6-b1de-5c61becf9ddd
 md"""
-### Debugging results -- showing that the solution is not unique (empirically)
+I have currently ignored the mismatch between `E_sensitivity` and `E_ref` because I thought it's not that big of a deal. 
 """
 
-# ╔═╡ 2ab70aec-95c6-476f-a8fd-ff3fced6b5d9
-ntrials=5
-
-# ╔═╡ 7fc27aa2-d4c9-46f5-8143-c98b62b4933a
+# ╔═╡ 921cb430-ff44-4206-b5f0-60e2ef2a573a
 begin
-	g_norm = []
-	crt_net_ = meta[idx_η][s_idx_].net;
-	for i in 1:ntrials
-		_opf_ = DynamicPowerManagementProblem(crt_net_, d_dyn)
-		solve!(_opf_, OPT, verbose=false)
-		push!(g_norm, norm([evaluate(_opf_.g[t]) for t in 1:T]))
-	end
+plot(
+	[1-i*ε for i in -npoints:npoints], 
+	E_sensitivity./repeat(E_sensitivity[npoints+1, :]', 2npoints+1, 1), 
+	label=em_times', linestyle=[:solid :solid :dash], linewidth=3
+)
+	xlabel!("Relative demand change")
+	ylabel!("Relative total emissions")
+	title!("Consumption time=$cons_time")
 end
 
-# ╔═╡ c7742ecc-93a6-435b-9e80-5c86a0c596f8
-g_norm[1]
+# ╔═╡ b85b85d0-e1bc-4fc9-81cf-3792b55e3684
+@bind t_display Slider(1:1:T)
 
-# ╔═╡ 9b3e0e14-4b4c-421c-984e-1e7d228ed09e
-g_norm[2]
+# ╔═╡ 506e9360-2c25-4ea7-830b-68b4a6bf9026
+t_display
 
-# ╔═╡ 9bfc099e-6458-4831-b8d8-d79c7a06e321
+# ╔═╡ d5db1b45-0c94-4c15-81ce-abb4ede4ad87
+begin
+	plot(
+		[1-i*ε for i in -npoints:npoints], 
+		[s_sensitivity[:, k, t_display]/s_sensitivity[npoints+1, k, t_display] for k in 1:n], ylim=(.95, 1.05)
+	)
+	title!("Storage at time $t_display")
+	xlabel!("Change in demand at node $node at time $cons_time")
+	ylabel!("Change in storage at all nodes at time $t_display")
+
+end
+
+# ╔═╡ db1ae6bb-3923-4f7f-896e-0e42985ef380
+begin
+	plot(
+		[1-i*ε for i in -npoints:npoints], 
+		[E_sensitivity[:, k, t_display]./E_sensitivity[npoints+1, k, t_display] for k in 1:length(emissions_rates)]#, ylim=(.95, 1.05)
+		)
+	title!("Emissions at time $t_display")
+	xlabel!("Change in demand at node $node at time $cons_time")
+	ylabel!("Change in emissions at all generators at time $t_display")
+end
+
+# ╔═╡ 2fbb3f97-42ae-4f58-887e-4b9a76c9cb49
+begin
+	plot(
+		[1-i*ε for i in -npoints:npoints], 
+		[g_sensitivity[:, k, t_display]./g_sensitivity[npoints+1, k, t_display] for k in 1:length(emissions_rates)]#, ylim=(.95, 1.05)
+		)
+	title!("Generators at time $t_display")
+	xlabel!("Change in demand at node $node at time $cons_time")
+	ylabel!("Change in generation at all generators at time $t_display")
+end
+
+# ╔═╡ 9374abf1-78e4-4e60-875f-115cae7e7144
+@show mefs_crt
+
+# ╔═╡ 366d6ff5-4759-4f5d-8bd3-9a93a8f4eb9e
+E_sensitivity
+
+# ╔═╡ b5d3a530-2296-4e4a-83f7-98c4b6f116a6
 md"""
-Weirdly I can't get the same result here... I would have expected that different initializations would give me different norms for g...?
+showing the different charging patterns -- as a function of demand that changes
+essentially, we need all the charging at the different amounts of time *around* the consumption time I guess. 
+
+Basically I have to show: 
+- charge at time t, node n (which node), as a function of the demand?
+- Imagine you do all nodes, you have charge at time t (for multiple t's), node n (for all nodes), as a function of the demand
+
+"""
+
+# ╔═╡ 4d1aae3f-7976-41da-aa14-fff4c5574741
+md"""
+can you do the same with emissions?
 """
 
 # ╔═╡ 7bdf5b4e-ea3b-4f79-9e16-ef6ea63d354a
@@ -856,7 +910,7 @@ end
 # ╠═a6df5496-a98a-49a8-9115-d73b86c9a7bd
 # ╠═ac6479c1-0cd9-4164-98e2-7081033f83e6
 # ╟─b5d3320e-0033-46b5-9aec-02b120a96cdc
-# ╟─f9ef362a-91c5-46ee-b4cb-1567b88f4dd7
+# ╠═f9ef362a-91c5-46ee-b4cb-1567b88f4dd7
 # ╠═4fb2a0e8-db61-4602-a01c-cfa7aeac6afc
 # ╠═62a605bc-26f8-43ac-8b66-ea9bf75b75c3
 # ╠═9c9d0fbc-58b8-440b-87ba-8cbf4dfaf71c
@@ -874,20 +928,26 @@ end
 # ╠═b4c36ce0-7f31-453d-b3d5-ee54fcab7398
 # ╠═4aed3df5-441b-445b-9277-a38690eb8603
 # ╠═0113ed6f-a39f-4167-a3c3-429bedbed7b0
+# ╠═0eac1f8d-2671-431c-84cc-a97225bb3120
+# ╠═87aa4097-62c5-439a-b5af-88a4cb5eb697
 # ╠═91f7d63c-9e30-4fd4-ab39-9fbf58d101dc
 # ╠═77943ac8-36fe-4a13-a36d-db957780d869
-# ╠═cc3e87fb-1214-4f85-a864-0c8348033273
 # ╠═6fcd6e19-58c3-462d-964f-8cd3127b47a4
 # ╟─5c3117b3-7555-4366-9b43-bdba592a0877
 # ╟─af7f4492-4e97-4879-b151-2d8e38bf04d9
 # ╠═2973af52-0bd0-4ba8-855d-297427627e22
-# ╠═75609e75-4bda-4193-a914-6243db91bd1a
-# ╟─7b822106-48f8-4337-a3f9-e4a2645d3caa
-# ╠═2ab70aec-95c6-476f-a8fd-ff3fced6b5d9
-# ╠═7fc27aa2-d4c9-46f5-8143-c98b62b4933a
-# ╠═c7742ecc-93a6-435b-9e80-5c86a0c596f8
-# ╠═9b3e0e14-4b4c-421c-984e-1e7d228ed09e
-# ╠═9bfc099e-6458-4831-b8d8-d79c7a06e321
+# ╟─0c066c4c-2e9f-4bd6-b1de-5c61becf9ddd
+# ╠═921cb430-ff44-4206-b5f0-60e2ef2a573a
+# ╟─b85b85d0-e1bc-4fc9-81cf-3792b55e3684
+# ╟─506e9360-2c25-4ea7-830b-68b4a6bf9026
+# ╟─d5db1b45-0c94-4c15-81ce-abb4ede4ad87
+# ╟─db1ae6bb-3923-4f7f-896e-0e42985ef380
+# ╠═2fbb3f97-42ae-4f58-887e-4b9a76c9cb49
+# ╠═1a7af4e0-2608-422c-bafe-d200f30bc4f3
+# ╠═9374abf1-78e4-4e60-875f-115cae7e7144
+# ╠═366d6ff5-4759-4f5d-8bd3-9a93a8f4eb9e
+# ╠═b5d3a530-2296-4e4a-83f7-98c4b6f116a6
+# ╠═4d1aae3f-7976-41da-aa14-fff4c5574741
 # ╟─7bdf5b4e-ea3b-4f79-9e16-ef6ea63d354a
 # ╟─d8d1fb74-0018-4685-a283-e768ae877fe4
 # ╟─5f73f4e6-4eff-41b9-b68d-3baa5e77e924
