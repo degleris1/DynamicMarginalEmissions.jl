@@ -72,7 +72,7 @@ md"""
 
 # ╔═╡ f999d732-14b3-4ac5-b803-3df7a96ef898
 begin
-	net, d_peak = load_synthetic_network("case30.m")
+	net, d_peak, _ = load_synthetic_network("case30.m")
 	n = length(d_peak)
 	
 	# Limit line flows and generation capacities
@@ -206,8 +206,18 @@ c_rate = 0.25 #charging rate
 # ╔═╡ 491da4e6-03e6-49d3-907d-43ddcffdfb42
 s_rel = .1 #storage penetration
 
+# ╔═╡ 147a8ae3-a910-4d76-9689-4e77f7012914
+md"""
+This cursor allows for the definition/choice of the charge efficiency
+"""
+
 # ╔═╡ 9a45c280-d8a4-4849-8977-2dc763ed633b
 @bind η_c Slider(0.8:0.01:1.0)
+
+# ╔═╡ 5bd157b8-3dac-464e-85b0-c63830a7e817
+md"""
+This cursor allows for the definition/choice of the discharge efficiency
+"""
 
 # ╔═╡ e55e0566-7bd6-4126-8f60-0d940f6d8111
 @bind η_d Slider(0.8:0.01:1.0)
@@ -382,12 +392,10 @@ md"""
 # ╔═╡ 98a0d7c5-b1a8-4ebe-bb73-7ca88b475592
 storage_penetrations = [0.0, 0.05, 0.10]
 
-# ╔═╡ 3dce8c04-8a5c-41a7-b18a-be06caa628d3
-begin
-	#fix values to avoid rerunning the whole cell whenever playing with the sliders
-	η_c_ = 1.
-	η_d_ = 1.
-end
+# ╔═╡ bbbb358c-e645-4989-bed3-73d9217f7447
+md"""
+The below cell is where computation of MEFs for different storage penetrations/different η vals happens
+"""
 
 # ╔═╡ 6f08828b-4c4b-4f50-bd40-35805a37aae0
 begin
@@ -421,7 +429,9 @@ begin
 			# Construct and solve OPF problem
 			opf_dyn = DynamicPowerManagementProblem(net_dyn, d_dyn)
 			solve!(opf_dyn, OPT, verbose=false)
-			@show opf_dyn.problem.optval / T
+			
+			@show opf_dyn.problem.optval
+			@show norm([evaluate(opf_dyn.g[t]) for t in 1:T])
 
 			# Compute MEFs
 			mefs = compute_mefs(opf_dyn, net_dyn, d_dyn, emissions_rates)
@@ -465,10 +475,20 @@ end
 # ╔═╡ 0740dc70-a532-4818-b09d-b3b8d60fa6ba
 total_mefs = [sum(results[i], dims=2)[:, 1, :, :] for i in 1:length(η_vals)];
 
+# ╔═╡ f26187fb-d4b2-4f0d-8a80-5d831e0de6c3
+md"""
+The cursor below allows choosing for a specific value of charge/discharge efficiency
+"""
+
 # ╔═╡ 19f4e0cc-0c93-42dc-8ee4-17f52d4e5e90
 
 @bind idx_η Slider(1:1:length(η_vals))
 
+
+# ╔═╡ 4d9a4b36-6b3d-4836-8501-7f46cd7ab5cc
+md"""
+The chosen value is:
+"""
 
 # ╔═╡ 75d956fc-bcf6-40fe-acd5-b5eef0fc7902
 crt_η_ = η_vals[idx_η]
@@ -520,13 +540,13 @@ MEF as a function of consumption and emission times
 
 # ╔═╡ f7e0d09c-40bf-4936-987a-a3bcadae5487
 begin
-	node = interesting_nodes[highlighted_node]
+	node = interesting_nodes[highlighted_node] # we focus on a single node
 	
 	heatmap_subplts = []
 	for s_idx in 1:length(storage_penetrations)
 		
 		crt_results = results[idx_η][node, :, :, s_idx]'
-		@show maximum(crt_results)
+		# @show maximum(crt_results)
 		subplt = heatmap(log10.(max.(crt_results, δ)), 
 			c=:Blues_9, clim=(0, 4), colorbar=false,
 			xlabel="Consumption Time",
@@ -549,7 +569,202 @@ begin
 	plt_emissions_heatmap
 	
 	
+	
+	
 end
+
+# ╔═╡ edabacdd-8d25-4d64-9d4a-ecf1263ac02e
+md"""
+## Trying to understand where the cross patterns come from, and what they mean, etc.
+"""
+
+# ╔═╡ ee233685-474b-4162-bfef-5f3bdbe03c73
+md"""
+### Looking at charge/discharge patterns
+"""
+
+# ╔═╡ b5ac767e-ccde-4ee0-b50c-3584c5320e74
+@show η_vals
+
+# ╔═╡ a6df5496-a98a-49a8-9115-d73b86c9a7bd
+@show storage_penetrations
+
+# ╔═╡ ac6479c1-0cd9-4164-98e2-7081033f83e6
+s_idx_ = 2
+
+# ╔═╡ b5d3320e-0033-46b5-9aec-02b120a96cdc
+md"""
+The corresponding value of storage penetrations is
+"""
+
+# ╔═╡ f9ef362a-91c5-46ee-b4cb-1567b88f4dd7
+storage_penetrations[s_idx_]
+
+# ╔═╡ 4fb2a0e8-db61-4602-a01c-cfa7aeac6afc
+meta_crt = meta[idx_η];
+
+# ╔═╡ 62a605bc-26f8-43ac-8b66-ea9bf75b75c3
+s_crt = meta_crt[s_idx_].opf.s;
+
+# ╔═╡ 9c9d0fbc-58b8-440b-87ba-8cbf4dfaf71c
+begin
+	socs = zeros(n, T+1);
+	for t in 1:T
+		socs[:, t+1] = evaluate(s_crt[t])./C;
+	end
+end
+
+# ╔═╡ 68f34570-6774-4232-b24c-bb634ec7d3a3
+socs
+
+# ╔═╡ 39be43d5-c14a-4340-8941-762cf873bb1b
+md"""
+In the above we see that some nodes have zero demand, and therefore zero capacity. The reason lies with `d_peak`, that has some components that are zero (i.e. some nodes don't consume any energy). 
+"""
+
+# ╔═╡ 88bf19ff-1635-4453-a611-a45775724c70
+begin
+	plot(t_axis, socs', ylim=(0, 1))
+	title!("Relative SOC \n η = $crt_η_")
+	xlabel!("Hour")
+	ylabel!("SOC")
+end
+
+# ╔═╡ 0b9523aa-665f-4cb3-b985-b0d122a02a12
+md"""
+### Actually checking sensitivity at some points
+"""
+
+# ╔═╡ 3817ef32-586d-48fb-8f9b-ab4a9be7dbef
+md"""
+In order to check the sensitivity, we want to compute the emissions of the network at each time step for a given value of the demand and then re-compute the emissions for a slightly different value of the emissions at a given node and a given timestep. 
+
+We can then visualize the dynamics of the system (e.g. charging patterns) to see if anything interesting is happening.
+"""
+
+# ╔═╡ 732cf0bc-24e7-44cd-a208-524a83706fdf
+md"""
+Some inspiration can be drawn from `sensitivity_demand_check()` function
+"""
+
+# ╔═╡ 3c5edbc5-8fc7-4d09-98a9-85f2efb699a8
+node
+
+# ╔═╡ e4c203b2-70b4-46f3-b025-3be46efa5e19
+begin
+cons_time = 22
+em_times = [21, 22, 23];
+end
+
+# ╔═╡ 5365b74f-595f-4ade-a7af-e8dba53b84f7
+md"""
+Reference (as in computed) values
+"""
+
+# ╔═╡ a9b770e0-b137-40f7-b59a-35ad355b98bd
+ref_mefs = results[idx_η][node, :, :, s_idx_]';
+
+# ╔═╡ 8a5aa2a7-3d00-42c2-a26d-117380a46a7c
+md"""
+We see that there is a patch forming, i.e. the sensitivity is non zero even for nondiagonal elements.
+
+Therefore, if we change the demand at `cons_time`, the emissions at those `em_times` should vary proportionately to what is below:
+"""
+
+# ╔═╡ b4c36ce0-7f31-453d-b3d5-ee54fcab7398
+ref_mefs[em_times, cons_time]
+
+# ╔═╡ 4aed3df5-441b-445b-9277-a38690eb8603
+npoints = 10
+
+# ╔═╡ 0113ed6f-a39f-4167-a3c3-429bedbed7b0
+ε = 1e-2
+
+# ╔═╡ 91f7d63c-9e30-4fd4-ab39-9fbf58d101dc
+begin
+	E_sensitivity = zeros(2npoints+1, length(em_times));
+	crt_net = meta[idx_η][s_idx_].net;
+	for i in -npoints:npoints
+		d_crt = copy(d_dyn)
+		d_crt[cons_time][node] = d_dyn[cons_time][node] * (1+i*ε)
+		opf_ = DynamicPowerManagementProblem(crt_net, d_dyn)
+		solve!(opf_, OPT, verbose=false)
+		# @show opf_.problem.status
+		E_ = zeros(T)
+		for t in 1:T
+			E_[t] = evaluate(opf_.g[t])' * emissions_rates
+		end
+		E_sensitivity[i+npoints+1, :] = E_[em_times]
+	end
+end
+
+# ╔═╡ 77943ac8-36fe-4a13-a36d-db957780d869
+begin
+	E_ref = zeros(T)
+	
+	for t in 1:T
+		E_ref[t] = evaluate(meta[idx_η][s_idx_].opf.g[t])' * emissions_rates
+	end
+
+end
+
+# ╔═╡ cc3e87fb-1214-4f85-a864-0c8348033273
+E_sensitivity
+
+# ╔═╡ 6fcd6e19-58c3-462d-964f-8cd3127b47a4
+E_sensitivity[npoints+1, :]
+
+# ╔═╡ 5c3117b3-7555-4366-9b43-bdba592a0877
+md"""
+it still does not add up... I don't understand what is going on...
+Basically, the result in `E_sensitivity` at Δ = 0 should be the exact same as the result in `E_ref`
+"""
+
+# ╔═╡ af7f4492-4e97-4879-b151-2d8e38bf04d9
+md"""
+I have the feeling that the code does not result always in the same solution. One test I did was to run computation cells several times in a row and realized that I did not get the same emissions. 
+"""
+
+# ╔═╡ 2973af52-0bd0-4ba8-855d-297427627e22
+E_ref[em_times]
+
+# ╔═╡ 75609e75-4bda-4193-a914-6243db91bd1a
+plot([1-i*ε for i in -npoints:npoints], E_sensitivity./repeat(E_ref[em_times]', 2npoints+1, 1))
+
+# ╔═╡ 7b822106-48f8-4337-a3f9-e4a2645d3caa
+md"""
+### Debugging results -- showing that the solution is not unique (empirically)
+"""
+
+# ╔═╡ 2ab70aec-95c6-476f-a8fd-ff3fced6b5d9
+ntrials=5
+
+# ╔═╡ 7fc27aa2-d4c9-46f5-8143-c98b62b4933a
+begin
+	g_norm = []
+	crt_net_ = meta[idx_η][s_idx_].net;
+	for i in 1:ntrials
+		_opf_ = DynamicPowerManagementProblem(crt_net_, d_dyn)
+		solve!(_opf_, OPT, verbose=false)
+		push!(g_norm, norm([evaluate(_opf_.g[t]) for t in 1:T]))
+	end
+end
+
+# ╔═╡ c7742ecc-93a6-435b-9e80-5c86a0c596f8
+g_norm[1]
+
+# ╔═╡ 9b3e0e14-4b4c-421c-984e-1e7d228ed09e
+g_norm[2]
+
+# ╔═╡ 9bfc099e-6458-4831-b8d8-d79c7a06e321
+md"""
+Weirdly I can't get the same result here... I would have expected that different initializations would give me different norms for g...?
+"""
+
+# ╔═╡ 7bdf5b4e-ea3b-4f79-9e16-ef6ea63d354a
+md"""
+### A plot "explaining" what we see?
+"""
 
 # ╔═╡ d8d1fb74-0018-4685-a283-e768ae877fe4
 md"""
@@ -601,7 +816,9 @@ end
 # ╟─c8f71644-9371-443b-b976-1734cc7ae583
 # ╠═57a37eb0-a547-428c-9f8c-e5f3e30f5260
 # ╠═491da4e6-03e6-49d3-907d-43ddcffdfb42
+# ╟─147a8ae3-a910-4d76-9689-4e77f7012914
 # ╠═9a45c280-d8a4-4849-8977-2dc763ed633b
+# ╟─5bd157b8-3dac-464e-85b0-c63830a7e817
 # ╠═e55e0566-7bd6-4126-8f60-0d940f6d8111
 # ╠═9deb6bdf-54f4-42ee-855d-7e82cef6f4bb
 # ╠═af6d4ef0-f59f-42be-af36-7cf447478e4c
@@ -620,16 +837,57 @@ end
 # ╠═9aded04b-e55f-4ebd-97c4-90c3adf62547
 # ╟─30ec492c-8d21-43f6-bb09-32810494f21e
 # ╠═98a0d7c5-b1a8-4ebe-bb73-7ca88b475592
-# ╠═3dce8c04-8a5c-41a7-b18a-be06caa628d3
+# ╟─bbbb358c-e645-4989-bed3-73d9217f7447
 # ╠═6f08828b-4c4b-4f50-bd40-35805a37aae0
 # ╠═cd5fe410-6264-4381-b19f-31d050bc3930
 # ╠═0740dc70-a532-4818-b09d-b3b8d60fa6ba
-# ╠═19f4e0cc-0c93-42dc-8ee4-17f52d4e5e90
-# ╠═75d956fc-bcf6-40fe-acd5-b5eef0fc7902
+# ╟─f26187fb-d4b2-4f0d-8a80-5d831e0de6c3
+# ╟─19f4e0cc-0c93-42dc-8ee4-17f52d4e5e90
+# ╟─4d9a4b36-6b3d-4836-8501-7f46cd7ab5cc
+# ╟─75d956fc-bcf6-40fe-acd5-b5eef0fc7902
 # ╟─c6ee857d-8019-4c4f-bb07-a370a88ea3cf
 # ╟─6186798f-6711-4222-94bb-f53b2d0fad7d
-# ╠═d27ef0d8-70b2-4897-9000-8fa70b1862fc
+# ╟─d27ef0d8-70b2-4897-9000-8fa70b1862fc
 # ╟─6fc320b1-b60d-4f49-89ab-bf029ead6b55
 # ╠═f7e0d09c-40bf-4936-987a-a3bcadae5487
+# ╟─edabacdd-8d25-4d64-9d4a-ecf1263ac02e
+# ╟─ee233685-474b-4162-bfef-5f3bdbe03c73
+# ╠═b5ac767e-ccde-4ee0-b50c-3584c5320e74
+# ╠═a6df5496-a98a-49a8-9115-d73b86c9a7bd
+# ╠═ac6479c1-0cd9-4164-98e2-7081033f83e6
+# ╟─b5d3320e-0033-46b5-9aec-02b120a96cdc
+# ╟─f9ef362a-91c5-46ee-b4cb-1567b88f4dd7
+# ╠═4fb2a0e8-db61-4602-a01c-cfa7aeac6afc
+# ╠═62a605bc-26f8-43ac-8b66-ea9bf75b75c3
+# ╠═9c9d0fbc-58b8-440b-87ba-8cbf4dfaf71c
+# ╠═68f34570-6774-4232-b24c-bb634ec7d3a3
+# ╟─39be43d5-c14a-4340-8941-762cf873bb1b
+# ╠═88bf19ff-1635-4453-a611-a45775724c70
+# ╟─0b9523aa-665f-4cb3-b985-b0d122a02a12
+# ╟─3817ef32-586d-48fb-8f9b-ab4a9be7dbef
+# ╟─732cf0bc-24e7-44cd-a208-524a83706fdf
+# ╠═3c5edbc5-8fc7-4d09-98a9-85f2efb699a8
+# ╠═e4c203b2-70b4-46f3-b025-3be46efa5e19
+# ╟─5365b74f-595f-4ade-a7af-e8dba53b84f7
+# ╠═a9b770e0-b137-40f7-b59a-35ad355b98bd
+# ╟─8a5aa2a7-3d00-42c2-a26d-117380a46a7c
+# ╠═b4c36ce0-7f31-453d-b3d5-ee54fcab7398
+# ╠═4aed3df5-441b-445b-9277-a38690eb8603
+# ╠═0113ed6f-a39f-4167-a3c3-429bedbed7b0
+# ╠═91f7d63c-9e30-4fd4-ab39-9fbf58d101dc
+# ╠═77943ac8-36fe-4a13-a36d-db957780d869
+# ╠═cc3e87fb-1214-4f85-a864-0c8348033273
+# ╠═6fcd6e19-58c3-462d-964f-8cd3127b47a4
+# ╟─5c3117b3-7555-4366-9b43-bdba592a0877
+# ╟─af7f4492-4e97-4879-b151-2d8e38bf04d9
+# ╠═2973af52-0bd0-4ba8-855d-297427627e22
+# ╠═75609e75-4bda-4193-a914-6243db91bd1a
+# ╟─7b822106-48f8-4337-a3f9-e4a2645d3caa
+# ╠═2ab70aec-95c6-476f-a8fd-ff3fced6b5d9
+# ╠═7fc27aa2-d4c9-46f5-8143-c98b62b4933a
+# ╠═c7742ecc-93a6-435b-9e80-5c86a0c596f8
+# ╠═9b3e0e14-4b4c-421c-984e-1e7d228ed09e
+# ╠═9bfc099e-6458-4831-b8d8-d79c7a06e321
+# ╟─7bdf5b4e-ea3b-4f79-9e16-ef6ea63d354a
 # ╟─d8d1fb74-0018-4685-a283-e768ae877fe4
-# ╠═5f73f4e6-4eff-41b9-b68d-3baa5e77e924
+# ╟─5f73f4e6-4eff-41b9-b68d-3baa5e77e924
