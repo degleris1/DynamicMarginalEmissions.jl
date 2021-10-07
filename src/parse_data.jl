@@ -133,7 +133,7 @@ end
 Load a synthetic network file. Returns a `Network` object `θ`, a demand
 vector `d`, and the original data dictionary `data`.
 """
-function load_synthetic_network(case_name)
+function load_synthetic_network(case_name; line_outage=nothing)
     # Load network data
     network_data = parse_file(joinpath(@__DIR__, "../data", case_name));
     net = make_basic_network(network_data)
@@ -148,9 +148,16 @@ function load_synthetic_network(case_name)
     n = length(net["bus"])
     m = length(net["branch"])
 
+    # Susceptance
+    β = [1 / branch[i]["br_x"] for i in string.(1:m)]
+    if line_outage !== nothing
+        β[line_outage] = 0
+    end
+
     # Topology
     A = SparseMatrixCSC(calc_basic_incidence_matrix(net)')
     B = _make_B(gen, n, l)
+    F = make_pfdf_matrix(A, β)
 
     @assert size(A) == (n, m)
     @assert size(B) == (n, l)
@@ -163,7 +170,7 @@ function load_synthetic_network(case_name)
     fq = [gen[i]["cost"][1] for i in string.(1:l)]
     fl = [gen[i]["cost"][2] for i in string.(1:l)]
 
-    θ = PowerNetwork(fq, fl, pmax, gmax, A, B, TAU)
+    θ = PowerNetwork(fq, fl, pmax, gmax, A, B, F, TAU)
 
     # Demand
     d = _make_d(load, n)
@@ -267,4 +274,17 @@ function _make_B(gen, n, l)
 	end
 	
 	return B
+end
+
+function make_pfdf_matrix(A, β)
+    n, m = size(A)
+
+    # Make susceptance matrices
+    S_l = diagm(β) * A'
+    S_b = A * S_l
+
+    # Construct reactance matrix (psuedo-inverse)
+    X_b = [zeros(n)'; [zeros(n-1) inv(S_b[2:n, 2:n])]]
+
+    return S_l * X_b
 end
