@@ -49,6 +49,7 @@ function load_results_dynamic(savename)
         config = r["config"]
     end
 
+    config[:datadir] = DEFAULT_CONFIG[:datadir]
     data, df = create_dispatch_time_series(config)
     dynamic_data = make_dynamic_data(data)
 

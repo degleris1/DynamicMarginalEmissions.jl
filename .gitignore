@@ -5,6 +5,7 @@ src/__pycache__/*
 .vscode/
 
 results/
+img/
 
 *.png
 *.gif
