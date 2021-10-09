@@ -284,7 +284,10 @@ function make_pfdf_matrix(A, β)
     S_b = A * S_l
 
     # Construct reactance matrix (psuedo-inverse)
-    X_b = [zeros(n)'; [zeros(n-1) inv(S_b[2:n, 2:n])]]
+    X_b = [
+        zeros(n)'; 
+        zeros(n-1) inv(S_b[2:n, 2:n])
+    ]
 
     return S_l * X_b
 end
