@@ -51,6 +51,8 @@ function sensitivity_demand(P::PowerManagementProblem, ∇C, fq, fl, d, pmax, gm
     ∂K_xT = ∂K_x'
     #@show norm(∂K_xT - ∂K_xT2)
 
+    _foo = kkt(x, fq, fl, d, pmax, gmax, A, B, F)
+
     _, ∂K_θT = Zygote.forward_jacobian(d -> kkt(x, fq, fl, d, pmax, gmax, A, B, F), d)
 
     # Now compute ∇C(g*(θ)) = -∂K_θ' * inv(∂K_x') * v
@@ -168,7 +170,12 @@ function compute_jacobian_kkt(fq, fl, d, pmax, gmax, A, B, F, x; τ=TAU)
         -I(m)             I(m)        spzeros(m, 2l)
     ]
 
-    K13 = [[-B'; A'] [-B'*F'; I(m)]]
+    #K13 = [[-B'; A'] [-B'*F'; I(m)]]
+    K31 = [
+        #-B A;
+        -F*B I(m);
+        ones(n)'B spzeros(1, m);
+    ]
 
     K21 = [
         spzeros(m, l) -Diagonal(λpl);
@@ -180,8 +187,8 @@ function compute_jacobian_kkt(fq, fl, d, pmax, gmax, A, B, F, x; τ=TAU)
     K22 = Diagonal([-p - pmax; p - pmax; -g; g - gmax])
     
     return [
-        K11 K12 K13;
-        K21 K22 spzeros(2 * (m + l), n);
-        K13' spzeros(n, 2 * (m + l) + n)
+        K11 K12 K31';
+        K21 K22 spzeros(2 * (m + l), m + 1);
+        K31 spzeros(m + 1, 2 * (m + l) + m + 1)
     ]
 end

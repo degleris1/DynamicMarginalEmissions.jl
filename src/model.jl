@@ -42,7 +42,7 @@ incidence matrix `A`.
 The parameter `τ` is a regularization weight used to make the problem
 strongly convex by adding τ ∑ᵢ pᵢ² to the objective.
 """
-function PowerManagementProblem(fq, fl, d, pmax, gmax, A, B, F; τ=TAU, ds=0)
+function PowerManagementProblem(fq, fl, d, pmax, gmax, A, B, F; τ=TAU, ch=0, dis=0, η_c=1.0, η_d=1.0)
     n, m = size(A)
     n, l = size(B)
     g = Variable(l)
@@ -58,8 +58,8 @@ function PowerManagementProblem(fq, fl, d, pmax, gmax, A, B, F; τ=TAU, ds=0)
         p <= pmax,
         -g <= 0, 
         g <= gmax,
-        0 == A*p - B*g + d + ch - dis,
-        0 == p - F*(B*g - d + ch - dis)
+        0 == p - F*(B*g - d + ch - dis),
+        0 == ones(n)' * (B*g - d + ch - dis),
     ])
 
     params = (fq=fq, fl=fl, d=d, pmax=pmax, gmax=gmax, A=A, B=B, F=F, τ=τ, η_c=η_c, η_d=η_d)
@@ -83,7 +83,7 @@ Return the locational marginal prices of `P` (assumes the problem has
 already been solved). The LMPs are the dual variables of the power
 conservation constraint.
 """
-get_lmps(P::PowerManagementProblem) = P.problem.constraints[end].dual[:, 1]
+get_lmps(P::PowerManagementProblem) = -P.problem.constraints[end-1].dual[:, 1] .- P.problem.constraints[end].dual[1]
 
 
 
@@ -99,7 +99,7 @@ Compute the dimensions of the input / output of the KKT operator for
 a network with `n` nodes and `m` edges and `l` generator per node
 
 """
-kkt_dims(n, m, l) = 4m + 3l + n
+kkt_dims(n, m, l) = 4m + 3l + 1
 
 """
     kkt(x, fq, fl, d, pmax, gmax, A; τ=TAU)
@@ -111,19 +111,19 @@ function kkt(x, fq, fl, d, pmax, gmax, A, B, F; τ=TAU, ch=0, dis=0)
     n, m = size(A)
     n, l = size(B)
 
-    g, p, λpl, λpu, λgl, λgu, ν, νF = unflatten_variables(x, n, m, l)
+    g, p, λpl, λpu, λgl, λgu, ν, νE = unflatten_variables(x, n, m, l)
 
     # Lagragian is
     # L = J + λpl'(-p - pmax) + ... + λgu'(g - gmax) + v'(Ap - g - d) + νF'(p - F*(B*g - d))
     return [
-        Diagonal(fq)*g + fl - B'ν - λgl + λgu; # ∇_g L
-        A'ν + λpu - λpl + τ*p; # ∇_p L
+        Diagonal(fq)*g + fl - λgl + λgu - B'*F'*ν + νE[1]*B'*ones(n); # ∇_g L
+        ν + λpu - λpl + τ*p; # ∇_p L
         λpl .* (-p - pmax); 
         λpu .* (p - pmax);
         -λgl .* g;
         λgu .* (g - gmax);
-        A*p - B*g + d .+ ch .- dis;
         p - F*(B*g - d .+ ch .- dis);
+        ones(n)' * (B*g - d .+ ch .- dis);
     ]
 end
 
@@ -166,11 +166,11 @@ function unflatten_variables(x, n, m, l)
     λgu = x[i+1:i+l]
     i += l
     
-    ν = x[i+1:i+n]
-    i += n
-
-    νF = x[i+1:i+m]
+    ν = x[i+1:i+m]
     i += m
 
-    return g, p, λpl, λpu, λgl, λgu, ν, νF
+    νE = x[i+1:i+1]
+    i += 1
+
+    return g, p, λpl, λpu, λgl, λgu, ν, νE
 end
