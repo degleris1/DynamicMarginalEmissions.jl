@@ -28,7 +28,6 @@ using Distributions
 # ╔═╡ d3bd8561-248b-4e19-b556-c4274cd0e77c
 using ForwardDiff
 
-
 # ╔═╡ 399aeec4-f6b2-4225-bf7b-1cdbf5a8afc6
 solve_ecos!(x) = solve!(x, () -> ECOS.Optimizer())
 

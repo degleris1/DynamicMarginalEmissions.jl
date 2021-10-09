@@ -276,6 +276,13 @@ function _make_B(gen, n, l)
 	return B
 end
 
+"""
+    make_pfdf_matrix(A, β)
+
+Convert incidence matrix `A` and edge susceptances `β` to the PFDF matrix `F`.
+
+Note: the reference node is always set to 1.
+"""
 function make_pfdf_matrix(A, β)
     n, m = size(A)
 

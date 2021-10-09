@@ -18,6 +18,15 @@ mutable struct PowerNetwork
     τ
 end
 
+"""
+    PowerNetwork(fq, fl, pmax, gmax, A, B, F; τ=TAU)
+
+Create a power network with quadratic and linear prices `fq` and `fl`, line capacities
+`pmax`, generation capacities `gmax`, incidence matrix `A`, node-generator matrix `B`,
+and PFDF matrix `F`.
+
+Optionally, quadratically penalize power flows with weight `(1/2) τ^2`.
+"""
 PowerNetwork(fq, fl, pmax, gmax, A, B, F; τ=TAU) =
     PowerNetwork(fq, fl, pmax, gmax, A, B, F, τ)
 
