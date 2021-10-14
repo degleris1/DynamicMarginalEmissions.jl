@@ -119,19 +119,19 @@ function compute_jacobian_kkt_dyn(x, net, d_dyn)
     dim_s = storage_kkt_dims(n, l)
 
     # decompose `x` in arrays of T variables
-    g, p, s, ch, dis, λpl, λpu, λgl, λgu, ν, λsl, λsu, λchl, λchu, λdisl, λdisu, λrampl, λrampu, νs = 
+    g, p, s, ch, dis, λpl, λpu, λgl, λgu, ν, νE, λsl, λsu, λchl, λchu, λdisl, λdisu, λrampl, λrampu, νs = 
         unflatten_variables_dyn(x, n, m, l, T)
 
     # Compute individual Jacobians for the static system
 
     Kτ1 = [
         compute_jacobian_kkt(
-            net.fq[t], net.fl[t], d_dyn[t], net.pmax[t], net.gmax[t], net.A, net.B, 
-            [g[t]; p[t]; λpl[t]; λpu[t]; λgl[t]; λgu[t]; ν[t]]; τ=TAU)
+            net.fq[t], net.fl[t], d_dyn[t], net.pmax[t], net.gmax[t], net.A, net.B, net.F,
+            [g[t]; p[t]; λpl[t]; λpu[t]; λgl[t]; λgu[t]; ν[t]; νE[t]]; τ=TAU)
         for t in 1:T
     ]
     Kτ2 = [
-        compute_jacobian_kkt_charge_discharge_ramp(dim_t, n, l)
+        compute_jacobian_kkt_charge_discharge_ramp(dim_t, n, m, l, net.F)
         for t in 1:T
     ]
     Kτ3 = [
@@ -185,9 +185,9 @@ Compute the part of the Jacobian associated with charge and discharge,
 with `dims` being the dimension of the static system, `n` the number of nodes, and `l` 
 the number of generators.
 """
-function compute_jacobian_kkt_charge_discharge_ramp(dims, n, l)
-    dKdch = [spzeros(dims-n, n); Diagonal(ones(n))]
-    dKddis = [spzeros(dims-n, n); -Diagonal(ones(n))]
+function compute_jacobian_kkt_charge_discharge_ramp(dims, n, m, l, F)
+    dKdch = [spzeros(dims-m-1, n); -F; ones(1, n)]
+    dKddis = [spzeros(dims-m-1, n); F; -ones(1, n)]
     dKdλl = [-I(l); spzeros(dims-l, l)]
     dKdλu = [I(l); spzeros(dims-l, l)]
 
@@ -358,6 +358,7 @@ function compute_jacobian_kkt_dyn_t(
 )
 
     # extract some variables
+    F = net.F
     η_c = net.η_c
     η_d = net.η_d
     C = net.C
@@ -421,8 +422,8 @@ function compute_jacobian_kkt_dyn_t(
     # @show size(Dλramp)
     K_static = [
         spzeros(n, T*kdims);
-        spzeros(n, t*kdims-n) I(n) spzeros(n, (T-t)*kdims);
-        spzeros(n, t*kdims-n) -I(n) spzeros(n, (T-t)*kdims);
+        spzeros(n, t*kdims - m - 1) -F' ones(n) spzeros(n, (T-t)*kdims);
+        spzeros(n, t*kdims - m - 1) F' -ones(n) spzeros(n, (T-t)*kdims);
         spzeros(6n, T*kdims);
         Dλramp;
         spzeros(n, T*kdims);
