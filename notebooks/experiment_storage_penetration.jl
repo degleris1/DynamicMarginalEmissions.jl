@@ -49,6 +49,15 @@ md"""
 - Add a curve with 0% storage in the emissions vs time for different values of η plot
 - Discuss validity of results of delayed and EARLY (i.e. impact before) emissions
 - Discuss why there is this cross pattern
+- Make sure there is renewable curtailment
+"""
+
+# ╔═╡ 751a51bb-97c6-4608-8195-7ed465b9eb7c
+md"""
+## Things to figure out
+- Storage patterns
+- Why is a given timestep more significant than other timesteps
+- Be careful about the value of the time, when storage is and is not...
 """
 
 # ╔═╡ 44275f74-7e7c-48d5-80a0-0f24609ef327
@@ -79,8 +88,8 @@ begin
 	n = length(d_peak)
 	
 	# Limit line flows and generation capacities
-	net.pmax *= 0.75
-	net.gmax *= 0.7
+	net.pmax *= 10000#.75
+	net.gmax *= .7
 	
 	# Remove lines
 	net.pmax[[2, 3, 5, 11, 12, 20, 22, 26, 27, 30, 39]] .*= δ
@@ -144,7 +153,7 @@ begin
 end
 
 # ╔═╡ c82ef027-740a-49b1-93d2-1554c411a896
-renewable_penetration = 0.25
+renewable_penetration = 0.0 #0.25
 
 # ╔═╡ 0239e1da-caf5-4593-af1b-5d1e8d2f2b3e
 begin
@@ -254,6 +263,11 @@ begin
 	ylabel!("SOC")
 end
 
+# ╔═╡ e97e793d-069b-4d8a-9754-9d0f92b35c56
+begin
+	plot([abs.(evaluate(opf_dyn.p[i]))./ net.pmax for i=1:T])
+end
+
 # ╔═╡ 3f9eb091-059c-44a5-9b50-ae3cabe24060
 md"""
 ## How does charging efficiency affect MEFs
@@ -274,7 +288,7 @@ storage_pen = s_rel
 # ╔═╡ 47e2e177-3701-471f-ae3c-38276ec69370
 begin
 
-	println("Recomputing results")
+	println("Recomputing results for different η")
 	options_η = (
 		c_rate=c_rate,
 		renewable_penetration=renewable_penetration,
@@ -301,6 +315,7 @@ begin
 		solve!(opf_dyn, OPT, verbose=false)
 		println("...The objective value is:")
 		@show opf_dyn.problem.optval / T
+		@show opf_dyn.problem.status
 
 		# Compute MEFs
 		mefs = compute_mefs(opf_dyn, net_dyn, d_dyn, emissions_rates)
@@ -402,7 +417,7 @@ The below cell is where computation of MEFs for different storage penetrations/d
 
 # ╔═╡ 6f08828b-4c4b-4f50-bd40-35805a37aae0
 begin
-	println("Recomputing results")
+	println("Recomputing results for different storage pens")
 	options = (
 		c_rate=c_rate,
 		renewable_penetration=renewable_penetration,
@@ -435,6 +450,7 @@ begin
 			
 			@show opf_dyn.problem.optval
 			@show norm([evaluate(opf_dyn.g[t]) for t in 1:T])
+			@show opf_dyn.problem.status
 
 			# Compute MEFs
 			mefs = compute_mefs(opf_dyn, net_dyn, d_dyn, emissions_rates)
@@ -845,6 +861,7 @@ end
 # ╔═╡ Cell order:
 # ╟─c39005df-61e0-4c08-8321-49cc5fe71ef3
 # ╠═5867a4eb-470a-4a8a-84e1-6f150de1dcde
+# ╠═751a51bb-97c6-4608-8195-7ed465b9eb7c
 # ╠═44275f74-7e7c-48d5-80a0-0f24609ef327
 # ╠═db59921e-e998-11eb-0307-e396d43191b5
 # ╠═0aac9a3f-a477-4095-9be1-f4babe1e2803
@@ -877,6 +894,7 @@ end
 # ╠═9deb6bdf-54f4-42ee-855d-7e82cef6f4bb
 # ╠═af6d4ef0-f59f-42be-af36-7cf447478e4c
 # ╠═dd9efed9-f6ed-43fb-93f2-4d21d1360091
+# ╠═e97e793d-069b-4d8a-9754-9d0f92b35c56
 # ╟─3f9eb091-059c-44a5-9b50-ae3cabe24060
 # ╠═355ebed2-42e6-41bb-b1db-a72d1aaae56f
 # ╠═7bc3de9b-45e8-4a5b-a6b9-d816ee695bd9
