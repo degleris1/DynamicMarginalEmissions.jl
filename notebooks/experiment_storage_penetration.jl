@@ -550,7 +550,7 @@ begin
 		
 		crt_results = results[idx_η][node, :, :, s_idx]'
 		# @show maximum(crt_results)
-		subplt = heatmap(log10.(max.(crt_results, δ)), 
+		subplt = heatmap(log10.(max.(crt_results, δ))', 
 			c=:Blues_9, clim=(0, 4), colorbar=false,
 			xlabel="Consumption Time",
 			title="$(100*storage_penetrations[s_idx])% storage, η=$crt_η_", 					xticks=xticks_hr, yticks=xticks=xticks_hr
@@ -681,7 +681,7 @@ mefs_crt = ref_mefs[em_times, cons_time]
 npoints = 10
 
 # ╔═╡ 0113ed6f-a39f-4167-a3c3-429bedbed7b0
-ε = 1e-4
+ε = 1e-2
 
 # ╔═╡ 0eac1f8d-2671-431c-84cc-a97225bb3120
 evaluate(opf_dyn.g[1]).*emissions_rates
@@ -763,7 +763,7 @@ t_display
 begin
 	plot(
 		[1-i*ε for i in -npoints:npoints], 
-		[s_sensitivity[:, k, t_display]/s_sensitivity[npoints+1, k, t_display] for k in 1:n], ylim=(.95, 1.05)
+		[s_sensitivity[:, k, t_display]/(s_sensitivity[npoints+1, k, t_display]+1e-8) for k in 1:n], ylim=(.95, 1.05)
 	)
 	title!("Storage at time $t_display")
 	xlabel!("Change in demand at node $node at time $cons_time")
@@ -775,7 +775,7 @@ end
 begin
 	plot(
 		[1-i*ε for i in -npoints:npoints], 
-		[E_sensitivity[:, k, t_display]./E_sensitivity[npoints+1, k, t_display] for k in 1:length(emissions_rates)]#, ylim=(.95, 1.05)
+		[E_sensitivity[:, k, t_display]./(E_sensitivity[npoints+1, k, t_display]+1e-6) for k in 1:length(emissions_rates)], ylim=(.95, 1.05)
 		)
 	title!("Emissions at time $t_display")
 	xlabel!("Change in demand at node $node at time $cons_time")
@@ -786,7 +786,7 @@ end
 begin
 	plot(
 		[1-i*ε for i in -npoints:npoints], 
-		[g_sensitivity[:, k, t_display]./g_sensitivity[npoints+1, k, t_display] for k in 1:length(emissions_rates)]#, ylim=(.95, 1.05)
+		[g_sensitivity[:, k, t_display]./(g_sensitivity[npoints+1, k, t_display]+1e-8) for k in 1:length(emissions_rates)], ylim=(.99, 1.01)
 		)
 	title!("Generators at time $t_display")
 	xlabel!("Change in demand at node $node at time $cons_time")
@@ -940,8 +940,8 @@ end
 # ╠═921cb430-ff44-4206-b5f0-60e2ef2a573a
 # ╟─b85b85d0-e1bc-4fc9-81cf-3792b55e3684
 # ╟─506e9360-2c25-4ea7-830b-68b4a6bf9026
-# ╟─d5db1b45-0c94-4c15-81ce-abb4ede4ad87
-# ╟─db1ae6bb-3923-4f7f-896e-0e42985ef380
+# ╠═d5db1b45-0c94-4c15-81ce-abb4ede4ad87
+# ╠═db1ae6bb-3923-4f7f-896e-0e42985ef380
 # ╠═2fbb3f97-42ae-4f58-887e-4b9a76c9cb49
 # ╠═1a7af4e0-2608-422c-bafe-d200f30bc4f3
 # ╠═9374abf1-78e4-4e60-875f-115cae7e7144
