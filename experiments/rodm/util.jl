@@ -3,6 +3,7 @@ using CSV
 using DataFrames
 using Dates
 using ECOS
+using Gurobi
 using JLD
 
 using CarbonNetworks
@@ -27,14 +28,18 @@ WEEKS = 1:52
 DAYS = 1 : (maximum(WEEKS)*DAYS_PER_WEEK)
 TIMES = 1 : (maximum(DAYS)*HOURS_PER_DAY)
 
-BLOCK_LENGTH = 4
+BLOCK_LENGTH = 1
 HOURS_PER_BLOCK = BLOCK_LENGTH*HOURS_PER_DAY
 BLOCKS = 1 : Int(maximum(DAYS) / BLOCK_LENGTH)
 
-CHEMICALS = (:co2,)
+CHEMICALS = (:co2, :so2, :nox)
 
+GUROBI_ENV = Gurobi.Env()
+GUROBI_OPT = Convex.MOI.OptimizerWithAttributes(() -> Gurobi.Optimizer(GUROBI_ENV), "LogToConsole" => false)
 
 solve_ecos!(x) = solve!(x, () -> ECOS.Optimizer(verbose=false))
+
+solve_gurobi!(x) = solve!(x, GUROBI_OPT)
 
 results_path_static(f) = joinpath(RESULTS_DIRECTORY, FILE_PREFIX_STATIC*f*FILE_SUFFIX)
 
@@ -134,6 +139,7 @@ function formulate_and_solve_problem_dynamic(Ps, config, is_coal)
     η_c = config[:charge_efficiency]
     η_d = config[:discharge_efficiency]
     ρ_rel = config[:coal_ramping_rate]
+    gmin_coal = config[:coal_min]
 
     T = length(Ps)
 
@@ -147,21 +153,102 @@ function formulate_and_solve_problem_dynamic(Ps, config, is_coal)
     ρ = (ρ_rel*is_coal + 2*(1 .- is_coal)) .* θ.gmax
     
     dnet = make_dynamic(θ, T, P, C; η_c=η_c, η_d=η_d, ρ=ρ)
-    opf = DynamicPowerManagementProblem(dnet, d)
-    solve_ecos!(opf)
+    
+    # Solve unit commitment problem
+    if config[:unit_commitment]
+        opf, dnet, d, uc_active = make_unit_commitment!(dnet, d, is_coal, gmin_coal)
+    else
+        uc_active = 1:length(dnet.gmax[1])
+        opf = DynamicPowerManagementProblem(dnet, d)
+    end
+
+    solve_gurobi!(opf)
+
     if !(opf.problem.status in (Convex.MOI.OPTIMAL, Convex.MOI.ALMOST_OPTIMAL))
         @warn opf.problem.status
     end
 
+    g = evaluate.(opf.g)
+
     # Reduce problem
-    # println("Reducing problem...")
     opfr, netr, rel = reduce_problem(opf, dnet)
 
     # Compute generations and marginal emissions rates
-    g = evaluate.(opf.g)
-    mefs = [compute_mefs(opfr, netr, d, getfield(q, chem)[rel]) for chem in CHEMICALS]
+    mefs = [compute_mefs(opfr, netr, d, getfield(q, chem)[uc_active][rel]) for chem in CHEMICALS]
 
     return (g=g, dq=mefs)
+end
+
+function make_unit_commitment!(net, d, is_uc, gmin_uc_pc)
+    # Make UC selector matrix
+    T = length(net.gmax)
+    l = size(net.B, 2)
+    n_uc = sum(is_uc)
+
+    uc_inds = findall(x -> x == 1, is_uc)
+    free_inds = findall(x -> x == 0, is_uc)
+
+    M_uc = zeros(n_uc, l)
+    for (i, gen_id) in enumerate(uc_inds)
+        M_uc[i, gen_id] = 1
+    end
+
+    # Introduce binary variables
+    z = Variable(n_uc, BinVar)
+
+    # New capacities
+    gmax_uc = M_uc * net.gmax[1]
+    gmin_uc = gmin_uc_pc * gmax_uc
+
+    # # Update network
+    # for t in 1:T
+    #     uc_net.gmax[t][uc_inds] .-= gmin_uc
+    # end
+
+    # Update demand
+    #uc_d = [d[t] - net.B*M_uc'*(z .* gmin_uc) for t in 1:T]
+
+    # Solve unit commitment problem
+    uc = DynamicPowerManagementProblem(net, d)
+    for t in 1:T
+        add_constraints!(uc.problem, [
+            M_uc * uc.g[t] >= z .* gmin_uc,
+            M_uc * uc.g[t] <= z .* gmax_uc,
+        ])
+    end
+    solve_gurobi!(uc)
+    @show uc.problem.status
+
+    # Now reduce optimal power flow problem
+    # Specifically, eliminate 'off' generators
+    # Reduce capacities of 'on' generators by their minimum output
+    # Reduce demand by the minimum outputs
+    # This problem should have the same result as the unit commitment problem above
+
+    # Update network --- eliminate off generators and lower capacities
+    active_uc_gens = findall(x -> abs(x-1) < 1e-2, evaluate(z))
+    active_inds = [free_inds; uc_inds[active_uc_gens]]
+
+    new_net = deepcopy(net)
+    new_net.B = net.B[:, active_inds]
+    new_net.ρ = net.ρ[active_inds]
+    new_net.fq = [fq[active_inds] for fq in net.fq]
+    new_net.fl = [fl[active_inds] for fl in net.fl]
+    for t in 1:T
+        new_net.gmax[t] = net.gmax[t][active_inds]
+        new_net.gmax[t][length(free_inds)+1:end] -= gmin_uc[active_uc_gens]
+    end
+
+    # Update demand --- decrease demand
+    new_d = [
+        d[t] - net.B * M_uc[active_uc_gens, :]' * gmin_uc[active_uc_gens]
+        for t in 1:T
+    ]
+
+    opf = DynamicPowerManagementProblem(new_net, new_d)
+
+
+    return opf, new_net, new_d, active_inds
 end
 
 function reduce_problem(opf, net; tol=1e-4)

@@ -10,13 +10,15 @@ end
 
 DEFAULT_CONFIG = Dict(
     :datadir => "~/Data/carbon_networks/",
-    :multithread => true,
+    :multithread => false,
     :storage_percentage => 0.001,
     :charge_rate => 0.25,
     :charge_efficiency => 0.95,
     :discharge_efficiency => 0.95,
     :carbon_tax => 0.00,
     :coal_ramping_rate => 1.5,
+    :unit_commitment => false,
+    :coal_min => 0.40,
 )
 
 RAMP_CONFIG = [
@@ -33,3 +35,7 @@ STORAGE_CONFIG = [
     ))
     for s_rel in [0.0, 0.02, 0.05, 0.10]
 ]
+
+UNIT_CONFIG = set_config(DEFAULT_CONFIG, Dict{Symbol, Any}(
+    :unit_commitment => true,
+))
