@@ -63,12 +63,12 @@ function PowerManagementProblem(fq, fl, d, pmax, gmax, A, B, F; τ=TAU, ch=0, di
         + (τ/2)*sumsquares(p)
     )
     add_constraints!(problem, [
-        -p <= pmax,
-        p <= pmax,
-        -g <= 0, 
-        g <= gmax,
-        0 == p - F*(B*g - d + ch - dis),
-        0 == ones(n)' * (B*g - d + ch - dis),
+        -p <= pmax,  # λpl
+        p <= pmax,  # λpu
+        -g <= 0,  # λgl
+        g <= gmax,  # λgu
+        0 == p - F*(B*g - d + ch - dis),  # ν
+        0 == ones(n)' * (B*g - d + ch - dis),  # νE
     ])
 
     params = (fq=fq, fl=fl, d=d, pmax=pmax, gmax=gmax, A=A, B=B, F=F, τ=τ, η_c=η_c, η_d=η_d)
