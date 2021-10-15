@@ -118,6 +118,9 @@ begin
 	plt
 end
 
+# ╔═╡ 39cdac4b-87bb-441c-99e3-402b40bef7d3
+_, m, l = get_problem_dims(net)
+
 # ╔═╡ 1bd72281-4a7f-44f4-974d-632e9d0aaf28
 md"""
 ### Demand and renewable time series
@@ -213,7 +216,7 @@ md"""
 """
 
 # ╔═╡ 57a37eb0-a547-428c-9f8c-e5f3e30f5260
-c_rate = 0.25 #charging rate
+c_rate = .25 #charging rate
 
 # ╔═╡ 491da4e6-03e6-49d3-907d-43ddcffdfb42
 s_rel = .1 #storage penetration
@@ -224,7 +227,7 @@ This cursor allows for the definition/choice of the charge efficiency
 """
 
 # ╔═╡ 9a45c280-d8a4-4849-8977-2dc763ed633b
-@bind η_c Slider(0.8:0.01:1.0)
+@bind η_c Slider(0.8:0.05:1.0)
 
 # ╔═╡ 5bd157b8-3dac-464e-85b0-c63830a7e817
 md"""
@@ -232,7 +235,10 @@ This cursor allows for the definition/choice of the discharge efficiency
 """
 
 # ╔═╡ e55e0566-7bd6-4126-8f60-0d940f6d8111
-@bind η_d Slider(0.8:0.01:1.0)
+@bind η_d Slider(0.8:0.05:1.0)
+
+# ╔═╡ 6cc82262-cc73-4483-b97e-664d5093d69c
+@show η_c, η_d
 
 # ╔═╡ 9deb6bdf-54f4-42ee-855d-7e82cef6f4bb
 begin
@@ -244,13 +250,26 @@ begin
 	# Construct and solve OPF problem
 	opf_dyn = DynamicPowerManagementProblem(net_dyn, d_dyn)
 	solve!(opf_dyn, OPT, verbose=false)
+	@show opf_dyn.problem.status
+end
+
+# ╔═╡ 960ee252-afa8-4208-abed-495c78128fe5
+begin
+	plot(dyn_gmax[1])
+	plot!(net_dyn.ρ, label = "rho")
 end
 
 # ╔═╡ af6d4ef0-f59f-42be-af36-7cf447478e4c
 begin
 	s_vals = zeros(n, T+1)
+	g_vals = zeros(l, T)
+	p_vals = zeros(m, T)
+	d_vals = zeros(n, T)
 	for t in 1:T
     	s_vals[:, t+1] = evaluate(opf_dyn.s[t])./C
+		g_vals[:, t] = evaluate(opf_dyn.g[t])./dyn_gmax[t]
+		p_vals[:, t] = evaluate(opf_dyn.p[t])./net.pmax
+		d_vals[:, t] = d_dyn[t]
 	end
 end
 
@@ -263,9 +282,49 @@ begin
 	ylabel!("SOC")
 end
 
+# ╔═╡ 67446d4d-6df0-4ed4-aae0-f62eb9295a96
+begin
+	plot(g_vals')
+end
+
+# ╔═╡ 8e08a2ef-3953-4c85-8a0f-7986bb512144
+begin
+plot([sum(d_vals[:, i]) for i=1:T], label="demand", lw=2, legend=:bottomleft)
+p_tot = [sum(p_vals[:, i]) for i=1:T]
+# plot(p_tot)
+g_tot = [sum(g_vals[:, i] .* dyn_gmax[i]) for i=1:T]
+plot!(g_tot, ls=:dash, label="g", lw = 4)
+# ds = [sum(evaluate(opf_dyn.s[1]))] 
+ds = vcat(
+		sum(evaluate(opf_dyn.s[1])),
+		[sum((evaluate(opf_dyn.s[i]) - evaluate(opf_dyn.s[i-1]))) for i=2:T]
+		)
+	
+plot!(ds, ls=:dash, label="ds", lw=4)
+plot!(g_tot - ds, ls=:dash, label="g-ds", lw=4)
+end
+
+# ╔═╡ 360e9bc7-c80a-41fb-a661-9e783e5b6248
+ds
+
 # ╔═╡ e97e793d-069b-4d8a-9754-9d0f92b35c56
 begin
-	plot([abs.(evaluate(opf_dyn.p[i]))./ net.pmax for i=1:T])
+	plot([(evaluate(opf_dyn.p[i]))./ net.pmax for i=1:T])
+end
+
+# ╔═╡ 8123c8a5-4f4f-49b8-9400-dc02f1496ea9
+begin
+	plot([(evaluate(opf_dyn.g[i]))./ net.gmax for i=1:T])
+end
+
+# ╔═╡ 9e4b8d7e-5422-45ce-b667-6995e787dfae
+begin
+	plot([d_dyn[t] for t=1:T])
+end
+
+# ╔═╡ eeec1c34-ae03-4142-9820-14d9801be6ae
+begin
+	plot([evaluate(opf_dyn.s[t]) for t=1:T])
 end
 
 # ╔═╡ 3f9eb091-059c-44a5-9b50-ae3cabe24060
@@ -871,6 +930,7 @@ end
 # ╟─75dfaefd-abec-47e2-acc3-c0ff3a01048e
 # ╠═f999d732-14b3-4ac5-b803-3df7a96ef898
 # ╠═23690382-3d30-46e3-b26a-a30875be78ec
+# ╠═39cdac4b-87bb-441c-99e3-402b40bef7d3
 # ╟─1bd72281-4a7f-44f4-974d-632e9d0aaf28
 # ╠═0c786da1-7f44-40af-b6d6-e0d6db2242b2
 # ╠═5b80ca83-0719-437f-9e51-38f2bed02fb4
@@ -891,10 +951,18 @@ end
 # ╠═9a45c280-d8a4-4849-8977-2dc763ed633b
 # ╟─5bd157b8-3dac-464e-85b0-c63830a7e817
 # ╠═e55e0566-7bd6-4126-8f60-0d940f6d8111
+# ╠═6cc82262-cc73-4483-b97e-664d5093d69c
 # ╠═9deb6bdf-54f4-42ee-855d-7e82cef6f4bb
-# ╠═af6d4ef0-f59f-42be-af36-7cf447478e4c
+# ╟─960ee252-afa8-4208-abed-495c78128fe5
+# ╟─af6d4ef0-f59f-42be-af36-7cf447478e4c
 # ╠═dd9efed9-f6ed-43fb-93f2-4d21d1360091
+# ╠═67446d4d-6df0-4ed4-aae0-f62eb9295a96
+# ╠═8e08a2ef-3953-4c85-8a0f-7986bb512144
+# ╠═360e9bc7-c80a-41fb-a661-9e783e5b6248
 # ╠═e97e793d-069b-4d8a-9754-9d0f92b35c56
+# ╠═8123c8a5-4f4f-49b8-9400-dc02f1496ea9
+# ╠═9e4b8d7e-5422-45ce-b667-6995e787dfae
+# ╠═eeec1c34-ae03-4142-9820-14d9801be6ae
 # ╟─3f9eb091-059c-44a5-9b50-ae3cabe24060
 # ╠═355ebed2-42e6-41bb-b1db-a72d1aaae56f
 # ╠═7bc3de9b-45e8-4a5b-a6b9-d816ee695bd9

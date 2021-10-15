@@ -33,7 +33,7 @@ export compute_mefs
 export plot_sensitivity_check
 export make_dynamic, generate_random_data
 
-export compute_jacobian_kkt_dyn
+export compute_jacobian_kkt_dyn, get_problem_dims
 
 
 # Files
