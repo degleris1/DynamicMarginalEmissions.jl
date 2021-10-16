@@ -5,6 +5,7 @@ using CSV
 using Convex
 using DataFrames
 using ECOS
+using Gurobi
 using LightGraphs
 using LinearAlgebra
 using SimpleWeightedGraphs
@@ -47,6 +48,11 @@ include("descent.jl")
 
 include("utils.jl")
 
-OPT = () -> ECOS.Optimizer(verbose=false)
+ECOS_OPT = () -> ECOS.Optimizer(verbose=false)
+# GUROBI_ENV = Gurobi.Env()
+# GUROBI_OPT = Convex.MOI.OptimizerWithAttributes(
+#     () -> Gurobi.Optimizer(GUROBI_ENV), "LogToConsole" => false
+# )
+OPT = ECOS_OPT
 
 end

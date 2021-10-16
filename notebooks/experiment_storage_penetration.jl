@@ -18,14 +18,11 @@ begin
 	import Pkg
 	Pkg.activate();
 	using Random
-	using Convex, ECOS
+	using Convex, ECOS, Gurobi
 	using Plots
 	using PlutoUI
 	using JLD
 	using LinearAlgebra
-	
-	OPT = () -> ECOS.Optimizer(verbose=false)
-	δ = 1e-4
 end;
 
 # ╔═╡ 0aac9a3f-a477-4095-9be1-f4babe1e2803
@@ -64,6 +61,20 @@ md"""
 md"""
 ## Loading
 """
+
+# ╔═╡ a32d6a56-8da8-44b0-b659-21030692630a
+begin
+	ECOS_OPT = () -> ECOS.Optimizer(verbose=false)
+	GUROBI_ENV = Gurobi.Env()
+	GUROBI_OPT = Convex.MOI.OptimizerWithAttributes(
+		() -> Gurobi.Optimizer(GUROBI_ENV), "LogToConsole" => false
+	)
+	ECOS_OPT_2 = Convex.MOI.OptimizerWithAttributes(
+		ECOS.Optimizer, "maxit"=> 100, "reltol"=>1e-6, "LogToConsole"=>false
+		)
+	OPT = ECOS_OPT_2
+	δ = 1e-4
+end
 
 # ╔═╡ 257a6f74-d3c3-42eb-8076-80d26cf164ca
 theme(:default, label=nothing, 
@@ -242,6 +253,7 @@ This cursor allows for the definition/choice of the discharge efficiency
 
 # ╔═╡ 9deb6bdf-54f4-42ee-855d-7e82cef6f4bb
 begin
+	println("Solving first problem")
 	# Construct dynamic network
 	C = total_demands * (s_rel)
 	P = C * c_rate
@@ -249,7 +261,7 @@ begin
 
 	# Construct and solve OPF problem
 	opf_dyn = DynamicPowerManagementProblem(net_dyn, d_dyn)
-	solve!(opf_dyn, OPT, verbose=false)
+	solve!(opf_dyn, OPT, verbose=true)
 	@show opf_dyn.problem.status
 end
 
@@ -286,6 +298,11 @@ end
 begin
 	plot(g_vals')
 end
+
+# ╔═╡ e6bd7944-f6ab-4022-b350-a0537c603008
+md"""
+They should only match exactly if the efficiencies are equal to 1. 
+"""
 
 # ╔═╡ 8e08a2ef-3953-4c85-8a0f-7986bb512144
 begin
@@ -346,7 +363,7 @@ storage_pen = s_rel
 
 # ╔═╡ 47e2e177-3701-471f-ae3c-38276ec69370
 begin
-
+	println("----------------------------------------------------------")
 	println("Recomputing results for different η")
 	options_η = (
 		c_rate=c_rate,
@@ -476,6 +493,7 @@ The below cell is where computation of MEFs for different storage penetrations/d
 
 # ╔═╡ 6f08828b-4c4b-4f50-bd40-35805a37aae0
 begin
+	println("--------------------------------------------------------")
 	println("Recomputing results for different storage pens")
 	options = (
 		c_rate=c_rate,
@@ -497,7 +515,7 @@ begin
 			n, T, length(mef_times), length(storage_penetrations)
 		)
 		for (ind_s, s_rel) in enumerate(storage_penetrations)
-
+			println("s = $s_rel, η = $η")
 			# Construct dynamic network
 			C = total_demands * (s_rel + δ)
 			P = C * c_rate
@@ -560,8 +578,11 @@ The cursor below allows choosing for a specific value of charge/discharge effici
 
 # ╔═╡ 19f4e0cc-0c93-42dc-8ee4-17f52d4e5e90
 
-@bind idx_η Slider(1:1:length(η_vals))
+# @bind idx_η Slider(1:1:length(η_vals))
 
+
+# ╔═╡ 4925c50b-12c0-4217-94de-bdcc72c01ccf
+idx_η = 1
 
 # ╔═╡ 4d9a4b36-6b3d-4836-8501-7f46cd7ab5cc
 md"""
@@ -650,6 +671,14 @@ begin
 	
 	
 end
+
+# ╔═╡ 52c889e4-753c-447c-a9e1-862750b3643f
+nn = round.(results[idx_η][node, :, :, 1]'[16:20, 16:20])
+
+# ╔═╡ 850f7430-7e69-4b5d-a89e-9ac0a659b56b
+md"""
+Why are there nondiagonal elements for zero penetration?
+"""
 
 # ╔═╡ edabacdd-8d25-4d64-9d4a-ecf1263ac02e
 md"""
@@ -919,11 +948,12 @@ end
 
 # ╔═╡ Cell order:
 # ╟─c39005df-61e0-4c08-8321-49cc5fe71ef3
-# ╠═5867a4eb-470a-4a8a-84e1-6f150de1dcde
-# ╠═751a51bb-97c6-4608-8195-7ed465b9eb7c
+# ╟─5867a4eb-470a-4a8a-84e1-6f150de1dcde
+# ╟─751a51bb-97c6-4608-8195-7ed465b9eb7c
 # ╠═44275f74-7e7c-48d5-80a0-0f24609ef327
 # ╠═db59921e-e998-11eb-0307-e396d43191b5
 # ╠═0aac9a3f-a477-4095-9be1-f4babe1e2803
+# ╠═a32d6a56-8da8-44b0-b659-21030692630a
 # ╠═257a6f74-d3c3-42eb-8076-80d26cf164ca
 # ╠═113e61a9-3b21-48d0-9854-a2fcce904e8a
 # ╟─9bd515d4-c7aa-4a3d-a4fb-28686290a134
@@ -957,6 +987,7 @@ end
 # ╟─af6d4ef0-f59f-42be-af36-7cf447478e4c
 # ╠═dd9efed9-f6ed-43fb-93f2-4d21d1360091
 # ╠═67446d4d-6df0-4ed4-aae0-f62eb9295a96
+# ╠═e6bd7944-f6ab-4022-b350-a0537c603008
 # ╠═8e08a2ef-3953-4c85-8a0f-7986bb512144
 # ╠═360e9bc7-c80a-41fb-a661-9e783e5b6248
 # ╠═e97e793d-069b-4d8a-9754-9d0f92b35c56
@@ -982,14 +1013,17 @@ end
 # ╠═cd5fe410-6264-4381-b19f-31d050bc3930
 # ╠═0740dc70-a532-4818-b09d-b3b8d60fa6ba
 # ╟─f26187fb-d4b2-4f0d-8a80-5d831e0de6c3
-# ╟─19f4e0cc-0c93-42dc-8ee4-17f52d4e5e90
+# ╠═19f4e0cc-0c93-42dc-8ee4-17f52d4e5e90
+# ╠═4925c50b-12c0-4217-94de-bdcc72c01ccf
 # ╟─4d9a4b36-6b3d-4836-8501-7f46cd7ab5cc
-# ╟─75d956fc-bcf6-40fe-acd5-b5eef0fc7902
+# ╠═75d956fc-bcf6-40fe-acd5-b5eef0fc7902
 # ╟─c6ee857d-8019-4c4f-bb07-a370a88ea3cf
 # ╟─6186798f-6711-4222-94bb-f53b2d0fad7d
 # ╟─d27ef0d8-70b2-4897-9000-8fa70b1862fc
 # ╟─6fc320b1-b60d-4f49-89ab-bf029ead6b55
 # ╠═f7e0d09c-40bf-4936-987a-a3bcadae5487
+# ╠═52c889e4-753c-447c-a9e1-862750b3643f
+# ╠═850f7430-7e69-4b5d-a89e-9ac0a659b56b
 # ╟─edabacdd-8d25-4d64-9d4a-ecf1263ac02e
 # ╟─ee233685-474b-4162-bfef-5f3bdbe03c73
 # ╠═b5ac767e-ccde-4ee0-b50c-3584c5320e74
