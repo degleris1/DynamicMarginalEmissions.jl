@@ -93,6 +93,11 @@ md"""
 ### Network
 """
 
+# ╔═╡ 41534be1-c46e-4ee5-9e31-35c0767e19cd
+md"""
+UPDATE PMAX!!!
+"""
+
 # ╔═╡ f999d732-14b3-4ac5-b803-3df7a96ef898
 begin
 	net, d_peak, _ = load_synthetic_network("case30.m")
@@ -165,6 +170,11 @@ begin
 	savefig(plt_time_series, "../img/storage_penetration_time_series.png")
 	plt_time_series
 end
+
+# ╔═╡ abb35cb1-2a01-4702-a083-2033a979bdb0
+md"""
+UPDATE THE BELOW!!!
+"""
 
 # ╔═╡ c82ef027-740a-49b1-93d2-1554c411a896
 renewable_penetration = 0.0 #0.25
@@ -958,6 +968,7 @@ end
 # ╠═113e61a9-3b21-48d0-9854-a2fcce904e8a
 # ╟─9bd515d4-c7aa-4a3d-a4fb-28686290a134
 # ╟─75dfaefd-abec-47e2-acc3-c0ff3a01048e
+# ╟─41534be1-c46e-4ee5-9e31-35c0767e19cd
 # ╠═f999d732-14b3-4ac5-b803-3df7a96ef898
 # ╠═23690382-3d30-46e3-b26a-a30875be78ec
 # ╠═39cdac4b-87bb-441c-99e3-402b40bef7d3
@@ -967,6 +978,7 @@ end
 # ╠═cfcba5ad-e516-4223-860e-b1f18a6449ba
 # ╟─34d4bd62-6be2-4089-8caa-1a8715bee433
 # ╠═b7476391-30b9-4817-babf-7c9078531ee7
+# ╟─abb35cb1-2a01-4702-a083-2033a979bdb0
 # ╠═c82ef027-740a-49b1-93d2-1554c411a896
 # ╠═0239e1da-caf5-4593-af1b-5d1e8d2f2b3e
 # ╠═9e5a1672-d452-42f5-ba5a-a2fa0b1eaada

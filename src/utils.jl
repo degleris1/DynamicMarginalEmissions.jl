@@ -7,6 +7,8 @@ function make_dynamic(net::PowerNetwork, T, P, C, dyn_gmax, η_c, η_d)
 	return DynamicPowerNetwork(fqs, fls, pmaxs, dyn_gmax, net.A, net.B, net.F, P, C, T; η_c=η_c, η_d=η_d)
 end
 
+make_dynamic(net::PowerNetwork, T, P, C, η) = make_dynamic(net, T, P, C, [net.gmax for _ in 1:T], η, η);
+
 
 function generate_random_data(n, l, T)
     Random.seed!(2)

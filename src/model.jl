@@ -131,8 +131,8 @@ function kkt(x, fq, fl, d, pmax, gmax, A, B, F; τ=TAU, ch=0, dis=0)
         λpu .* (p - pmax);
         -λgl .* g;
         λgu .* (g - gmax);
-        p - F*(B*g - d .+ ch .- dis);
-        ones(n)' * (B*g - d .+ ch .- dis);
+        p - F*(B*g - d .- ch .+ dis);
+        ones(n)' * (B*g - d .- ch .+ dis);
     ]
 end
 

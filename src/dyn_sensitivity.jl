@@ -186,8 +186,8 @@ with `dims` being the dimension of the static system, `n` the number of nodes, a
 the number of generators.
 """
 function compute_jacobian_kkt_charge_discharge_ramp(dims, n, m, l, F)
-    dKdch = [spzeros(dims-m-1, n); -F; ones(1, n)]
-    dKddis = [spzeros(dims-m-1, n); F; -ones(1, n)]
+    dKdch = [spzeros(dims-m-1, n); F; -ones(1, n)]
+    dKddis = [spzeros(dims-m-1, n); -F; ones(1, n)]
     dKdλl = [-I(l); spzeros(dims-l, l)]
     dKdλu = [I(l); spzeros(dims-l, l)]
 
