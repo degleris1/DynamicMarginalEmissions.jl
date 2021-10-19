@@ -31,6 +31,13 @@ begin
 	using CarbonNetworks
 end
 
+# ╔═╡ 58ebe2b7-ea23-41fd-9cca-a3e02fdb4012
+md"""
+## Questions
+- Why do the results barely change when I change the selection for `node`? 
+- Why do batteries SOC barely change when I increase `spen` even to 100%?
+"""
+
 # ╔═╡ f94d2b5b-779a-4de0-9753-c077bc925fa1
 begin
 	ECOS_OPT = () -> ECOS.Optimizer(verbose=false)
@@ -132,6 +139,9 @@ begin
 		
 end
 
+# ╔═╡ ac841787-a0c0-47b7-8ddd-51d4bf285ea7
+
+
 # ╔═╡ f59c420b-a1fe-4847-8115-a33166be54aa
 begin
 	s_vals = zeros(n, T+1)
@@ -208,10 +218,8 @@ begin
 	
 end
 
-# ╔═╡ ac841787-a0c0-47b7-8ddd-51d4bf285ea7
-
-
 # ╔═╡ Cell order:
+# ╠═58ebe2b7-ea23-41fd-9cca-a3e02fdb4012
 # ╠═2498bfac-3108-11ec-2b8b-7fb26f96afbb
 # ╠═6a260a4f-9f96-464b-b101-1127e6ec48fe
 # ╠═f94d2b5b-779a-4de0-9753-c077bc925fa1
