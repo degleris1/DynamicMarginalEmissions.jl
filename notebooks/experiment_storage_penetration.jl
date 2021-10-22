@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.16.1
+# v0.16.3
 
 using Markdown
 using InteractiveUtils
@@ -42,10 +42,6 @@ md"""
 # ╔═╡ 5867a4eb-470a-4a8a-84e1-6f150de1dcde
 md"""
 ## ToDo
-- Integrate ramping constraints
-- Add a curve with 0% storage in the emissions vs time for different values of η plot
-- Discuss validity of results of delayed and EARLY (i.e. impact before) emissions
-- Discuss why there is this cross pattern
 - Make sure there is renewable curtailment
 """
 
@@ -55,6 +51,7 @@ md"""
 - Storage patterns
 - Why is a given timestep more significant than other timesteps
 - Be careful about the value of the time, when storage is and is not...
+- why do I need to increase `p` so significantly to get something that is feasible? 
 """
 
 # ╔═╡ 44275f74-7e7c-48d5-80a0-0f24609ef327
@@ -72,7 +69,7 @@ begin
 	ECOS_OPT_2 = Convex.MOI.OptimizerWithAttributes(
 		ECOS.Optimizer, "maxit"=> 100, "reltol"=>1e-6, "LogToConsole"=>false
 		)
-	OPT = ECOS_OPT_2
+	OPT = ECOS_OPT
 	δ = 1e-4
 end
 
@@ -82,6 +79,12 @@ theme(:default, label=nothing,
 
 # ╔═╡ 113e61a9-3b21-48d0-9854-a2fcce904e8a
 xticks_hr = [0, 6, 12, 18, 24]
+
+# ╔═╡ 19b6abf5-6951-4492-8f17-f76df29f9289
+RUN_BIG_CELL1 = false
+
+# ╔═╡ 856a78d9-7b4c-453b-b73b-c81eee014e52
+RUN_BIG_CELL2 = true
 
 # ╔═╡ 9bd515d4-c7aa-4a3d-a4fb-28686290a134
 md"""
@@ -104,7 +107,7 @@ begin
 	n = length(d_peak)
 	
 	# Limit line flows and generation capacities
-	net.pmax *= 10000#.75
+	net.pmax *= 3000#.75
 	net.gmax *= .7
 	
 	# Remove lines
@@ -173,7 +176,7 @@ end
 
 # ╔═╡ abb35cb1-2a01-4702-a083-2033a979bdb0
 md"""
-UPDATE THE BELOW!!!
+UPDATE renewable penetration!!!
 """
 
 # ╔═╡ c82ef027-740a-49b1-93d2-1554c411a896
@@ -331,27 +334,22 @@ plot!(ds, ls=:dash, label="ds", lw=4)
 plot!(g_tot - ds, ls=:dash, label="g-ds", lw=4)
 end
 
-# ╔═╡ 360e9bc7-c80a-41fb-a661-9e783e5b6248
-ds
-
 # ╔═╡ e97e793d-069b-4d8a-9754-9d0f92b35c56
 begin
 	plot([(evaluate(opf_dyn.p[i]))./ net.pmax for i=1:T])
-end
-
-# ╔═╡ 8123c8a5-4f4f-49b8-9400-dc02f1496ea9
-begin
-	plot([(evaluate(opf_dyn.g[i]))./ net.gmax for i=1:T])
+	title!("Congestion status at each time step")
 end
 
 # ╔═╡ 9e4b8d7e-5422-45ce-b667-6995e787dfae
 begin
 	plot([d_dyn[t] for t=1:T])
+	title!("Demand at each timestep")
 end
 
 # ╔═╡ eeec1c34-ae03-4142-9820-14d9801be6ae
 begin
 	plot([evaluate(opf_dyn.s[t]) for t=1:T])
+	title!("storage at each time step")
 end
 
 # ╔═╡ 3f9eb091-059c-44a5-9b50-ae3cabe24060
@@ -362,17 +360,16 @@ md"""
 # ╔═╡ 355ebed2-42e6-41bb-b1db-a72d1aaae56f
 mef_times = 1:24
 
-# ╔═╡ 7bc3de9b-45e8-4a5b-a6b9-d816ee695bd9
-refresh = true
-
 # ╔═╡ 4a8c7752-6de8-4ea7-aafe-702b17507185
 storage_pen = s_rel
 
 # ╔═╡ 6e6b15b1-7685-4a20-9d94-dd703caa2fe9
 η_vals = [0.9, 0.95, 0.99, 1.] #charge-discharge efficiency values
+# η_vals = [0.99-1e-4, 0.99, 0.99 + 1e-4] 
 
 # ╔═╡ 47e2e177-3701-471f-ae3c-38276ec69370
 begin
+	if RUN_BIG_CELL1
 	println("----------------------------------------------------------")
 	println("Recomputing results for different η")
 	options_η = (
@@ -411,6 +408,7 @@ begin
 		end
 
 		meta_η[ind_η] = (opf=opf_dyn, net=net_dyn)
+	end
 	end
 		
 
@@ -503,6 +501,7 @@ The below cell is where computation of MEFs for different storage penetrations/d
 
 # ╔═╡ 6f08828b-4c4b-4f50-bd40-35805a37aae0
 begin
+	if RUN_BIG_CELL2
 	println("--------------------------------------------------------")
 	println("Recomputing results for different storage pens")
 	options = (
@@ -548,6 +547,7 @@ begin
 			meta[ind_η][ind_s] = (opf=opf_dyn, net=net_dyn)
 		end
 	end
+	end
 		
 end
 
@@ -592,7 +592,7 @@ The cursor below allows choosing for a specific value of charge/discharge effici
 
 
 # ╔═╡ 4925c50b-12c0-4217-94de-bdcc72c01ccf
-idx_η = 1
+idx_η = 3
 
 # ╔═╡ 4d9a4b36-6b3d-4836-8501-7f46cd7ab5cc
 md"""
@@ -648,16 +648,21 @@ MEF as a function of consumption and emission times
 """
 
 # ╔═╡ f7e0d09c-40bf-4936-987a-a3bcadae5487
-begin
+let
 	node = interesting_nodes[highlighted_node] # we focus on a single node
 	
+	plots = []
 	heatmap_subplts = []
+	for idx_η in 1:length(η_vals)
+		crt_η_ = η_vals[idx_η]
 	for s_idx in 1:length(storage_penetrations)
 		
 		crt_results = results[idx_η][node, :, :, s_idx]'
 		# @show maximum(crt_results)
-		subplt = heatmap(log10.(max.(crt_results, δ))', 
-			c=:Blues_9, clim=(0, 4), colorbar=false,
+		subplt = heatmap(crt_results', #log10.(max.(crt_results, δ))
+			c=:nipy_spectral, #https://docs.juliaplots.org/latest/generated/colorschemes/
+			clim=(0, 2000), 
+			colorbar=false,
 			xlabel="Consumption Time",
 			title="$(100*storage_penetrations[s_idx])% storage, η=$crt_η_", 					xticks=xticks_hr, yticks=xticks=xticks_hr
 		)
@@ -668,14 +673,17 @@ begin
 		push!(heatmap_subplts, subplt)
 	end
 	
+
+	end
+	# @layout l = [grid(3,3)]
 	plt_emissions_heatmap = plot(heatmap_subplts..., 
-		layout=Plots.grid(1, 3, widths=[.29, 0.29, 0.42]), 
-		size=(650, 200), 
+		layout=Plots.grid(length(η_vals), length(storage_penetrations), widths=[.29, 0.29, 0.42]), 
+		size=(650, 650/3*length(η_vals)), 
 		bottom_margin=8Plots.pt
 	)
-	savefig(plt_emissions_heatmap, 
-		"../img/storage_penetration_emissions_heatmap.png")
-	plt_emissions_heatmap
+	# savefig(plt_emissions_heatmap, 
+		# "../img/storage_penetration_emissions_heatmap.png")
+	# plt_emissions_heatmap
 	
 	
 	
@@ -683,12 +691,7 @@ begin
 end
 
 # ╔═╡ 52c889e4-753c-447c-a9e1-862750b3643f
-nn = round.(results[idx_η][node, :, :, 1]'[16:20, 16:20])
-
-# ╔═╡ 850f7430-7e69-4b5d-a89e-9ac0a659b56b
-md"""
-Why are there nondiagonal elements for zero penetration?
-"""
+nn = round.(results[idx_η][10, :, :, 1]'[16:20, 16:20])
 
 # ╔═╡ edabacdd-8d25-4d64-9d4a-ecf1263ac02e
 md"""
@@ -958,14 +961,16 @@ end
 
 # ╔═╡ Cell order:
 # ╟─c39005df-61e0-4c08-8321-49cc5fe71ef3
-# ╟─5867a4eb-470a-4a8a-84e1-6f150de1dcde
-# ╟─751a51bb-97c6-4608-8195-7ed465b9eb7c
+# ╠═5867a4eb-470a-4a8a-84e1-6f150de1dcde
+# ╠═751a51bb-97c6-4608-8195-7ed465b9eb7c
 # ╠═44275f74-7e7c-48d5-80a0-0f24609ef327
 # ╠═db59921e-e998-11eb-0307-e396d43191b5
 # ╠═0aac9a3f-a477-4095-9be1-f4babe1e2803
 # ╠═a32d6a56-8da8-44b0-b659-21030692630a
 # ╠═257a6f74-d3c3-42eb-8076-80d26cf164ca
 # ╠═113e61a9-3b21-48d0-9854-a2fcce904e8a
+# ╠═19b6abf5-6951-4492-8f17-f76df29f9289
+# ╠═856a78d9-7b4c-453b-b73b-c81eee014e52
 # ╟─9bd515d4-c7aa-4a3d-a4fb-28686290a134
 # ╟─75dfaefd-abec-47e2-acc3-c0ff3a01048e
 # ╟─41534be1-c46e-4ee5-9e31-35c0767e19cd
@@ -999,25 +1004,22 @@ end
 # ╟─af6d4ef0-f59f-42be-af36-7cf447478e4c
 # ╠═dd9efed9-f6ed-43fb-93f2-4d21d1360091
 # ╠═67446d4d-6df0-4ed4-aae0-f62eb9295a96
-# ╠═e6bd7944-f6ab-4022-b350-a0537c603008
-# ╠═8e08a2ef-3953-4c85-8a0f-7986bb512144
-# ╠═360e9bc7-c80a-41fb-a661-9e783e5b6248
-# ╠═e97e793d-069b-4d8a-9754-9d0f92b35c56
-# ╠═8123c8a5-4f4f-49b8-9400-dc02f1496ea9
-# ╠═9e4b8d7e-5422-45ce-b667-6995e787dfae
-# ╠═eeec1c34-ae03-4142-9820-14d9801be6ae
+# ╟─e6bd7944-f6ab-4022-b350-a0537c603008
+# ╟─8e08a2ef-3953-4c85-8a0f-7986bb512144
+# ╟─e97e793d-069b-4d8a-9754-9d0f92b35c56
+# ╟─9e4b8d7e-5422-45ce-b667-6995e787dfae
+# ╟─eeec1c34-ae03-4142-9820-14d9801be6ae
 # ╟─3f9eb091-059c-44a5-9b50-ae3cabe24060
 # ╠═355ebed2-42e6-41bb-b1db-a72d1aaae56f
-# ╠═7bc3de9b-45e8-4a5b-a6b9-d816ee695bd9
-# ╟─4a8c7752-6de8-4ea7-aafe-702b17507185
+# ╠═4a8c7752-6de8-4ea7-aafe-702b17507185
 # ╠═6e6b15b1-7685-4a20-9d94-dd703caa2fe9
 # ╠═47e2e177-3701-471f-ae3c-38276ec69370
 # ╠═457c1959-94fa-4267-8645-3ed1409cd0a0
 # ╟─dfa2a03b-6925-4be0-aeac-076c4cf25969
 # ╟─a7e75e49-5031-4cc4-b96e-6227277ec3ba
-# ╠═d9617524-76c3-447d-9b94-0a690f83a7b9
+# ╟─d9617524-76c3-447d-9b94-0a690f83a7b9
 # ╟─fb43471f-6aed-4fd6-a9e0-b165f6c77003
-# ╠═9aded04b-e55f-4ebd-97c4-90c3adf62547
+# ╟─9aded04b-e55f-4ebd-97c4-90c3adf62547
 # ╟─30ec492c-8d21-43f6-bb09-32810494f21e
 # ╠═98a0d7c5-b1a8-4ebe-bb73-7ca88b475592
 # ╟─bbbb358c-e645-4989-bed3-73d9217f7447
@@ -1035,7 +1037,6 @@ end
 # ╟─6fc320b1-b60d-4f49-89ab-bf029ead6b55
 # ╠═f7e0d09c-40bf-4936-987a-a3bcadae5487
 # ╠═52c889e4-753c-447c-a9e1-862750b3643f
-# ╠═850f7430-7e69-4b5d-a89e-9ac0a659b56b
 # ╟─edabacdd-8d25-4d64-9d4a-ecf1263ac02e
 # ╟─ee233685-474b-4162-bfef-5f3bdbe03c73
 # ╠═b5ac767e-ccde-4ee0-b50c-3584c5320e74
