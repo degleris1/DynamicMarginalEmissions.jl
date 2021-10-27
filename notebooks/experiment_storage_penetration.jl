@@ -565,12 +565,12 @@ begin
 		push!(total_emissions, E)
 	end
 		crt_η = η_vals[i]
-		plot!(storage_penetrations, total_emissions, lw=4, label="η=$crt_η")
+		plot!(storage_penetrations, total_emissions, lw=2, label="η=$crt_η", ls=:dash, markershape=:circle, ms=4)
 	end
 	
 	
 	
-	plot!(size=(650, 150), xlabel="storage capacity (% total demand)")
+	plot!(size=(650, 300), xlabel="storage capacity (% total demand)", legend=:bottomright)
 	plot!(ylabel="co2 emissions", xlim=(0, Inf))
 	plot!(bottom_margin=5Plots.mm, left_margin=5Plots.mm)
 	
@@ -592,7 +592,7 @@ The cursor below allows choosing for a specific value of charge/discharge effici
 
 
 # ╔═╡ 4925c50b-12c0-4217-94de-bdcc72c01ccf
-idx_η = 3
+idx_η = 2
 
 # ╔═╡ 4d9a4b36-6b3d-4836-8501-7f46cd7ab5cc
 md"""
@@ -642,14 +642,18 @@ begin
 	plt_dynamic_mef
 end
 
+# ╔═╡ 1da34733-fee3-42e1-b5e0-cac3f5f196c9
+@bind node_matrix Slider(1:1:n)
+
 # ╔═╡ 6fc320b1-b60d-4f49-89ab-bf029ead6b55
 md"""
-MEF as a function of consumption and emission times
+MEF as a function of consumption and emission times for node $node_matrix
 """
 
 # ╔═╡ f7e0d09c-40bf-4936-987a-a3bcadae5487
 let
-	node = interesting_nodes[highlighted_node] # we focus on a single node
+	#node = interesting_nodes[highlighted_node]
+	node = node_matrix# we focus on a single node
 	
 	plots = []
 	heatmap_subplts = []
@@ -659,9 +663,9 @@ let
 		
 		crt_results = results[idx_η][node, :, :, s_idx]'
 		# @show maximum(crt_results)
-		subplt = heatmap(crt_results', #log10.(max.(crt_results, δ))
-			c=:nipy_spectral, #https://docs.juliaplots.org/latest/generated/colorschemes/
-			clim=(0, 2000), 
+		subplt = heatmap(log10.(max.(crt_results, δ))',
+			c=:tab20b, #https://docs.juliaplots.org/latest/generated/colorschemes/
+			clim=(0, 4), 
 			colorbar=false,
 			xlabel="Consumption Time",
 			title="$(100*storage_penetrations[s_idx])% storage, η=$crt_η_", 					xticks=xticks_hr, yticks=xticks=xticks_hr
@@ -720,6 +724,17 @@ The corresponding value of storage penetrations is
 # ╔═╡ f9ef362a-91c5-46ee-b4cb-1567b88f4dd7
 storage_penetrations[s_idx_]
 
+# ╔═╡ 5921be3d-43ff-4611-b324-a39eda5dc685
+md""" the current value of η is: """
+
+# ╔═╡ 1677d82a-71cf-49e2-85df-53821d3a21a3
+η_vals[idx_η]
+
+# ╔═╡ 85a3ff2e-5fae-4c30-a4ca-1225622134e6
+md"""
+For this part we should focus on η = 0.95, as we see the square patterns (i.e. thick cross patterns) and the reason why is not yet clear to me. 
+"""
+
 # ╔═╡ 4fb2a0e8-db61-4602-a01c-cfa7aeac6afc
 meta_crt = meta[idx_η];
 
@@ -730,7 +745,7 @@ s_crt = meta_crt[s_idx_].opf.s;
 begin
 	socs = zeros(n, T+1);
 	for t in 1:T
-		socs[:, t+1] = evaluate(s_crt[t])./C;
+		socs[:, t+1] = evaluate(s_crt[t])./(C.+1e-4);
 	end
 end
 
@@ -750,6 +765,11 @@ begin
 	ylabel!("SOC")
 end
 
+# ╔═╡ 1c4afaaa-68fa-4db9-9db3-2dcb712f5bda
+md"""
+For some nodes the above gets flat at nearly 50% for most batteries... that does not make any sense to me...
+"""
+
 # ╔═╡ 0b9523aa-665f-4cb3-b985-b0d122a02a12
 md"""
 ### Actually checking sensitivity at some points
@@ -768,12 +788,12 @@ Some inspiration can be drawn from `sensitivity_demand_check()` function
 """
 
 # ╔═╡ 3c5edbc5-8fc7-4d09-98a9-85f2efb699a8
-node
+node = node_matrix
 
 # ╔═╡ e4c203b2-70b4-46f3-b025-3be46efa5e19
 begin
-cons_time = 22
-em_times = [21, 22, 23];
+cons_time = 18
+em_times = [6,7,12,17,18];
 end
 
 # ╔═╡ 5365b74f-595f-4ade-a7af-e8dba53b84f7
@@ -795,7 +815,7 @@ Therefore, if we change the demand at `cons_time`, the emissions at those `em_ti
 mefs_crt = ref_mefs[em_times, cons_time]
 
 # ╔═╡ 4aed3df5-441b-445b-9277-a38690eb8603
-npoints = 10
+npoints = 5
 
 # ╔═╡ 0113ed6f-a39f-4167-a3c3-429bedbed7b0
 ε = 1e-2
@@ -806,8 +826,18 @@ evaluate(opf_dyn.g[1]).*emissions_rates
 # ╔═╡ 87aa4097-62c5-439a-b5af-88a4cb5eb697
 evaluate(opf_dyn.g[1])
 
+# ╔═╡ c9b41436-e0a0-4e57-908f-b45e42122e63
+md"""
+The cell below perturbs demand at a given time and then we will plot the different variales as a function of the demand, trying to understand the emergence of those patterns
+"""
+
+# ╔═╡ 110f3329-c847-47f1-8427-ee959adc8745
+RUN_CELL_SENSITIVITY = false
+
 # ╔═╡ 91f7d63c-9e30-4fd4-ab39-9fbf58d101dc
 begin
+	if RUN_CELL_SENSITIVITY
+	println("Running sensitivity analysis")
 	E_sensitivity = zeros(2npoints+1, length(emissions_rates), T);
 	s_sensitivity = zeros(2npoints+1, n, T)
 	g_sensitivity = zeros(2npoints+1, length(emissions_rates), T);
@@ -817,6 +847,7 @@ begin
 		d_crt[cons_time][node] = d_dyn[cons_time][node] * (1+i*ε)
 		opf_ = DynamicPowerManagementProblem(crt_net, d_dyn)
 		solve!(opf_, OPT, verbose=false)
+		@show opf_.problem.status
 
 		for t in 1:T
 			s_sensitivity[i+npoints+1, :, t] = evaluate(opf_.s[t])
@@ -824,10 +855,11 @@ begin
 			E_sensitivity[i+npoints+1, :, t] = evaluate(opf_.g[t]).*emissions_rates
 		end
 	end
+	end
 end
 
 # ╔═╡ 77943ac8-36fe-4a13-a36d-db957780d869
-begin
+begin #E_ref is the total emissions at a given time
 	E_ref = zeros(T)
 	
 	for t in 1:T
@@ -836,8 +868,26 @@ begin
 
 end
 
+# ╔═╡ 4fd2833c-6c23-4009-8734-980d3dd08c91
+md"""
+What is the value of emissions when there is no perturbation? 
+"""
+
 # ╔═╡ 6fcd6e19-58c3-462d-964f-8cd3127b47a4
 sum(E_sensitivity[npoints+1, :, em_times], dims=1)
+
+# ╔═╡ 2973af52-0bd0-4ba8-855d-297427627e22
+E_ref[em_times]
+
+# ╔═╡ c8dfd0d3-b41a-49fd-a9f5-ceff119732d3
+md"""
+----
+"""
+
+# ╔═╡ 4de25614-0fef-4b2d-adc4-066f2a7431e5
+md"""
+*The below text is from before -- it seems that the code now results in the same solution? tb confirmed*
+"""
 
 # ╔═╡ 5c3117b3-7555-4366-9b43-bdba592a0877
 md"""
@@ -850,65 +900,62 @@ md"""
 I have the feeling that the code does not result always in the same solution. One test I did was to run computation cells several times in a row and realized that I did not get the same emissions. 
 """
 
-# ╔═╡ 2973af52-0bd0-4ba8-855d-297427627e22
-E_ref[em_times]
-
 # ╔═╡ 0c066c4c-2e9f-4bd6-b1de-5c61becf9ddd
 md"""
 I have currently ignored the mismatch between `E_sensitivity` and `E_ref` because I thought it's not that big of a deal. 
 """
 
-# ╔═╡ 921cb430-ff44-4206-b5f0-60e2ef2a573a
-begin
-plot(
-	[1-i*ε for i in -npoints:npoints], 
-	E_sensitivity./repeat(E_sensitivity[npoints+1, :]', 2npoints+1, 1), 
-	label=em_times', linestyle=[:solid :solid :dash], linewidth=3
-)
-	xlabel!("Relative demand change")
-	ylabel!("Relative total emissions")
-	title!("Consumption time=$cons_time")
-end
+# ╔═╡ 4335ec41-0125-4cf1-9d90-b45429683032
+md"""
+----
+"""
 
 # ╔═╡ b85b85d0-e1bc-4fc9-81cf-3792b55e3684
 @bind t_display Slider(1:1:T)
 
 # ╔═╡ 506e9360-2c25-4ea7-830b-68b4a6bf9026
-t_display
+md"""
+Emissions time: $t_display
+"""
 
 # ╔═╡ d5db1b45-0c94-4c15-81ce-abb4ede4ad87
-begin
-	plot(
+let
+	γ = 1e-5
+	ylims = (.99, 1.01)
+	plt_s = plot(
 		[1-i*ε for i in -npoints:npoints], 
-		[s_sensitivity[:, k, t_display]/(s_sensitivity[npoints+1, k, t_display]+1e-8) for k in 1:n], ylim=(.95, 1.05)
+		[s_sensitivity[:, k, t_display]/(s_sensitivity[npoints+1, k, t_display]+γ) for k in 1:n], ylim=ylims
 	)
 	title!("Storage at time $t_display")
 	xlabel!("Change in demand at node $node at time $cons_time")
 	ylabel!("Change in storage at all nodes at time $t_display")
-
-end
-
-# ╔═╡ db1ae6bb-3923-4f7f-896e-0e42985ef380
-begin
-	plot(
+	
+	plt_E = plot(
 		[1-i*ε for i in -npoints:npoints], 
-		[E_sensitivity[:, k, t_display]./(E_sensitivity[npoints+1, k, t_display]+1e-6) for k in 1:length(emissions_rates)], ylim=(.95, 1.05)
+		[E_sensitivity[:, k, t_display]./(E_sensitivity[npoints+1, k, t_display]+γ) for k in 1:length(emissions_rates)], ylim=ylims
 		)
 	title!("Emissions at time $t_display")
 	xlabel!("Change in demand at node $node at time $cons_time")
 	ylabel!("Change in emissions at all generators at time $t_display")
-end
-
-# ╔═╡ 2fbb3f97-42ae-4f58-887e-4b9a76c9cb49
-begin
-	plot(
+	
+	plt_g = plot(
 		[1-i*ε for i in -npoints:npoints], 
-		[g_sensitivity[:, k, t_display]./(g_sensitivity[npoints+1, k, t_display]+1e-8) for k in 1:length(emissions_rates)], ylim=(.99, 1.01)
+		[g_sensitivity[:, k, t_display]./(g_sensitivity[npoints+1, k, t_display]+γ) for k in 1:length(emissions_rates)], ylim=ylims
 		)
 	title!("Generators at time $t_display")
 	xlabel!("Change in demand at node $node at time $cons_time")
 	ylabel!("Change in generation at all generators at time $t_display")
+	
+	plot([plt_s, plt_E, plt_g]..., size = (650, 650))
+
 end
+
+# ╔═╡ 3c56b287-7b49-4e6c-876a-c9727fc51ecd
+md"""
+*TODO*: analyze batteries: 
+- see which line capacities are binding
+- conducting the same analysis as what you told anthony
+"""
 
 # ╔═╡ 9374abf1-78e4-4e60-875f-115cae7e7144
 @show mefs_crt
@@ -1035,6 +1082,7 @@ end
 # ╟─6186798f-6711-4222-94bb-f53b2d0fad7d
 # ╟─d27ef0d8-70b2-4897-9000-8fa70b1862fc
 # ╟─6fc320b1-b60d-4f49-89ab-bf029ead6b55
+# ╟─1da34733-fee3-42e1-b5e0-cac3f5f196c9
 # ╠═f7e0d09c-40bf-4936-987a-a3bcadae5487
 # ╠═52c889e4-753c-447c-a9e1-862750b3643f
 # ╟─edabacdd-8d25-4d64-9d4a-ecf1263ac02e
@@ -1044,12 +1092,16 @@ end
 # ╠═ac6479c1-0cd9-4164-98e2-7081033f83e6
 # ╟─b5d3320e-0033-46b5-9aec-02b120a96cdc
 # ╠═f9ef362a-91c5-46ee-b4cb-1567b88f4dd7
+# ╟─5921be3d-43ff-4611-b324-a39eda5dc685
+# ╟─1677d82a-71cf-49e2-85df-53821d3a21a3
+# ╟─85a3ff2e-5fae-4c30-a4ca-1225622134e6
 # ╠═4fb2a0e8-db61-4602-a01c-cfa7aeac6afc
 # ╠═62a605bc-26f8-43ac-8b66-ea9bf75b75c3
 # ╠═9c9d0fbc-58b8-440b-87ba-8cbf4dfaf71c
 # ╠═68f34570-6774-4232-b24c-bb634ec7d3a3
 # ╟─39be43d5-c14a-4340-8941-762cf873bb1b
 # ╠═88bf19ff-1635-4453-a611-a45775724c70
+# ╠═1c4afaaa-68fa-4db9-9db3-2dcb712f5bda
 # ╟─0b9523aa-665f-4cb3-b985-b0d122a02a12
 # ╟─3817ef32-586d-48fb-8f9b-ab4a9be7dbef
 # ╟─732cf0bc-24e7-44cd-a208-524a83706fdf
@@ -1063,19 +1115,23 @@ end
 # ╠═0113ed6f-a39f-4167-a3c3-429bedbed7b0
 # ╠═0eac1f8d-2671-431c-84cc-a97225bb3120
 # ╠═87aa4097-62c5-439a-b5af-88a4cb5eb697
+# ╠═c9b41436-e0a0-4e57-908f-b45e42122e63
+# ╠═110f3329-c847-47f1-8427-ee959adc8745
 # ╠═91f7d63c-9e30-4fd4-ab39-9fbf58d101dc
 # ╠═77943ac8-36fe-4a13-a36d-db957780d869
+# ╟─4fd2833c-6c23-4009-8734-980d3dd08c91
 # ╠═6fcd6e19-58c3-462d-964f-8cd3127b47a4
+# ╠═2973af52-0bd0-4ba8-855d-297427627e22
+# ╟─c8dfd0d3-b41a-49fd-a9f5-ceff119732d3
+# ╟─4de25614-0fef-4b2d-adc4-066f2a7431e5
 # ╟─5c3117b3-7555-4366-9b43-bdba592a0877
 # ╟─af7f4492-4e97-4879-b151-2d8e38bf04d9
-# ╠═2973af52-0bd0-4ba8-855d-297427627e22
 # ╟─0c066c4c-2e9f-4bd6-b1de-5c61becf9ddd
-# ╠═921cb430-ff44-4206-b5f0-60e2ef2a573a
-# ╟─b85b85d0-e1bc-4fc9-81cf-3792b55e3684
+# ╟─4335ec41-0125-4cf1-9d90-b45429683032
 # ╟─506e9360-2c25-4ea7-830b-68b4a6bf9026
-# ╠═d5db1b45-0c94-4c15-81ce-abb4ede4ad87
-# ╠═db1ae6bb-3923-4f7f-896e-0e42985ef380
-# ╠═2fbb3f97-42ae-4f58-887e-4b9a76c9cb49
+# ╟─b85b85d0-e1bc-4fc9-81cf-3792b55e3684
+# ╟─d5db1b45-0c94-4c15-81ce-abb4ede4ad87
+# ╠═3c56b287-7b49-4e6c-876a-c9727fc51ecd
 # ╠═1a7af4e0-2608-422c-bafe-d200f30bc4f3
 # ╠═9374abf1-78e4-4e60-875f-115cae7e7144
 # ╠═366d6ff5-4759-4f5d-8bd3-9a93a8f4eb9e
