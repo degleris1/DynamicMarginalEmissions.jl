@@ -36,6 +36,8 @@ md"""
 ## Questions
 - Why do the results barely change when I change the selection for `node`? Probably because the power flow constraints are not tight - can we make some of them tight? 
 - Why do batteries SOC barely change when I increase `spen` even to 100%?
+
+- What is the impact of having `cq = 0`, really? Is that important? How does that change the condition number of the jacobian? can it be reliable inverted?
 """
 
 # ╔═╡ f94d2b5b-779a-4de0-9753-c077bc925fa1
@@ -64,7 +66,7 @@ begin
 		m_, _ = size(B)
 		β = rand(Uniform(0, 1), m_)
 		F = make_pfdf_matrix(A, β)
-		net = PowerNetwork(cq[1], cl[1], pmax[1], gmax[1], A, B, F)
+		net = PowerNetwork(rand(Uniform(0, 1), l_), cl[1], pmax[1], gmax[1], A, B, F)
 	else
 		net, _, _ = load_synthetic_network("case14.m");
 	end
@@ -164,6 +166,12 @@ Put the storage in a single location: $node_storage.
 If 0, then all the nodes are taken. 
 """
 
+# ╔═╡ f87196a3-f963-4077-bda2-5ec05c095542
+cq
+
+# ╔═╡ 0d4c5872-9d00-47a0-a345-07a415a7d12d
+cl
+
 # ╔═╡ 6726672d-ab82-4364-bcea-bec33034bdac
 begin
 	
@@ -184,7 +192,7 @@ begin
 
 	net_dyn = make_dynamic(net, T, P, C, η);
 
-	# Construct and solve OPF problem|
+	# Construct and solve OPF problem
 	opf_dyn = DynamicPowerManagementProblem(net_dyn, d_dyn)
 	solve!(opf_dyn, OPT, verbose=false)
 
@@ -299,10 +307,10 @@ begin
 	for node_ in 1:n
 		crt_map = results[node_, :, :]
 		subplt = heatmap(crt_map, 
-		c=:tab20, colorbar=false,
+		c=:bluesreds, colorbar=false,
 		# xlabel="Consumption Time",
 		title="node=$node_",
-		xticks=nothing, yticks=nothing,
+		# xticks=nothing, yticks=nothing,
 		clim=clims,
 	)
 		# plot!(ylabel="Emissions Time")
@@ -457,15 +465,15 @@ let
 end
 
 # ╔═╡ Cell order:
-# ╟─58ebe2b7-ea23-41fd-9cca-a3e02fdb4012
+# ╠═58ebe2b7-ea23-41fd-9cca-a3e02fdb4012
 # ╟─2498bfac-3108-11ec-2b8b-7fb26f96afbb
 # ╟─6a260a4f-9f96-464b-b101-1127e6ec48fe
 # ╟─f94d2b5b-779a-4de0-9753-c077bc925fa1
 # ╟─1be301f4-31fe-44e9-895a-49bb1eec512f
 # ╠═6b706efa-3343-4b9a-bd2f-1bf263707836
 # ╠═7d4a1f79-2a2f-4179-bdb6-ea394b7ca5fb
-# ╠═5aef540d-719e-4212-9e2d-40c75cb685a7
-# ╟─fb3e2e73-8b0b-43ba-a102-39ad9599941f
+# ╟─5aef540d-719e-4212-9e2d-40c75cb685a7
+# ╠═fb3e2e73-8b0b-43ba-a102-39ad9599941f
 # ╟─058f7c12-d237-4130-aeb2-99279953d3f8
 # ╟─0b806e4a-73a9-48f1-993c-875d0c9a01c3
 # ╟─f8072762-643c-485d-86d7-caf5a54c7d1e
@@ -484,7 +492,9 @@ end
 # ╟─377a4e9e-8d8c-4a76-9965-8df0a21dcf9c
 # ╟─c058136b-e536-41be-8c7a-28a8c51f3b22
 # ╟─141ec2da-8ab0-4fa4-91ea-01d88dbf5c42
-# ╟─6726672d-ab82-4364-bcea-bec33034bdac
+# ╠═f87196a3-f963-4077-bda2-5ec05c095542
+# ╠═0d4c5872-9d00-47a0-a345-07a415a7d12d
+# ╠═6726672d-ab82-4364-bcea-bec33034bdac
 # ╟─488db7c4-a048-47bd-b2bf-430d7f5664ae
 # ╟─f59c420b-a1fe-4847-8115-a33166be54aa
 # ╟─2b8ccbdc-bbbe-4a0a-a71b-52fad873bc70
@@ -497,7 +507,7 @@ end
 # ╟─a133a850-22a8-4f3f-a2df-07c56735fbe3
 # ╟─5bd2052c-8f4b-4969-8864-8906ece79df5
 # ╠═c62e4fe2-2971-4479-af09-11b5467b2fee
-# ╟─2aa296d4-7f47-4585-8a01-c70e9dddd2ac
+# ╠═2aa296d4-7f47-4585-8a01-c70e9dddd2ac
 # ╟─9f8ef7ba-8e3d-4ac8-bb7f-44be3dee822d
 # ╟─2892cc44-a2a6-4e36-b9fc-a2d5e4e564bc
 # ╟─0ed86b74-66e6-428e-84cc-5afe96e49060
