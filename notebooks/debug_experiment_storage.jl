@@ -57,6 +57,9 @@ theme(:default, label=nothing,
 # ╔═╡ 5aef540d-719e-4212-9e2d-40c75cb685a7
 LOAD_RANDOM_GRAPH = true
 
+# ╔═╡ 06070be9-fae4-41b1-bdd3-066f7e785439
+QUAD_COSTS = true
+
 # ╔═╡ fb3e2e73-8b0b-43ba-a102-39ad9599941f
 begin
 	if LOAD_RANDOM_GRAPH
@@ -66,12 +69,19 @@ begin
 		m_, _ = size(B)
 		β = rand(Uniform(0, 1), m_)
 		F = make_pfdf_matrix(A, β)
-		net = PowerNetwork(rand(Uniform(0, 1), l_), cl[1], pmax[1], gmax[1], A, B, F)
+		
+		if ~ QUAD_COSTS
+			cq = [zeros(l_)]
+		end
+		net = PowerNetwork(cq[1], cl[1], pmax[1], gmax[1], A, B, F)
 	else
 		net, _, _ = load_synthetic_network("case14.m");
 	end
 	
 end;
+
+# ╔═╡ 4aaf967a-2c29-49c4-80f0-4d3311b8c1ff
+net.fq
 
 # ╔═╡ 0b806e4a-73a9-48f1-993c-875d0c9a01c3
 pmax_ref = net.pmax;
@@ -128,7 +138,7 @@ md"""node = $node"""
 
 # ╔═╡ c9a5eeec-389b-4dbf-9c57-3ddd7ebff264
 begin
-α_max = 10
+α_max = 20
 step = .1
 αs = 1:step:α_max;
 end;
@@ -166,18 +176,13 @@ Put the storage in a single location: $node_storage.
 If 0, then all the nodes are taken. 
 """
 
-# ╔═╡ f87196a3-f963-4077-bda2-5ec05c095542
-cq
-
-# ╔═╡ 0d4c5872-9d00-47a0-a345-07a415a7d12d
-cl
-
 # ╔═╡ 6726672d-ab82-4364-bcea-bec33034bdac
 begin
 	
-	results = zeros(
+	mefs = zeros(
 			n, T, length(mef_times)
 		)
+	println("Solving problem with parameters:")
 	println("s = $spen, η = $η, α=$α")
 	
 	# Construct dynamic network
@@ -196,13 +201,15 @@ begin
 	opf_dyn = DynamicPowerManagementProblem(net_dyn, d_dyn)
 	solve!(opf_dyn, OPT, verbose=false)
 
-	@show opf_dyn.problem.status
+	if opf_dyn.problem.status != Convex.MOI.OPTIMAL
+		@show opf_dyn.problem.status
+	end
 
 	# Compute MEFs
-	mefs = compute_mefs(opf_dyn, net_dyn, d_dyn, emissions_rates)
+	mefs_ = compute_mefs(opf_dyn, net_dyn, d_dyn, emissions_rates)
 
 	for ind_t in 1:T
-		results[:, :, ind_t] .= mefs[ind_t];
+		mefs[:, :, ind_t] .= mefs_[ind_t];
 	end
 	
 	opf_dyn.problem.status
@@ -264,10 +271,10 @@ let
 	push!(subplts, g_s_plt)
 	
 	
-	crt_results = results[node, :, :]
-	lim = max(abs(maximum(crt_results)), abs(minimum(crt_results)));
+	crt_mefs = mefs[node, :, :]
+	lim = max(abs(maximum(crt_mefs)), abs(minimum(crt_mefs)));
 	clims = (-lim, lim)
-	subplt = heatmap(crt_results, 
+	subplt = heatmap(crt_mefs, 
 		c=:balance, colorbar=true,
 		xlabel="Consumption Time",
 		title="$(100*spen)% storage, η=$η", 
@@ -302,10 +309,10 @@ md""" node = $node"""
 begin
 	
 	subplts_nodes = []
-	lim = max(abs(minimum(results)), abs(maximum(results)));
+	lim = max(abs(minimum(mefs)), abs(maximum(mefs)));
 	clims = (-lim, lim)
 	for node_ in 1:n
-		crt_map = results[node_, :, :]
+		crt_map = mefs[node_, :, :]
 		subplt = heatmap(crt_map, 
 		c=:bluesreds, colorbar=false,
 		# xlabel="Consumption Time",
@@ -345,10 +352,7 @@ end;
 @bind cons_time Slider(1:1:T)
 
 # ╔═╡ c6d3c265-d3e9-4f4e-b5e7-23a3762beb49
-results[node, :, cons_time]
-
-# ╔═╡ 853ba46f-7f3d-4f3a-b7c7-6e6cd8ea0b68
-sum(results[node, :, cons_time])
+mefs[node, :, cons_time]
 
 # ╔═╡ c1f12b9d-60fe-4c10-b74b-a63dfd965577
 md"""Cons time = $cons_time"""
@@ -372,7 +376,9 @@ begin
 		d_crt[cons_time][node] = ref_val * (1+i*ε)
 		opf_ = DynamicPowerManagementProblem(net_dyn, d_crt)
 		solve!(opf_, OPT, verbose=false)
-		@show opf_.problem.status
+		if opf_.problem.status != Convex.MOI.OPTIMAL
+			@show opf_.problem.status
+		end
 
 		for t in 1:T
 			s_sensitivity[i+npoints+1, :, t] = evaluate(opf_.s[t])
@@ -429,7 +435,14 @@ let
 	xlabel!("Change in demand at node $node at time $cons_time")
 	ylabel!("Change in total emissions")
 	
-	plot([plt_s, plt_E, plt_g, plt_E_tot]..., size = (650, 650))
+	#adding the theoretical curve for the sensitivity
+	E_th = (
+		sum(E_sensitivity[npoints+1, :, t_display]) .+ [ref_val * i * ε for i in -npoints:npoints] .* sum(mefs[node, t_display, cons_time])
+		)./sum(E_sensitivity[npoints+1, :, t_display])
+	plot!([1+i*ε for i in -npoints:npoints], E_th, ls=:dash)
+	title!("Total emissions at time $t_display")
+	
+	plot([plt_s, plt_E, plt_g, plt_E_tot]..., size = (650, 650), lw = 3)
 
 end
 
@@ -451,21 +464,21 @@ let
 	foo = :Paired_12
 	plt1 = plot()
 	for node in 1:n
-		plot!([sum(results[node, _t, :]) for _t in 1:T], palette=foo)
+		plot!([sum(mefs[node, _t, :]) for _t in 1:T], palette=foo)
 	end
 	plot!()
 	#bar([crt_map = results[node, _t, _t]' for node in 1:n])
 	
 	plt2 = plot()
 	for node in 1:n
-			plot!(results[node, c_t, :])
+			plot!(mefs[node, c_t, :])
 	end
 
 	plot([plt1, plt2]...)
 end
 
 # ╔═╡ Cell order:
-# ╠═58ebe2b7-ea23-41fd-9cca-a3e02fdb4012
+# ╟─58ebe2b7-ea23-41fd-9cca-a3e02fdb4012
 # ╟─2498bfac-3108-11ec-2b8b-7fb26f96afbb
 # ╟─6a260a4f-9f96-464b-b101-1127e6ec48fe
 # ╟─f94d2b5b-779a-4de0-9753-c077bc925fa1
@@ -473,7 +486,9 @@ end
 # ╠═6b706efa-3343-4b9a-bd2f-1bf263707836
 # ╠═7d4a1f79-2a2f-4179-bdb6-ea394b7ca5fb
 # ╟─5aef540d-719e-4212-9e2d-40c75cb685a7
+# ╠═06070be9-fae4-41b1-bdd3-066f7e785439
 # ╠═fb3e2e73-8b0b-43ba-a102-39ad9599941f
+# ╠═4aaf967a-2c29-49c4-80f0-4d3311b8c1ff
 # ╟─058f7c12-d237-4130-aeb2-99279953d3f8
 # ╟─0b806e4a-73a9-48f1-993c-875d0c9a01c3
 # ╟─f8072762-643c-485d-86d7-caf5a54c7d1e
@@ -492,23 +507,20 @@ end
 # ╟─377a4e9e-8d8c-4a76-9965-8df0a21dcf9c
 # ╟─c058136b-e536-41be-8c7a-28a8c51f3b22
 # ╟─141ec2da-8ab0-4fa4-91ea-01d88dbf5c42
-# ╠═f87196a3-f963-4077-bda2-5ec05c095542
-# ╠═0d4c5872-9d00-47a0-a345-07a415a7d12d
-# ╠═6726672d-ab82-4364-bcea-bec33034bdac
+# ╟─6726672d-ab82-4364-bcea-bec33034bdac
 # ╟─488db7c4-a048-47bd-b2bf-430d7f5664ae
 # ╟─f59c420b-a1fe-4847-8115-a33166be54aa
 # ╟─2b8ccbdc-bbbe-4a0a-a71b-52fad873bc70
 # ╠═c6d3c265-d3e9-4f4e-b5e7-23a3762beb49
-# ╠═853ba46f-7f3d-4f3a-b7c7-6e6cd8ea0b68
 # ╟─79eb4f29-1457-41b4-96c3-9bfbe7a54208
 # ╟─bdd10c3a-5b1f-4f63-860c-268b9c4f035d
 # ╟─c1f12b9d-60fe-4c10-b74b-a63dfd965577
 # ╟─124bc7c3-bb3b-4b36-bb7e-4f3f52b7de58
 # ╟─a133a850-22a8-4f3f-a2df-07c56735fbe3
 # ╟─5bd2052c-8f4b-4969-8864-8906ece79df5
-# ╠═c62e4fe2-2971-4479-af09-11b5467b2fee
-# ╠═2aa296d4-7f47-4585-8a01-c70e9dddd2ac
+# ╟─c62e4fe2-2971-4479-af09-11b5467b2fee
+# ╟─2aa296d4-7f47-4585-8a01-c70e9dddd2ac
 # ╟─9f8ef7ba-8e3d-4ac8-bb7f-44be3dee822d
 # ╟─2892cc44-a2a6-4e36-b9fc-a2d5e4e564bc
 # ╟─0ed86b74-66e6-428e-84cc-5afe96e49060
-# ╟─1132387c-80b1-416d-b167-909be1e3e3ab
+# ╠═1132387c-80b1-416d-b167-909be1e3e3ab

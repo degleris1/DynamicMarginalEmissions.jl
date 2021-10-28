@@ -35,6 +35,11 @@ function sensitivity_demand_dyn(P::PowerManagementProblem, net::DynamicPowerNetw
 
     v = ∂K_xT \ ∇C
 
+    # Checking inversion of the Jacobian
+    cond_n = cond(Array(∂K_xT))
+    println("Condition number = $cond_n")
+
+
     ∇C_θ = []
     for t in 1:T
         _, ∂K_θT = Zygote.forward_jacobian(
@@ -209,7 +214,13 @@ function compute_jacobian_kkt_future_ramp(dims, n, l)
     return [spzeros(dims, 9n) dKdλl dKdλu spzeros(dims, n)]
 end
 
-
+###################################################################################
+#
+# Below contains functions for automated testing of the sensitivity
+#
+# TODO: update, and make sure they work
+#
+####################################################################################
 
 """
     compute_obj_sensitivity(P::PowerManagementProblem, net::DynamicPowerNetwork, d, t)

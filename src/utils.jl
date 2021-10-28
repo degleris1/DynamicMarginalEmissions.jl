@@ -28,7 +28,7 @@ function generate_random_data(n, l, T)
     end
 
     # Generate carbon costs
-    cq = zeros(l)
+    cq = rand(Exponential(2), l)
     cl = rand(Exponential(2), l)
 
     # Generate demands
