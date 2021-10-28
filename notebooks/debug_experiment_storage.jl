@@ -31,15 +31,6 @@ begin
 	using CarbonNetworks
 end
 
-# ╔═╡ 58ebe2b7-ea23-41fd-9cca-a3e02fdb4012
-md"""
-## Questions
-- Why do the results barely change when I change the selection for `node`? Probably because the power flow constraints are not tight - can we make some of them tight? 
-- Why do batteries SOC barely change when I increase `spen` even to 100%?
-
-- What is the impact of having `cq = 0`, really? Is that important? How does that change the condition number of the jacobian? can it be reliable inverted?
-"""
-
 # ╔═╡ f94d2b5b-779a-4de0-9753-c077bc925fa1
 begin
 	ECOS_OPT = () -> ECOS.Optimizer(verbose=false)
@@ -58,7 +49,10 @@ theme(:default, label=nothing,
 LOAD_RANDOM_GRAPH = true
 
 # ╔═╡ 06070be9-fae4-41b1-bdd3-066f7e785439
-QUAD_COSTS = true
+QUAD_COSTS = false
+
+# ╔═╡ 538bf950-6a1f-431a-b4ea-aefcf833bded
+DIFFERENT_LINEAR_COSTS = true
 
 # ╔═╡ fb3e2e73-8b0b-43ba-a102-39ad9599941f
 begin
@@ -79,9 +73,6 @@ begin
 	end
 	
 end;
-
-# ╔═╡ 4aaf967a-2c29-49c4-80f0-4d3311b8c1ff
-net.fq
 
 # ╔═╡ 0b806e4a-73a9-48f1-993c-875d0c9a01c3
 pmax_ref = net.pmax;
@@ -196,6 +187,9 @@ begin
 	net.pmax = pmax_mat[:, αi];
 
 	net_dyn = make_dynamic(net, T, P, C, η);
+	if DIFFERENT_LINEAR_COSTS
+		net_dyn.fl = [rand(Exponential(2), l) .* net_dyn.fl[1] for _ in 1:T]
+	end
 
 	# Construct and solve OPF problem
 	opf_dyn = DynamicPowerManagementProblem(net_dyn, d_dyn)
@@ -478,7 +472,6 @@ let
 end
 
 # ╔═╡ Cell order:
-# ╟─58ebe2b7-ea23-41fd-9cca-a3e02fdb4012
 # ╟─2498bfac-3108-11ec-2b8b-7fb26f96afbb
 # ╟─6a260a4f-9f96-464b-b101-1127e6ec48fe
 # ╟─f94d2b5b-779a-4de0-9753-c077bc925fa1
@@ -487,8 +480,8 @@ end
 # ╠═7d4a1f79-2a2f-4179-bdb6-ea394b7ca5fb
 # ╟─5aef540d-719e-4212-9e2d-40c75cb685a7
 # ╠═06070be9-fae4-41b1-bdd3-066f7e785439
-# ╠═fb3e2e73-8b0b-43ba-a102-39ad9599941f
-# ╠═4aaf967a-2c29-49c4-80f0-4d3311b8c1ff
+# ╠═538bf950-6a1f-431a-b4ea-aefcf833bded
+# ╟─fb3e2e73-8b0b-43ba-a102-39ad9599941f
 # ╟─058f7c12-d237-4130-aeb2-99279953d3f8
 # ╟─0b806e4a-73a9-48f1-993c-875d0c9a01c3
 # ╟─f8072762-643c-485d-86d7-caf5a54c7d1e
@@ -523,4 +516,4 @@ end
 # ╟─9f8ef7ba-8e3d-4ac8-bb7f-44be3dee822d
 # ╟─2892cc44-a2a6-4e36-b9fc-a2d5e4e564bc
 # ╟─0ed86b74-66e6-428e-84cc-5afe96e49060
-# ╠═1132387c-80b1-416d-b167-909be1e3e3ab
+# ╟─1132387c-80b1-416d-b167-909be1e3e3ab
