@@ -36,8 +36,8 @@ function sensitivity_demand_dyn(P::PowerManagementProblem, net::DynamicPowerNetw
     v = ∂K_xT \ ∇C
 
     # Checking inversion of the Jacobian
-    cond_n = cond(Array(∂K_xT))
-    println("Condition number = $cond_n")
+    # cond_n = cond(Array(∂K_xT))
+    # println("Condition number = $cond_n")
 
 
     ∇C_θ = []
