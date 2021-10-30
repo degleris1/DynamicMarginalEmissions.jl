@@ -31,6 +31,15 @@ begin
 	using CarbonNetworks
 end
 
+# ╔═╡ fc7f1535-18ae-4f76-ae99-06839728360f
+using LightGraphs, SimpleWeightedGraphs, GraphPlot
+
+# ╔═╡ efc01f26-6b99-4a70-b34b-b022fb0d6f5b
+md"""
+## TODO
+- Conduct the battery placement analysis? i.e. depending on where you place the battery you have the emergence of squares depending on where it is? (i.e. close nodes should be more sensitive to the presence of the battery?)
+"""
+
 # ╔═╡ f94d2b5b-779a-4de0-9753-c077bc925fa1
 begin
 	ECOS_OPT = () -> ECOS.Optimizer(verbose=false)
@@ -49,16 +58,16 @@ theme(:default, label=nothing,
 LOAD_RANDOM_GRAPH = true
 
 # ╔═╡ 06070be9-fae4-41b1-bdd3-066f7e785439
-QUAD_COSTS = false
+QUAD_COSTS = true
 
 # ╔═╡ 538bf950-6a1f-431a-b4ea-aefcf833bded
-DIFFERENT_LINEAR_COSTS = true
+DIFFERENT_LINEAR_COSTS = false
 
 # ╔═╡ fb3e2e73-8b0b-43ba-a102-39ad9599941f
 begin
 	if LOAD_RANDOM_GRAPH
-		n_ = 4
-		l_ = 4
+		n_ = 6
+		l_ = 10
 		A, B, cq, cl, _, gmax, pmax, _, _ = generate_random_data(n_, l_, 1)
 		m_, _ = size(B)
 		β = rand(Uniform(0, 1), m_)
@@ -82,7 +91,6 @@ n, m, l = get_problem_dims(net);
 
 # ╔═╡ 058f7c12-d237-4130-aeb2-99279953d3f8
 begin
-	using LightGraphs, SimpleWeightedGraphs, GraphPlot
 	Random.seed!(5)
 	
 	G = SimpleWeightedGraph(n)
@@ -107,8 +115,11 @@ mef_times = 1:1:T;
 # ╔═╡ 65b961b0-cc87-450e-bedb-43c5f38aafc5
 md"""T = $T"""
 
+# ╔═╡ 4a0c8a47-4aea-41ef-8a45-e2ea5789721f
+spens = 0:0.1:3;
+
 # ╔═╡ b77196c7-987d-4175-9508-88c11cedbc3c
-@bind spen Slider(0:0.1:3)
+@bind spen Slider(spens)
 
 # ╔═╡ 2085073b-4770-4815-9e38-c36b850ab8d4
 md"""
@@ -129,7 +140,7 @@ md"""node = $node"""
 
 # ╔═╡ c9a5eeec-389b-4dbf-9c57-3ddd7ebff264
 begin
-α_max = 20
+α_max = 30
 step = .1
 αs = 1:step:α_max;
 end;
@@ -440,6 +451,108 @@ let
 
 end
 
+# ╔═╡ d2e380ba-6b1a-4602-ab87-b4926eaa8125
+md"""
+## Evolution of mefs as a function of storage penetration
+"""
+
+# ╔═╡ ca0e5b0a-f6c4-492d-9f44-e903e256e4d3
+md"""Cons time = $cons_time"""
+
+# ╔═╡ 20f0a35f-3aec-4b72-8ee2-eaca1e98dac0
+md"""Em time = $t_display"""
+
+# ╔═╡ 75197a33-b583-4a5e-bc2f-20e091ad0200
+md"""Node = $node"""
+
+# ╔═╡ 76a36e77-bbcd-42ad-a3f7-5a1b45d1a767
+RUN_CELL_STORAGE = true
+
+# ╔═╡ 4587a3ba-f478-4ae9-ba2a-15ea8755fa75
+mefs_spens = zeros(n, length(mef_times), T, length(spens));
+
+# ╔═╡ e034f565-9926-491b-b7b0-a09bf873f0b2
+let
+	if RUN_CELL_STORAGE
+		
+		println("Running cell Storage")
+
+		for k in 1:length(spens)
+			C = sum(d_dyn) .* (spens[k] + δ)/T
+			if node_storage >= 1
+				nodes_on = zeros(n)
+				nodes_on[node_storage] = 1
+				C = C.* nodes_on
+			end
+			P = 100*C 
+			net.pmax = pmax_mat[:, αi];
+
+
+			net_dyn = make_dynamic(net, T, P, C, η);
+
+
+			# Construct and solve OPF problem
+			opf_dyn = DynamicPowerManagementProblem(net_dyn, d_dyn)
+			solve!(opf_dyn, OPT, verbose=false)
+
+			if opf_dyn.problem.status != Convex.MOI.OPTIMAL
+				@show opf_dyn.problem.status
+			end
+
+			# Compute MEFs
+			mefs_ = compute_mefs(opf_dyn, net_dyn, d_dyn, emissions_rates)
+
+			for ind_t in 1:T
+				mefs_spens[:, :, ind_t, k] .= mefs_[ind_t];
+			end
+		end
+	end
+end
+
+# ╔═╡ 6bfe841c-2f05-4e30-9edb-2181b64c92c1
+begin
+	
+	plot()
+	for t in mef_times
+		plot!(spens, [mefs_spens[node, cons_time, t, k] for k in 1:length(spens)], lw=3, ls=:dash, markershape=:circle)
+	end
+	plot!()
+	xlabel!("Storage pen")
+	ylabel!("MEFs")
+	title!("MEFs as a function of storage pen for constime = $cons_time")
+end
+
+# ╔═╡ a873fab5-d047-4670-8136-b7dbe9363a19
+md"""Above plot seems to show that at a given consumption time, the mefs converge"""
+
+# ╔═╡ f889110b-add4-4a71-b951-6cfd8879c030
+md"""
+How about total mefs? 
+"""
+
+# ╔═╡ 22330790-1627-4555-b4cd-0f554c000385
+let
+	plot()
+	for ct in 1:T # looping over consumption times
+		plot!(
+			spens, 
+			[sum(mefs_spens[node, ct, :, k]) for k in 1:length(spens)], 
+			lw=3, ls=:dash, markershape=:circle
+			)
+	end
+	plot!()
+	xlabel!("Storage Pen")
+	ylabel!("Total mef")
+	title!("Total MEF as a function of storage pen for node $node")
+end
+
+# ╔═╡ 3114e5b2-c969-4bb6-99e8-432690a7152b
+mefs_spens[node, :, cons_time, end]
+
+
+# ╔═╡ c5a9c260-f51c-439e-8d40-806444c6e243
+mefs[node, :, cons_time]
+
 # ╔═╡ 9f8ef7ba-8e3d-4ac8-bb7f-44be3dee822d
 md"""
 ---
@@ -472,6 +585,8 @@ let
 end
 
 # ╔═╡ Cell order:
+# ╠═efc01f26-6b99-4a70-b34b-b022fb0d6f5b
+# ╠═fc7f1535-18ae-4f76-ae99-06839728360f
 # ╟─2498bfac-3108-11ec-2b8b-7fb26f96afbb
 # ╟─6a260a4f-9f96-464b-b101-1127e6ec48fe
 # ╟─f94d2b5b-779a-4de0-9753-c077bc925fa1
@@ -481,14 +596,15 @@ end
 # ╟─5aef540d-719e-4212-9e2d-40c75cb685a7
 # ╠═06070be9-fae4-41b1-bdd3-066f7e785439
 # ╠═538bf950-6a1f-431a-b4ea-aefcf833bded
-# ╟─fb3e2e73-8b0b-43ba-a102-39ad9599941f
-# ╟─058f7c12-d237-4130-aeb2-99279953d3f8
+# ╠═fb3e2e73-8b0b-43ba-a102-39ad9599941f
+# ╠═058f7c12-d237-4130-aeb2-99279953d3f8
 # ╟─0b806e4a-73a9-48f1-993c-875d0c9a01c3
 # ╟─f8072762-643c-485d-86d7-caf5a54c7d1e
 # ╟─65b961b0-cc87-450e-bedb-43c5f38aafc5
 # ╟─73dac19a-3663-4f25-ac96-24e3a9997d3e
 # ╟─2085073b-4770-4815-9e38-c36b850ab8d4
-# ╟─b77196c7-987d-4175-9508-88c11cedbc3c
+# ╠═4a0c8a47-4aea-41ef-8a45-e2ea5789721f
+# ╠═b77196c7-987d-4175-9508-88c11cedbc3c
 # ╟─69e3a691-b3a7-49c8-b178-01c82d9fa30f
 # ╟─01ec04b7-e317-43b9-86b8-8a7e9ecbcdea
 # ╟─c418c302-2bd5-40c5-aca6-e0302372903a
@@ -499,20 +615,33 @@ end
 # ╟─6198b321-6573-4100-8166-6048c5fa2980
 # ╟─377a4e9e-8d8c-4a76-9965-8df0a21dcf9c
 # ╟─c058136b-e536-41be-8c7a-28a8c51f3b22
-# ╠═141ec2da-8ab0-4fa4-91ea-01d88dbf5c42
-# ╠═6726672d-ab82-4364-bcea-bec33034bdac
+# ╟─141ec2da-8ab0-4fa4-91ea-01d88dbf5c42
+# ╟─6726672d-ab82-4364-bcea-bec33034bdac
 # ╟─488db7c4-a048-47bd-b2bf-430d7f5664ae
 # ╟─f59c420b-a1fe-4847-8115-a33166be54aa
 # ╟─2b8ccbdc-bbbe-4a0a-a71b-52fad873bc70
 # ╠═c6d3c265-d3e9-4f4e-b5e7-23a3762beb49
-# ╠═79eb4f29-1457-41b4-96c3-9bfbe7a54208
+# ╟─79eb4f29-1457-41b4-96c3-9bfbe7a54208
 # ╟─bdd10c3a-5b1f-4f63-860c-268b9c4f035d
-# ╠═c1f12b9d-60fe-4c10-b74b-a63dfd965577
-# ╠═124bc7c3-bb3b-4b36-bb7e-4f3f52b7de58
-# ╠═a133a850-22a8-4f3f-a2df-07c56735fbe3
+# ╟─c1f12b9d-60fe-4c10-b74b-a63dfd965577
+# ╟─124bc7c3-bb3b-4b36-bb7e-4f3f52b7de58
+# ╟─a133a850-22a8-4f3f-a2df-07c56735fbe3
 # ╟─5bd2052c-8f4b-4969-8864-8906ece79df5
 # ╟─c62e4fe2-2971-4479-af09-11b5467b2fee
-# ╠═2aa296d4-7f47-4585-8a01-c70e9dddd2ac
+# ╟─2aa296d4-7f47-4585-8a01-c70e9dddd2ac
+# ╟─d2e380ba-6b1a-4602-ab87-b4926eaa8125
+# ╟─ca0e5b0a-f6c4-492d-9f44-e903e256e4d3
+# ╟─20f0a35f-3aec-4b72-8ee2-eaca1e98dac0
+# ╟─75197a33-b583-4a5e-bc2f-20e091ad0200
+# ╟─76a36e77-bbcd-42ad-a3f7-5a1b45d1a767
+# ╠═4587a3ba-f478-4ae9-ba2a-15ea8755fa75
+# ╟─e034f565-9926-491b-b7b0-a09bf873f0b2
+# ╟─6bfe841c-2f05-4e30-9edb-2181b64c92c1
+# ╟─a873fab5-d047-4670-8136-b7dbe9363a19
+# ╟─f889110b-add4-4a71-b951-6cfd8879c030
+# ╟─22330790-1627-4555-b4cd-0f554c000385
+# ╠═3114e5b2-c969-4bb6-99e8-432690a7152b
+# ╠═c5a9c260-f51c-439e-8d40-806444c6e243
 # ╟─9f8ef7ba-8e3d-4ac8-bb7f-44be3dee822d
 # ╟─2892cc44-a2a6-4e36-b9fc-a2d5e4e564bc
 # ╟─0ed86b74-66e6-428e-84cc-5afe96e49060

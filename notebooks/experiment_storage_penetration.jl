@@ -135,7 +135,7 @@ begin
 		add_edge!(G, inds[1], inds[2], net.pmax[j])
 	end
 	
-	plt = gplot(G)
+	plt = gplot(G, nodelabel=1:n)
 	plt
 end
 
@@ -175,11 +175,6 @@ begin
 	savefig(plt_time_series, "../img/storage_penetration_time_series.png")
 	plt_time_series
 end
-
-# ╔═╡ abb35cb1-2a01-4702-a083-2033a979bdb0
-md"""
-UPDATE renewable penetration!!!
-"""
 
 # ╔═╡ c82ef027-740a-49b1-93d2-1554c411a896
 renewable_penetration = 0.0 #0.25
@@ -623,17 +618,6 @@ begin
 	plt_dynamic_mef
 end
 
-# ╔═╡ c76f2ebe-ce41-47fd-b31a-2851aca53567
-
-
-# ╔═╡ 3ad37f2d-7cd9-4e80-8af8-db38498c1790
-md"""
-TODO: there is a plot to do which is an evolution of MEFs as the storage increases, but :
-- one is the total MEF as above
-- the other is per emission time. 
-- And basically they all merge to a single value I think
-"""
-
 # ╔═╡ 1da34733-fee3-42e1-b5e0-cac3f5f196c9
 @bind node_matrix Slider(1:1:n)
 
@@ -764,6 +748,21 @@ md"""
 # ╔═╡ 3c5edbc5-8fc7-4d09-98a9-85f2efb699a8
 node = node_matrix
 
+# ╔═╡ c76f2ebe-ce41-47fd-b31a-2851aca53567
+let
+	plot()
+	for ct in 1:T
+		plot!(
+			storage_penetrations, 
+			[sum(results[idx_η][node, ct, :, j]) for j in 1:length(storage_penetrations)], 
+			lw=3, ls=:dash, markershape=:circle
+			)
+	end
+	plot!()
+	xlabel!("storage penetration")
+	ylabel!("Total MEF")
+end
+
 # ╔═╡ 67ad2564-fb20-4a71-a084-0145e8ed24bc
 @bind cons_time Slider(1:1:T)
 
@@ -771,13 +770,16 @@ node = node_matrix
 let
 	plot()
 	for t in 1:T
-		plot!(storage_penetrations, [results[idx_η][node, cons_time, t, j] for j in 1:length(storage_penetrations)], lw=3)
+		plot!(storage_penetrations, [results[idx_η][node, cons_time, t, j] for j in 1:length(storage_penetrations)], lw=3, ls=:dash, markershape=:circle)
 	end
 	plot!(size=(500, 500))
 	xlabel!("storage penetration")
 	ylabel!("MEF")
 	title!("MEF at node $node_matrix and consumption time $cons_time for different emsissions times")
 end
+
+# ╔═╡ c7deae02-3dad-4335-9449-a7e8f8bd5b4f
+cons_time
 
 # ╔═╡ b1f2aba6-5b6b-443c-84ab-21c4d2017a07
 md"""Cons time = $cons_time"""
@@ -917,6 +919,9 @@ md"""
 # ╔═╡ b85b85d0-e1bc-4fc9-81cf-3792b55e3684
 @bind t_display Slider(1:1:T)
 
+# ╔═╡ b674af27-307b-4dbb-8a75-a54bde1f123d
+t_display
+
 # ╔═╡ 506e9360-2c25-4ea7-830b-68b4a6bf9026
 md"""
 Emissions time: $t_display|
@@ -978,13 +983,6 @@ end
 
 # ╔═╡ 12fff501-301f-4f81-ae01-7f4e79001cac
 perturb_vals.-ref_val
-
-# ╔═╡ 3c56b287-7b49-4e6c-876a-c9727fc51ecd
-md"""
-*TODO*: analyze batteries: 
-- see which line capacities are binding
-- conducting the same analysis as what you told anthony
-"""
 
 # ╔═╡ 9374abf1-78e4-4e60-875f-115cae7e7144
 @show mefs_crt
@@ -1051,7 +1049,7 @@ end
 # ╟─9bd515d4-c7aa-4a3d-a4fb-28686290a134
 # ╟─75dfaefd-abec-47e2-acc3-c0ff3a01048e
 # ╟─f999d732-14b3-4ac5-b803-3df7a96ef898
-# ╟─23690382-3d30-46e3-b26a-a30875be78ec
+# ╠═23690382-3d30-46e3-b26a-a30875be78ec
 # ╠═39cdac4b-87bb-441c-99e3-402b40bef7d3
 # ╟─1bd72281-4a7f-44f4-974d-632e9d0aaf28
 # ╠═0c786da1-7f44-40af-b6d6-e0d6db2242b2
@@ -1059,7 +1057,6 @@ end
 # ╠═cfcba5ad-e516-4223-860e-b1f18a6449ba
 # ╟─34d4bd62-6be2-4089-8caa-1a8715bee433
 # ╠═b7476391-30b9-4817-babf-7c9078531ee7
-# ╟─abb35cb1-2a01-4702-a083-2033a979bdb0
 # ╠═c82ef027-740a-49b1-93d2-1554c411a896
 # ╠═0239e1da-caf5-4593-af1b-5d1e8d2f2b3e
 # ╠═9e5a1672-d452-42f5-ba5a-a2fa0b1eaada
@@ -1106,13 +1103,14 @@ end
 # ╟─c6ee857d-8019-4c4f-bb07-a370a88ea3cf
 # ╠═6186798f-6711-4222-94bb-f53b2d0fad7d
 # ╟─d27ef0d8-70b2-4897-9000-8fa70b1862fc
-# ╠═25063860-6109-46e7-9dd5-a7fc0c12159e
-# ╠═c76f2ebe-ce41-47fd-b31a-2851aca53567
-# ╠═3ad37f2d-7cd9-4e80-8af8-db38498c1790
+# ╟─25063860-6109-46e7-9dd5-a7fc0c12159e
+# ╟─c76f2ebe-ce41-47fd-b31a-2851aca53567
 # ╟─6fc320b1-b60d-4f49-89ab-bf029ead6b55
 # ╟─1da34733-fee3-42e1-b5e0-cac3f5f196c9
 # ╟─32cd894b-ee5d-44b7-8983-82a4b72524a8
-# ╠═f7e0d09c-40bf-4936-987a-a3bcadae5487
+# ╠═c7deae02-3dad-4335-9449-a7e8f8bd5b4f
+# ╠═b674af27-307b-4dbb-8a75-a54bde1f123d
+# ╟─f7e0d09c-40bf-4936-987a-a3bcadae5487
 # ╠═52c889e4-753c-447c-a9e1-862750b3643f
 # ╟─edabacdd-8d25-4d64-9d4a-ecf1263ac02e
 # ╟─ee233685-474b-4162-bfef-5f3bdbe03c73
@@ -1150,9 +1148,8 @@ end
 # ╟─4335ec41-0125-4cf1-9d90-b45429683032
 # ╟─506e9360-2c25-4ea7-830b-68b4a6bf9026
 # ╟─b85b85d0-e1bc-4fc9-81cf-3792b55e3684
-# ╠═30511293-8ba5-486e-956b-e9f2a1ed0505
+# ╟─30511293-8ba5-486e-956b-e9f2a1ed0505
 # ╠═12fff501-301f-4f81-ae01-7f4e79001cac
-# ╠═3c56b287-7b49-4e6c-876a-c9727fc51ecd
 # ╠═1a7af4e0-2608-422c-bafe-d200f30bc4f3
 # ╠═9374abf1-78e4-4e60-875f-115cae7e7144
 # ╠═366d6ff5-4759-4f5d-8bd3-9a93a8f4eb9e
