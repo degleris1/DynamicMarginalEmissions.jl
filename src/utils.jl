@@ -14,7 +14,15 @@ function generate_random_data(n, l, T)
     Random.seed!(2)
 
     # Make graph
+    if n > 3
     G = watts_strogatz(n, 3, 0.3)
+    else
+        G = Graph(3)
+        add_edge!(G, 1, 2)
+        add_edge!(G, 1, 3)
+        add_edge!(G, 2, 3)
+    end
+
 
     # Convert to incidence matrix
     A = incidence_matrix(G, oriented=true)

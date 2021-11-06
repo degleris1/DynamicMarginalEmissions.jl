@@ -38,6 +38,35 @@ using LightGraphs, SimpleWeightedGraphs, GraphPlot
 md"""
 ## TODO
 - Conduct the battery placement analysis? i.e. depending on where you place the battery you have the emergence of squares depending on where it is? (i.e. close nodes should be more sensitive to the presence of the battery?)
+
+- *make sure* that the orders in which you query the `mef` matrix is correct (cons time vs t_display etc.)
+
+- Introduce larger discrepancies in the line capacities, right now it's a uniform scaling
+
+- Introduce renewable generation and locational storage and see how the system evolves with that...
+
+- look at curtailment of renewables
+
+- look at congestion
+
+- revisit how the total demand is sized
+
+- they say the problem is solved to optimality, but we see non empty batteries at the last timestep...?
+
+- why does storage location update every time? 
+
+- if you add some transmission cost, how do the mefs scale with distance? 
+
+- change the way in which line capacity limits are set, because it seems to be too strong a parameter for now... and for small networks you can probably change them independently
+
+- add transmission costs?
+"""
+
+# ╔═╡ 221dbb8b-f5c0-4631-8c4d-39d59f9c9932
+md"""
+## !!!! IF DEMAND IS ZERO YOU HAVE TO ADAPT HOW YOU CALCULATE SENSITIVITY!!!
+
+you implemented chagnes in the main notebook that you did not even translate
 """
 
 # ╔═╡ f94d2b5b-779a-4de0-9753-c077bc925fa1
@@ -63,11 +92,39 @@ QUAD_COSTS = true
 # ╔═╡ 538bf950-6a1f-431a-b4ea-aefcf833bded
 DIFFERENT_LINEAR_COSTS = false
 
+# ╔═╡ db4f89b9-0ffc-41d9-a46e-1eb0b6fb6f83
+# Define the properties of the network
+begin
+	n_ = 3
+	l_ = 3
+end;
+
+# ╔═╡ 141ec2da-8ab0-4fa4-91ea-01d88dbf5c42
+# @bind node_storage Slider(0:n)
+
+# ╔═╡ 365ed8da-0f55-4d98-a570-6bc68f328cc2
+begin
+node_storage = 2
+node_renewable = 1
+node_demand = 3
+end;
+
+# ╔═╡ c058136b-e536-41be-8c7a-28a8c51f3b22
+md"""
+Put the storage in a single location: $node_storage. 
+
+If 0, then all the nodes have storage. 
+"""
+
+# ╔═╡ 05405ddb-7046-400b-9ae6-4899f37de6a3
+@bind percent_renewable Slider(0:0.1:1)
+
+# ╔═╡ a2932123-66a5-4d29-a794-3026d8984aff
+md"""Percent of total generation capacity provided by renewable: $(100*percent_renewable) %"""
+
 # ╔═╡ fb3e2e73-8b0b-43ba-a102-39ad9599941f
 begin
 	if LOAD_RANDOM_GRAPH
-		n_ = 6
-		l_ = 10
 		A, B, cq, cl, _, gmax, pmax, _, _ = generate_random_data(n_, l_, 1)
 		m_, _ = size(B)
 		β = rand(Uniform(0, 1), m_)
@@ -76,9 +133,24 @@ begin
 		if ~ QUAD_COSTS
 			cq = [zeros(l_)]
 		end
+		
+		if node_renewable > 0
+			cq[1][node_renewable] = 0
+			cl[1][node_renewable] = 0
+			gmax[1][node_renewable]  = percent_renewable/(1-percent_renewable) * (
+				sum([gmax[1][k] for k in 1:l_]) - gmax[1][node_renewable]
+			)
+		end
+		
 		net = PowerNetwork(cq[1], cl[1], pmax[1], gmax[1], A, B, F)
 	else
 		net, _, _ = load_synthetic_network("case14.m");
+	end
+	
+	emissions_rates = rand(Exponential(1), l_)
+	
+	if node_renewable > 0
+		emissions_rates[node_renewable] = 0
 	end
 	
 end;
@@ -148,6 +220,13 @@ end;
 # ╔═╡ c35434eb-c850-4650-870e-b4b719ff1a9b
 @bind αi Slider(1:1:length(αs))
 
+# ╔═╡ 76e07e5e-8022-40e6-84aa-84bb050c7545
+begin
+	p1 = 5.
+	p2 = 5
+	p3 = 30.0
+end;
+
 # ╔═╡ 6198b321-6573-4100-8166-6048c5fa2980
 α = αs[αi];
 
@@ -155,28 +234,38 @@ end;
 md"""α = $α"""
 
 # ╔═╡ 377a4e9e-8d8c-4a76-9965-8df0a21dcf9c
+# TODO : revisit how the demand is sized
+# TODO: revisit how the power line constraints are set, too
+
 begin
 	pmax_mat = zeros(m, length(αs));
 	for i in 1:length(αs)
 		pmax_mat[:, i] = αs[i]*ones(m);
 	end
 	d_dyn = [rand(Bernoulli(0.8), n) .* rand(Exponential(2), n) for _ in 1:T];
-	for i in 1:T
-		d_dyn[i] = d_dyn[i]/sum(d_dyn[i]) * (0.75 * sum(net.gmax)) * rand(Uniform(0, 1));
+	if node_demand > 0
+		d_dyn = [zeros(n) for _ in 1:T];
+		for t in 1:T
+			d_dyn[t][node_demand] = rand(Exponential(2));
+		end
 	end
-	emissions_rates = rand(Exponential(1), l)
+	for i in 1:T
+		if node_renewable > 0
+			d_dyn[i] = d_dyn[i]/sum(d_dyn[i]) * (
+					sum(net.gmax) - net.gmax[node_renewable]) * rand(Uniform(.3, .9)
+					);
+		else
+			d_dyn[i] = d_dyn[i]/sum(d_dyn[i]) * (
+					sum(net.gmax)) * rand(Uniform(.3, .9)
+					);
+		end
+	end
+
 	
 end;
 
-# ╔═╡ 141ec2da-8ab0-4fa4-91ea-01d88dbf5c42
-@bind node_storage Slider(0:n)
-
-# ╔═╡ c058136b-e536-41be-8c7a-28a8c51f3b22
-md"""
-Put the storage in a single location: $node_storage. 
-
-If 0, then all the nodes are taken. 
-"""
+# ╔═╡ cadc304e-24d3-4aa7-8858-24255effaa13
+d_dyn
 
 # ╔═╡ 6726672d-ab82-4364-bcea-bec33034bdac
 begin
@@ -185,7 +274,7 @@ begin
 			n, T, length(mef_times)
 		)
 	println("Solving problem with parameters:")
-	println("s = $spen, η = $η, α=$α")
+	println("s = $spen, η = $η, α=$α, renewable_pc = $(100*percent_renewable)%")
 	
 	# Construct dynamic network
 	C = sum(d_dyn) .* (spen + δ)/T
@@ -195,7 +284,8 @@ begin
 		C = C.* nodes_on
 	end
 	P = 100*C 
-	net.pmax = pmax_mat[:, αi];
+	# net.pmax = pmax_mat[:, αi];
+	net.pmax = [p1, p2, p3];
 
 	net_dyn = make_dynamic(net, T, P, C, η);
 	if DIFFERENT_LINEAR_COSTS
@@ -291,16 +381,17 @@ let
 	# plot!(colorbar=true)
 	push!(subplts, subplt)
 	
+	
 	lay = @layout [Plots.grid(1, 3); Plots.grid(1, 2)]
 	
-	plt_emissions_heatmap = plot(subplts..., 
+	plots = plot(subplts..., 
 		layout=lay
 		# size=(650, 200), 
 		# bottom_margin=8Plots.pt
 	)
 
 	
-	plt_emissions_heatmap
+	plots
 	
 	
 	
@@ -319,7 +410,7 @@ begin
 	for node_ in 1:n
 		crt_map = mefs[node_, :, :]
 		subplt = heatmap(crt_map, 
-		c=:bluesreds, colorbar=false,
+		c=:balance, colorbar=false,
 		# xlabel="Consumption Time",
 		title="node=$node_",
 		# xticks=nothing, yticks=nothing,
@@ -450,6 +541,48 @@ let
 	plot([plt_s, plt_E, plt_g, plt_E_tot]..., size = (650, 650), lw = 3)
 
 end
+
+# ╔═╡ 4a43aedb-b17e-459b-aadb-86528d1bb7c4
+md"""Visualizing total mefs"""
+
+# ╔═╡ 96a33baa-9cb2-446c-a850-076ccf503735
+let
+bar_plt = bar([mefs[k, t_display, cons_time] for k in 1:n])
+xlabel!("node")
+ylabel!("nodal mefs at time $t_display")
+	
+bar_plt2 = bar([sum(mefs[k, :, cons_time]) for k in 1:n])
+xlabel!("node")
+ylabel!("total nodal mefs")
+	
+plot(bar_plt, bar_plt2)
+
+end
+
+# ╔═╡ 2061e505-62b3-4e50-b91d-2852fcfc24ad
+md"""
+Is there renewable curtailment? As in -- can they not use all the renewable generation because of congestion? 
+"""
+
+# ╔═╡ 438f18ea-5a4c-4916-91c2-9be5f2e8fcc1
+let
+	if node_renewable > 0
+		plt1 = plot(g_vals[node_renewable, :], ylim=(0, 1.1))
+		xlabel!("Time")
+		ylabel!("Generation of renewable")
+		title!("Relative")
+
+		plt2 = plot(g_vals[node_renewable, :] * net.gmax[node_renewable])
+		xlabel!("Time")
+		ylabel!("Generation of renewable")
+		title!("Absolute")
+		
+		plot(plt1, plt2)
+	end
+end
+
+# ╔═╡ 9d98607d-d6a8-48ba-996b-aab22be9b3a9
+net.gmax
 
 # ╔═╡ d2e380ba-6b1a-4602-ab87-b4926eaa8125
 md"""
@@ -586,37 +719,44 @@ end
 
 # ╔═╡ Cell order:
 # ╠═efc01f26-6b99-4a70-b34b-b022fb0d6f5b
+# ╠═221dbb8b-f5c0-4631-8c4d-39d59f9c9932
 # ╠═fc7f1535-18ae-4f76-ae99-06839728360f
-# ╟─2498bfac-3108-11ec-2b8b-7fb26f96afbb
-# ╟─6a260a4f-9f96-464b-b101-1127e6ec48fe
-# ╟─f94d2b5b-779a-4de0-9753-c077bc925fa1
-# ╟─1be301f4-31fe-44e9-895a-49bb1eec512f
+# ╠═2498bfac-3108-11ec-2b8b-7fb26f96afbb
+# ╠═6a260a4f-9f96-464b-b101-1127e6ec48fe
+# ╠═f94d2b5b-779a-4de0-9753-c077bc925fa1
+# ╠═1be301f4-31fe-44e9-895a-49bb1eec512f
 # ╠═6b706efa-3343-4b9a-bd2f-1bf263707836
 # ╠═7d4a1f79-2a2f-4179-bdb6-ea394b7ca5fb
 # ╟─5aef540d-719e-4212-9e2d-40c75cb685a7
 # ╠═06070be9-fae4-41b1-bdd3-066f7e785439
 # ╠═538bf950-6a1f-431a-b4ea-aefcf833bded
+# ╠═db4f89b9-0ffc-41d9-a46e-1eb0b6fb6f83
+# ╟─c058136b-e536-41be-8c7a-28a8c51f3b22
+# ╠═141ec2da-8ab0-4fa4-91ea-01d88dbf5c42
+# ╠═365ed8da-0f55-4d98-a570-6bc68f328cc2
+# ╟─a2932123-66a5-4d29-a794-3026d8984aff
+# ╟─05405ddb-7046-400b-9ae6-4899f37de6a3
+# ╠═cadc304e-24d3-4aa7-8858-24255effaa13
 # ╠═fb3e2e73-8b0b-43ba-a102-39ad9599941f
 # ╠═058f7c12-d237-4130-aeb2-99279953d3f8
-# ╟─0b806e4a-73a9-48f1-993c-875d0c9a01c3
-# ╟─f8072762-643c-485d-86d7-caf5a54c7d1e
-# ╟─65b961b0-cc87-450e-bedb-43c5f38aafc5
-# ╟─73dac19a-3663-4f25-ac96-24e3a9997d3e
-# ╟─2085073b-4770-4815-9e38-c36b850ab8d4
+# ╠═0b806e4a-73a9-48f1-993c-875d0c9a01c3
+# ╠═f8072762-643c-485d-86d7-caf5a54c7d1e
+# ╠═65b961b0-cc87-450e-bedb-43c5f38aafc5
+# ╠═73dac19a-3663-4f25-ac96-24e3a9997d3e
 # ╠═4a0c8a47-4aea-41ef-8a45-e2ea5789721f
+# ╠═2085073b-4770-4815-9e38-c36b850ab8d4
 # ╠═b77196c7-987d-4175-9508-88c11cedbc3c
-# ╟─69e3a691-b3a7-49c8-b178-01c82d9fa30f
-# ╟─01ec04b7-e317-43b9-86b8-8a7e9ecbcdea
-# ╟─c418c302-2bd5-40c5-aca6-e0302372903a
-# ╟─971d508d-c862-44ac-a0a4-a2fd9aa9156b
-# ╟─c9a5eeec-389b-4dbf-9c57-3ddd7ebff264
-# ╟─5c07c744-639b-4f56-af9a-a4b2366864bb
-# ╟─c35434eb-c850-4650-870e-b4b719ff1a9b
-# ╟─6198b321-6573-4100-8166-6048c5fa2980
-# ╟─377a4e9e-8d8c-4a76-9965-8df0a21dcf9c
-# ╟─c058136b-e536-41be-8c7a-28a8c51f3b22
-# ╟─141ec2da-8ab0-4fa4-91ea-01d88dbf5c42
-# ╟─6726672d-ab82-4364-bcea-bec33034bdac
+# ╠═69e3a691-b3a7-49c8-b178-01c82d9fa30f
+# ╠═01ec04b7-e317-43b9-86b8-8a7e9ecbcdea
+# ╠═c418c302-2bd5-40c5-aca6-e0302372903a
+# ╠═971d508d-c862-44ac-a0a4-a2fd9aa9156b
+# ╠═c9a5eeec-389b-4dbf-9c57-3ddd7ebff264
+# ╠═5c07c744-639b-4f56-af9a-a4b2366864bb
+# ╠═c35434eb-c850-4650-870e-b4b719ff1a9b
+# ╠═76e07e5e-8022-40e6-84aa-84bb050c7545
+# ╠═6198b321-6573-4100-8166-6048c5fa2980
+# ╠═377a4e9e-8d8c-4a76-9965-8df0a21dcf9c
+# ╠═6726672d-ab82-4364-bcea-bec33034bdac
 # ╟─488db7c4-a048-47bd-b2bf-430d7f5664ae
 # ╟─f59c420b-a1fe-4847-8115-a33166be54aa
 # ╟─2b8ccbdc-bbbe-4a0a-a71b-52fad873bc70
@@ -629,6 +769,11 @@ end
 # ╟─5bd2052c-8f4b-4969-8864-8906ece79df5
 # ╟─c62e4fe2-2971-4479-af09-11b5467b2fee
 # ╟─2aa296d4-7f47-4585-8a01-c70e9dddd2ac
+# ╟─4a43aedb-b17e-459b-aadb-86528d1bb7c4
+# ╟─96a33baa-9cb2-446c-a850-076ccf503735
+# ╟─2061e505-62b3-4e50-b91d-2852fcfc24ad
+# ╠═438f18ea-5a4c-4916-91c2-9be5f2e8fcc1
+# ╠═9d98607d-d6a8-48ba-996b-aab22be9b3a9
 # ╟─d2e380ba-6b1a-4602-ab87-b4926eaa8125
 # ╟─ca0e5b0a-f6c4-492d-9f44-e903e256e4d3
 # ╟─20f0a35f-3aec-4b72-8ee2-eaca1e98dac0

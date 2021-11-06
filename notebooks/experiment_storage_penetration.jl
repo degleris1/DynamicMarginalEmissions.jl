@@ -807,7 +807,7 @@ The cell below perturbs demand at a given time and then we will plot the differe
 """
 
 # ╔═╡ 110f3329-c847-47f1-8427-ee959adc8745
-RUN_CELL_SENSITIVITY = true
+RUN_CELL_SENSITIVITY = false
 
 # ╔═╡ 91f7d63c-9e30-4fd4-ab39-9fbf58d101dc
 begin
@@ -1048,7 +1048,7 @@ end
 # ╠═856a78d9-7b4c-453b-b73b-c81eee014e52
 # ╟─9bd515d4-c7aa-4a3d-a4fb-28686290a134
 # ╟─75dfaefd-abec-47e2-acc3-c0ff3a01048e
-# ╟─f999d732-14b3-4ac5-b803-3df7a96ef898
+# ╠═f999d732-14b3-4ac5-b803-3df7a96ef898
 # ╠═23690382-3d30-46e3-b26a-a30875be78ec
 # ╠═39cdac4b-87bb-441c-99e3-402b40bef7d3
 # ╟─1bd72281-4a7f-44f4-974d-632e9d0aaf28
@@ -1146,9 +1146,9 @@ end
 # ╟─af7f4492-4e97-4879-b151-2d8e38bf04d9
 # ╟─0c066c4c-2e9f-4bd6-b1de-5c61becf9ddd
 # ╟─4335ec41-0125-4cf1-9d90-b45429683032
-# ╟─506e9360-2c25-4ea7-830b-68b4a6bf9026
-# ╟─b85b85d0-e1bc-4fc9-81cf-3792b55e3684
-# ╟─30511293-8ba5-486e-956b-e9f2a1ed0505
+# ╠═506e9360-2c25-4ea7-830b-68b4a6bf9026
+# ╠═b85b85d0-e1bc-4fc9-81cf-3792b55e3684
+# ╠═30511293-8ba5-486e-956b-e9f2a1ed0505
 # ╠═12fff501-301f-4f81-ae01-7f4e79001cac
 # ╠═1a7af4e0-2608-422c-bafe-d200f30bc4f3
 # ╠═9374abf1-78e4-4e60-875f-115cae7e7144
