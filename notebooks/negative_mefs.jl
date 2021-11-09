@@ -174,9 +174,6 @@ begin
 	# n: number of nodes in the graph
 	# l: number of generators (= length(emissions_rates))
 	# T: the time horizon
-	E_sensitivity = zeros(2npoints+1, length(emissions_rates), T);
-	s_sensitivity = zeros(2npoints+1, n, T)
-	g_sensitivity = zeros(2npoints+1, l, T);
 
 	ref_val = deepcopy(d[cons_time][node])
 	if ref_val > 0 
@@ -189,6 +186,11 @@ begin
 			x_axis_vals = perturb_vals
 			idx_ref = 1
 	end
+	
+	L = length(perturb_vals)
+	E_sensitivity = zeros(L, length(emissions_rates), T);
+	s_sensitivity = zeros(L, n, T)
+	g_sensitivity = zeros(L, l, T);
 	
 	for i in -npoints:npoints
 		d_crt = deepcopy(d)

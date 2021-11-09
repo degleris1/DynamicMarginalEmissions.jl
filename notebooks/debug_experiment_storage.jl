@@ -62,13 +62,6 @@ md"""
 - add transmission costs?
 """
 
-# ╔═╡ 221dbb8b-f5c0-4631-8c4d-39d59f9c9932
-md"""
-## !!!! IF DEMAND IS ZERO YOU HAVE TO ADAPT HOW YOU CALCULATE SENSITIVITY!!!
-
-you implemented chagnes in the main notebook that you did not even translate
-"""
-
 # ╔═╡ f94d2b5b-779a-4de0-9753-c077bc925fa1
 begin
 	ECOS_OPT = () -> ECOS.Optimizer(verbose=false)
@@ -99,14 +92,11 @@ begin
 	l_ = 3
 end;
 
-# ╔═╡ 141ec2da-8ab0-4fa4-91ea-01d88dbf5c42
-# @bind node_storage Slider(0:n)
-
 # ╔═╡ 365ed8da-0f55-4d98-a570-6bc68f328cc2
 begin
-node_storage = 2
-node_renewable = 1
-node_demand = 3
+node_storage = 2 # node that has storage. if 0, all nodes do.
+node_renewable = 1 # node that has renewable generation. if 0 all nodes do
+node_demand = 0 # node that has the demand. if 0 all nodes do
 end;
 
 # ╔═╡ c058136b-e536-41be-8c7a-28a8c51f3b22
@@ -155,6 +145,12 @@ begin
 	
 end;
 
+# ╔═╡ 75be5683-85a8-45c3-925c-7a53dbf9ae7d
+net.gmax
+
+# ╔═╡ ca2263db-d63a-4f26-9643-0aefa77b4d7c
+emissions_rates
+
 # ╔═╡ 0b806e4a-73a9-48f1-993c-875d0c9a01c3
 pmax_ref = net.pmax;
 
@@ -199,19 +195,10 @@ spen = $spen
 """
 
 # ╔═╡ 01ec04b7-e317-43b9-86b8-8a7e9ecbcdea
-@bind η Slider(0.8:0.05:1.0)
-
-# ╔═╡ 69e3a691-b3a7-49c8-b178-01c82d9fa30f
-md"""η = $η"""
-
-# ╔═╡ 971d508d-c862-44ac-a0a4-a2fd9aa9156b
-@bind node Slider(1:1:n)
-
-# ╔═╡ c418c302-2bd5-40c5-aca6-e0302372903a
-md"""node = $node"""
+η = 1
 
 # ╔═╡ c9a5eeec-389b-4dbf-9c57-3ddd7ebff264
-begin
+begin #alphas are currently not used
 α_max = 30
 step = .1
 αs = 1:step:α_max;
@@ -222,9 +209,9 @@ end;
 
 # ╔═╡ 76e07e5e-8022-40e6-84aa-84bb050c7545
 begin
-	p1 = 5.
-	p2 = 5
-	p3 = 30.0
+	p1 = 500
+	p2 = 500
+	p3 = 1
 end;
 
 # ╔═╡ 6198b321-6573-4100-8166-6048c5fa2980
@@ -242,6 +229,7 @@ begin
 	for i in 1:length(αs)
 		pmax_mat[:, i] = αs[i]*ones(m);
 	end
+	
 	d_dyn = [rand(Bernoulli(0.8), n) .* rand(Exponential(2), n) for _ in 1:T];
 	if node_demand > 0
 		d_dyn = [zeros(n) for _ in 1:T];
@@ -252,11 +240,11 @@ begin
 	for i in 1:T
 		if node_renewable > 0
 			d_dyn[i] = d_dyn[i]/sum(d_dyn[i]) * (
-					sum(net.gmax) - net.gmax[node_renewable]) * rand(Uniform(.3, .9)
+					sum(net.gmax) - net.gmax[node_renewable]) * rand(Uniform(.5, 1.)
 					);
 		else
 			d_dyn[i] = d_dyn[i]/sum(d_dyn[i]) * (
-					sum(net.gmax)) * rand(Uniform(.3, .9)
+					sum(net.gmax)) * rand(Uniform(.5, 1.)
 					);
 		end
 	end
@@ -323,6 +311,66 @@ begin
 		d_vals[:, t] = d_dyn[t]
 	end
 end
+
+# ╔═╡ 79eb4f29-1457-41b4-96c3-9bfbe7a54208
+begin
+	
+	subplts_nodes = []
+	lim = max(abs(minimum(mefs)), abs(maximum(mefs)));
+	clims = (-lim, lim)
+	for node_ in 1:n
+		crt_map = mefs[node_, :, :]
+		subplt = heatmap(crt_map, 
+		c=:balance, colorbar=false,
+		# xlabel="Consumption Time",
+		title="node=$node_",
+		# xticks=nothing, yticks=nothing,
+		clim=clims,
+	)
+		# plot!(ylabel="Emissions Time")
+	plot!(colorbar=true)
+	push!(subplts_nodes, subplt)
+	end
+	
+	
+	
+	plt_emissions_heatmap_nodes = plot(subplts_nodes..., 
+		# layout=Plots.grid(5, 3, widths=[.29, 0.29, 0.42]), 
+		# size=(650, 200), 
+		# bottom_margin=8Plots.pt
+	)
+
+	
+	plt_emissions_heatmap_nodes
+	
+	
+	
+	
+end
+
+# ╔═╡ bdd10c3a-5b1f-4f63-860c-268b9c4f035d
+begin
+	npoints = 20
+	ε = 1e-3
+	em_times = 1:1:T
+end;
+
+# ╔═╡ 124bc7c3-bb3b-4b36-bb7e-4f3f52b7de58
+@bind cons_time Slider(1:1:T)
+
+# ╔═╡ c1f12b9d-60fe-4c10-b74b-a63dfd965577
+md"""Cons time = $cons_time"""
+
+# ╔═╡ c62e4fe2-2971-4479-af09-11b5467b2fee
+@bind t_display Slider(1:1:T)
+
+# ╔═╡ 5bd2052c-8f4b-4969-8864-8906ece79df5
+md"""
+Emissions time: $t_display
+"""
+
+# ╔═╡ 971d508d-c862-44ac-a0a4-a2fd9aa9156b
+@bind node Slider(1:1:n)
 
 # ╔═╡ 488db7c4-a048-47bd-b2bf-430d7f5664ae
 let
@@ -401,59 +449,10 @@ end
 # ╔═╡ 2b8ccbdc-bbbe-4a0a-a71b-52fad873bc70
 md""" node = $node"""
 
-# ╔═╡ 79eb4f29-1457-41b4-96c3-9bfbe7a54208
-begin
-	
-	subplts_nodes = []
-	lim = max(abs(minimum(mefs)), abs(maximum(mefs)));
-	clims = (-lim, lim)
-	for node_ in 1:n
-		crt_map = mefs[node_, :, :]
-		subplt = heatmap(crt_map, 
-		c=:balance, colorbar=false,
-		# xlabel="Consumption Time",
-		title="node=$node_",
-		# xticks=nothing, yticks=nothing,
-		clim=clims,
-	)
-		# plot!(ylabel="Emissions Time")
-	plot!(colorbar=true)
-	push!(subplts_nodes, subplt)
-	end
-	
-	
-	
-	plt_emissions_heatmap_nodes = plot(subplts_nodes..., 
-		# layout=Plots.grid(5, 3, widths=[.29, 0.29, 0.42]), 
-		# size=(650, 200), 
-		# bottom_margin=8Plots.pt
-	)
-
-	
-	plt_emissions_heatmap_nodes
-	
-	
-	
-	
-end
-
-# ╔═╡ bdd10c3a-5b1f-4f63-860c-268b9c4f035d
-begin
-	npoints = 20
-	ε = 1e-3
-	em_times = 1:1:T
-end;
-
-# ╔═╡ 124bc7c3-bb3b-4b36-bb7e-4f3f52b7de58
-@bind cons_time Slider(1:1:T)
-
 # ╔═╡ c6d3c265-d3e9-4f4e-b5e7-23a3762beb49
 mefs[node, :, cons_time]
 
-# ╔═╡ c1f12b9d-60fe-4c10-b74b-a63dfd965577
-md"""Cons time = $cons_time"""
-
-# ╔═╡ a133a850-22a8-4f3f-a2df-07c56735fbe3
+# ╔═╡ c9e229f9-8ce6-4cd4-a0d7-4f53f2ced8ec
 begin
 	println("Running sensitivity analysis")
 	# size of the matrices are
@@ -461,15 +460,28 @@ begin
 	# n: number of nodes in the graph
 	# l: number of generators (= length(emissions_rates))
 	# T: the time horizon
-	E_sensitivity = zeros(2npoints+1, length(emissions_rates), T);
-	s_sensitivity = zeros(2npoints+1, n, T)
-	g_sensitivity = zeros(2npoints+1, l, T);
-	# println("initial value of the demand:")
-	# println(d_dyn[cons_time][node])
+
 	ref_val = deepcopy(d_dyn[cons_time][node])
-	for i in -npoints:npoints
+	if ref_val > 0 
+			perturb_vals = [ref_val * (1+i*ε) for i in -npoints:npoints]
+			x_axis_vals = [1+i*ε for i in -npoints:npoints]
+			idx_ref = npoints+1
+	else
+			println("""Demand is zero!""")
+			perturb_vals = [i*ε for i in 0:npoints]
+			x_axis_vals = perturb_vals
+			idx_ref = 1
+	end
+	
+	L = length(perturb_vals)
+	E_sensitivity = zeros(L, length(emissions_rates), T);
+	s_sensitivity = zeros(L, n, T)
+	g_sensitivity = zeros(L, l, T);
+	
+	for k in 1:L
 		d_crt = deepcopy(d_dyn)
-		d_crt[cons_time][node] = ref_val * (1+i*ε)
+		d_crt[cons_time][node] = perturb_vals[k]
+
 		opf_ = DynamicPowerManagementProblem(net_dyn, d_crt)
 		solve!(opf_, OPT, verbose=false)
 		if opf_.problem.status != Convex.MOI.OPTIMAL
@@ -477,69 +489,76 @@ begin
 		end
 
 		for t in 1:T
-			s_sensitivity[i+npoints+1, :, t] = evaluate(opf_.s[t])
-			g_sensitivity[i+npoints+1, :, t] = evaluate(opf_.g[t])
-			E_sensitivity[i+npoints+1, :, t] = evaluate(opf_.g[t]).*emissions_rates
+			s_sensitivity[k, :, t] = evaluate(opf_.s[t])
+			g_sensitivity[k, :, t] = evaluate(opf_.g[t])
+			E_sensitivity[k, :, t] = evaluate(opf_.g[t]).*emissions_rates
 		end
-		# println(d_dyn[cons_time][node])
-		# println(d_crt[cons_time][node])
-		# println(ref_val)
+
 	end
 end
 
-# ╔═╡ c62e4fe2-2971-4479-af09-11b5467b2fee
-@bind t_display Slider(1:1:T)
+# ╔═╡ c418c302-2bd5-40c5-aca6-e0302372903a
+md"""node = $node"""
 
-# ╔═╡ 5bd2052c-8f4b-4969-8864-8906ece79df5
-md"""
-Emissions time: $t_display
-"""
+# ╔═╡ fa2d971a-38d6-498e-b1fd-71e8ef420e7c
+net.pmax
+
+# ╔═╡ 418c2024-64c8-4dd3-ac1f-0d71ff99edd8
+evaluate(opf_dyn.p[1])
+
+# ╔═╡ 1182f86d-0d85-4174-8cfe-144bf2e38a0f
+net.gmax
+
+# ╔═╡ 8c57c424-d4bc-4ff4-95a2-b301561d8aeb
+mefs
 
 # ╔═╡ 2aa296d4-7f47-4585-8a01-c70e9dddd2ac
 let
+	println("----------------")
+	println(" Making plots")
 	γ = 1e-4
-	Δ = .02
+	Δ = .002
 	ylims = (1-Δ, 1+Δ)
 	plt_s = plot(
-		[1+i*ε for i in -npoints:npoints], 
-		[s_sensitivity[:, k, t_display]/(s_sensitivity[npoints+1, k, t_display]+γ) for k in 1:n], ylim=ylims
+		x_axis_vals, 
+		[s_sensitivity[:, k, t_display]/(s_sensitivity[idx_ref, k, t_display]+γ) for k in 1:n], ylim=ylims
 	)
 	title!("Storage at time $t_display")
 	xlabel!("Change in demand at node $node at time $cons_time")
 	ylabel!("Change in storage at all nodes at time $t_display")
 	
 	plt_E = plot(
-		[1+i*ε for i in -npoints:npoints], 
-		[E_sensitivity[:, k, t_display]./(E_sensitivity[npoints+1, k, t_display]+γ) for k in 1:length(emissions_rates)], ylim=ylims
+		x_axis_vals, 
+		[E_sensitivity[:, k, t_display]./(E_sensitivity[idx_ref, k, t_display]+γ) for k in 1:length(emissions_rates)], ylim=ylims
 		)
 	title!("Emissions at time $t_display")
 	xlabel!("Change in demand at node $node at time $cons_time")
 	ylabel!("Change in emissions at all generators at time $t_display")
 	
 	plt_g = plot(
-		[1+i*ε for i in -npoints:npoints], 
-		[g_sensitivity[:, k, t_display]./(g_sensitivity[npoints+1, k, t_display]+γ) for k in 1:length(emissions_rates)], ylim=ylims
+		x_axis_vals, 
+		[g_sensitivity[:, k, t_display]./(g_sensitivity[idx_ref, k, t_display]+γ) for k in 1:length(emissions_rates)], ylim=ylims
 		)
 	title!("Generators at time $t_display")
 	xlabel!("Change in demand at node $node at time $cons_time")
 	ylabel!("Change in generation at all generators at time $t_display")
 	
 	plt_E_tot = plot(
-		[1+i*ε for i in -npoints:npoints], 
-		sum(E_sensitivity[:, :, t_display], dims=2)./sum(E_sensitivity[npoints+1, :, t_display]), ylim=ylims
+		x_axis_vals, 
+		sum(E_sensitivity[:, :, t_display], dims=2)./sum(E_sensitivity[idx_ref, :, t_display]), ylim=ylims
 		)
 	xlabel!("Change in demand at node $node at time $cons_time")
 	ylabel!("Change in total emissions")
 	
 	#adding the theoretical curve for the sensitivity
 	E_th = (
-		sum(E_sensitivity[npoints+1, :, t_display]) .+ [ref_val * i * ε for i in -npoints:npoints] .* sum(mefs[node, t_display, cons_time])
-		)./sum(E_sensitivity[npoints+1, :, t_display])
-	plot!([1+i*ε for i in -npoints:npoints], E_th, ls=:dash)
+		sum(E_sensitivity[idx_ref, :, t_display]) .+ (perturb_vals.-ref_val) .* mefs[node, t_display, cons_time]
+		)./sum(E_sensitivity[idx_ref, :, t_display])
+	plot!(x_axis_vals, E_th, ls=:dash)
 	title!("Total emissions at time $t_display")
 	
 	plot([plt_s, plt_E, plt_g, plt_E_tot]..., size = (650, 650), lw = 3)
-
+	
 end
 
 # ╔═╡ 4a43aedb-b17e-459b-aadb-86528d1bb7c4
@@ -719,7 +738,6 @@ end
 
 # ╔═╡ Cell order:
 # ╠═efc01f26-6b99-4a70-b34b-b022fb0d6f5b
-# ╠═221dbb8b-f5c0-4631-8c4d-39d59f9c9932
 # ╠═fc7f1535-18ae-4f76-ae99-06839728360f
 # ╠═2498bfac-3108-11ec-2b8b-7fb26f96afbb
 # ╠═6a260a4f-9f96-464b-b101-1127e6ec48fe
@@ -732,24 +750,22 @@ end
 # ╠═538bf950-6a1f-431a-b4ea-aefcf833bded
 # ╠═db4f89b9-0ffc-41d9-a46e-1eb0b6fb6f83
 # ╟─c058136b-e536-41be-8c7a-28a8c51f3b22
-# ╠═141ec2da-8ab0-4fa4-91ea-01d88dbf5c42
 # ╠═365ed8da-0f55-4d98-a570-6bc68f328cc2
 # ╟─a2932123-66a5-4d29-a794-3026d8984aff
 # ╟─05405ddb-7046-400b-9ae6-4899f37de6a3
+# ╠═75be5683-85a8-45c3-925c-7a53dbf9ae7d
+# ╠═ca2263db-d63a-4f26-9643-0aefa77b4d7c
 # ╠═cadc304e-24d3-4aa7-8858-24255effaa13
 # ╠═fb3e2e73-8b0b-43ba-a102-39ad9599941f
 # ╠═058f7c12-d237-4130-aeb2-99279953d3f8
 # ╠═0b806e4a-73a9-48f1-993c-875d0c9a01c3
 # ╠═f8072762-643c-485d-86d7-caf5a54c7d1e
-# ╠═65b961b0-cc87-450e-bedb-43c5f38aafc5
-# ╠═73dac19a-3663-4f25-ac96-24e3a9997d3e
+# ╟─65b961b0-cc87-450e-bedb-43c5f38aafc5
+# ╟─73dac19a-3663-4f25-ac96-24e3a9997d3e
 # ╠═4a0c8a47-4aea-41ef-8a45-e2ea5789721f
-# ╠═2085073b-4770-4815-9e38-c36b850ab8d4
+# ╟─2085073b-4770-4815-9e38-c36b850ab8d4
 # ╠═b77196c7-987d-4175-9508-88c11cedbc3c
-# ╠═69e3a691-b3a7-49c8-b178-01c82d9fa30f
 # ╠═01ec04b7-e317-43b9-86b8-8a7e9ecbcdea
-# ╠═c418c302-2bd5-40c5-aca6-e0302372903a
-# ╠═971d508d-c862-44ac-a0a4-a2fd9aa9156b
 # ╠═c9a5eeec-389b-4dbf-9c57-3ddd7ebff264
 # ╠═5c07c744-639b-4f56-af9a-a4b2366864bb
 # ╠═c35434eb-c850-4650-870e-b4b719ff1a9b
@@ -757,18 +773,24 @@ end
 # ╠═6198b321-6573-4100-8166-6048c5fa2980
 # ╠═377a4e9e-8d8c-4a76-9965-8df0a21dcf9c
 # ╠═6726672d-ab82-4364-bcea-bec33034bdac
-# ╟─488db7c4-a048-47bd-b2bf-430d7f5664ae
+# ╠═488db7c4-a048-47bd-b2bf-430d7f5664ae
 # ╟─f59c420b-a1fe-4847-8115-a33166be54aa
 # ╟─2b8ccbdc-bbbe-4a0a-a71b-52fad873bc70
 # ╠═c6d3c265-d3e9-4f4e-b5e7-23a3762beb49
-# ╟─79eb4f29-1457-41b4-96c3-9bfbe7a54208
+# ╠═79eb4f29-1457-41b4-96c3-9bfbe7a54208
 # ╟─bdd10c3a-5b1f-4f63-860c-268b9c4f035d
 # ╟─c1f12b9d-60fe-4c10-b74b-a63dfd965577
 # ╟─124bc7c3-bb3b-4b36-bb7e-4f3f52b7de58
-# ╟─a133a850-22a8-4f3f-a2df-07c56735fbe3
+# ╠═c9e229f9-8ce6-4cd4-a0d7-4f53f2ced8ec
 # ╟─5bd2052c-8f4b-4969-8864-8906ece79df5
 # ╟─c62e4fe2-2971-4479-af09-11b5467b2fee
-# ╟─2aa296d4-7f47-4585-8a01-c70e9dddd2ac
+# ╟─c418c302-2bd5-40c5-aca6-e0302372903a
+# ╟─971d508d-c862-44ac-a0a4-a2fd9aa9156b
+# ╠═fa2d971a-38d6-498e-b1fd-71e8ef420e7c
+# ╠═418c2024-64c8-4dd3-ac1f-0d71ff99edd8
+# ╠═1182f86d-0d85-4174-8cfe-144bf2e38a0f
+# ╠═8c57c424-d4bc-4ff4-95a2-b301561d8aeb
+# ╠═2aa296d4-7f47-4585-8a01-c70e9dddd2ac
 # ╟─4a43aedb-b17e-459b-aadb-86528d1bb7c4
 # ╟─96a33baa-9cb2-446c-a850-076ccf503735
 # ╟─2061e505-62b3-4e50-b91d-2852fcfc24ad
