@@ -117,7 +117,7 @@ We probably want a few lines that are low capacity and many that are high capaci
 # renew_nodes = [1, 8, 15, 26]
 # renew_nodes = [4, 12, 16, 28]
 # renew_nodes = [15, 18, 19, 20]
-renew_nodes = [12, 14, 15, 13]
+renew_nodes = [12, 14, 15, 18]
 
 # ╔═╡ 63db8d8b-8229-47e0-a309-75813120aaab
 placed_gen_nodes = [9, 11, 6, 8, 28, 7] # 2 negative mefs
@@ -136,9 +136,14 @@ isolated edges - they probably need high capacities
 
 # ╔═╡ 35dccacb-8780-4f37-8dc5-29064a84d49c
 begin
-# add_low = [1, 39, 33, 6, 9, 36]
-	add_low = []
-	add_med = [35]
+	# add_low = [1, 39, 33, 6, 9, 36]
+	add_low = [1, 6, 13, 21, 25, 26, 33, 30, 32, 9, 3]
+	add_med = [35, 7, 12, 38, 36, 11]
+	add_zero = []
+
+	
+	level_low = .4
+	level_med = .5
 end;
 
 # ╔═╡ f999d732-14b3-4ac5-b803-3df7a96ef898
@@ -156,14 +161,15 @@ begin
 	
 	# Limit line flows and generation capacities
 	# n_low_capacity = 10
-	capacities = ones(size(net.A)[2])
+	capacities = ones(size(net.A)[2]) * .6
 	# capacities[1:n_low_capacity] .= .4 # .4
 	# capacities = Random.shuffle(capacities)
 	capacities[[29, 31]] .= .4 # minimum necessary, edges around gen 22
 	
-	capacities[add_low] .= .4
+	capacities[add_low] .= level_low
 
-	capacities[add_med] .= .7
+	capacities[add_med] .= level_med
+	capacities[add_zero] .= δ
 
 
 	
@@ -187,7 +193,7 @@ begin
 	# capacities[new_low] .= .4
 	net.pmax = net.pmax .* capacities 
 	
-	net.gmax *= 1.
+	net.gmax *= 2.
 	
 	# Remove lines - Lucas: not sure whether we need to remove the lines - TBD
 	# net.pmax[[2, 3, 5, 11, 12, 20, 22, 26, 27, 30|, 39]] .= δ #used to be *= δ
@@ -238,7 +244,7 @@ begin
 	end
 	
 	edge_colors = [
-		k < .5 ? colorant"orange" : colorant"lightgray" for k in capacities
+		k < .6 ? colorant"orange" : colorant"lightgray" for k in capacities
 		]
 	
 	Gplot = gplot(G, nodelabel=1:n, nodefillc=node_cols, edgestrokec=edge_colors)
@@ -464,7 +470,7 @@ begin
 end
 
 # ╔═╡ 06498d79-f20a-4691-8c72-8f1f962e6a6f
-node_single = 2
+node_single = 30
 
 # ╔═╡ 49aea0fc-1e0b-4e9c-8d7b-5d3727e95e1f
 begin
@@ -537,7 +543,7 @@ end
 
 # ╔═╡ 871ca595-9d9e-4f06-9119-c2b07bfdeb04
 begin
-tt = 1
+tt = 17
 mef_bar_plt = bar(
 	[sum(mefs[k, tt, :]) for k in 1:n]
 		)
@@ -546,6 +552,9 @@ end
 
 # ╔═╡ 0ace8911-c28f-47cd-8117-581b0cc5e1d7
 mef_bar_plt
+
+# ╔═╡ 8eb901fe-aa93-4d72-bc9d-194e199db013
+diag(crt_mefs)
 
 # ╔═╡ 5ae84f68-a0e6-47bb-9206-cd1384200581
 md""" adding colors to the edges based on their flow
@@ -1268,6 +1277,7 @@ end
 # ╠═06498d79-f20a-4691-8c72-8f1f962e6a6f
 # ╟─49aea0fc-1e0b-4e9c-8d7b-5d3727e95e1f
 # ╠═871ca595-9d9e-4f06-9119-c2b07bfdeb04
+# ╠═8eb901fe-aa93-4d72-bc9d-194e199db013
 # ╠═5ae84f68-a0e6-47bb-9206-cd1384200581
 # ╠═f15393ae-5c04-473e-ae28-ead5554896a3
 # ╠═e33f9e0f-7c4c-465e-9793-ed790d3256b2
