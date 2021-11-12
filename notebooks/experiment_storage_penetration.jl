@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.16.3
+# v0.17.1
 
 using Markdown
 using InteractiveUtils
@@ -7,8 +7,9 @@ using InteractiveUtils
 # This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
 macro bind(def, element)
     quote
+        local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
         local el = $(esc(element))
-        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : missing
+        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
         el
     end
 end
@@ -23,6 +24,7 @@ begin
 	using PlutoUI
 	using JLD
 	using LinearAlgebra
+	using LightGraphs, SimpleWeightedGraphs, GraphPlot
 end;
 
 # ╔═╡ 0aac9a3f-a477-4095-9be1-f4babe1e2803
@@ -60,6 +62,10 @@ md"""
 - handle renewable location: done
 - handle storage location
 - make sure we know exactly how to flip the mef matrix, and we avoid confusion
+- add colors for the flows, to see which one is congested vs non congeste
+- play with the location of renewables to get something more interesting
+- make sure renewable generation is properly allocated
+- another way to generate interesting results is to increase demand instead of changing line capacities
 """
 
 # ╔═╡ 44275f74-7e7c-48d5-80a0-0f24609ef327
@@ -108,28 +114,80 @@ We probably want a few lines that are low capacity and many that are high capaci
 # ╔═╡ 7d738cd3-1edf-4348-aa16-5ade0f87ae6f
 #define which nodes have renewable generation
 
-renew_nodes = [1, 8, 15, 26]
+# renew_nodes = [1, 8, 15, 26]
+# renew_nodes = [4, 12, 16, 28]
+# renew_nodes = [15, 18, 19, 20]
+renew_nodes = [12, 14, 15, 13]
 
-# ╔═╡ a5726053-cce1-422b-a350-c283ca5abbff
-Random.shuffle(vcat(ones(3), zeros(4)))
+# ╔═╡ 63db8d8b-8229-47e0-a309-75813120aaab
+placed_gen_nodes = [9, 11, 6, 8, 28, 7] # 2 negative mefs
+# placed_gen_nodes = [1, 2, 3, 4, 5, 6]
+# placed_gen_nodes = [19, 20, 23, 6, 9, 10]
+
+# ╔═╡ 1ff66201-1d03-4c2e-95e5-d3387b0ddd57
+md"""
+isolated edges - they probably need high capacities
+- (25, 26): 34
+- (27, 29): 39
+- (27, 30): 40
+- (9, 11): 14
+- (12, 13): 16
+"""
+
+# ╔═╡ 35dccacb-8780-4f37-8dc5-29064a84d49c
+begin
+# add_low = [1, 39, 33, 6, 9, 36]
+	add_low = []
+	add_med = [35]
+end;
 
 # ╔═╡ f999d732-14b3-4ac5-b803-3df7a96ef898
 begin
-	Random.seed!(2)
+	Random.seed!(2)# Random.seed!(2) - for n_low_capacity = 10 - .4
 	net, d_peak, _ = load_synthetic_network("case30.m")
 	n = length(d_peak)
 	
+	if placed_gen_nodes != nothing
+		net.B = I(n)[:, placed_gen_nodes]
+	end
 	_, l_no_renew = size(net.B)
+
 	gen_nodes = findall(vec(sum(net.B, dims = 2)) .> 0)
 	
 	# Limit line flows and generation capacities
-	n_low_capacity = 10
+	# n_low_capacity = 10
 	capacities = ones(size(net.A)[2])
-	capacities[1:n_low_capacity] .= .4
-	capacities = Random.shuffle(capacities)
+	# capacities[1:n_low_capacity] .= .4 # .4
+	# capacities = Random.shuffle(capacities)
+	capacities[[29, 31]] .= .4 # minimum necessary, edges around gen 22
+	
+	capacities[add_low] .= .4
+
+	capacities[add_med] .= .7
+
+
+	
+	# idx_low = [5, 19, 23, 26, 29, 31, 32]
+	# capacities[idx_low] .= .4
+	# add_low = [1, 2, 3, 4, 6, 7, 8, 11, 12, 15, 9, 20, 21, 30, 33, 37, 28]
+	# capacities[add_low] .= .4
+	
+# 	idx_high = [14, 16, 34, 39, 40] # important edges
+# 	capacities[idx_high] .= 1.
+# 	add_high = [1, 4, 20, 25, 30, 32, 6, 10, 12, 18, 15, 8, 9, 11, 23, 24, 33, 35, 28, 36, 31]
+# 	capacities[add_high] .= 1.
+	
+	# n_high_capacity = 15
+	# capacities = ones(size(net.A)[2])*.4
+	# capacities[1:n_high_capacity] .= .9
+	# capacities = Random.shuffle(capacities)
+	
+	# add_low_capacity = 4
+	# new_low = rand(1:length(capacities), add_low_capacity)
+	# capacities[new_low] .= .4
 	net.pmax = net.pmax .* capacities 
 	
-	net.gmax *= .7
+	net.gmax *= 1.
 	
 	# Remove lines - Lucas: not sure whether we need to remove the lines - TBD
 	# net.pmax[[2, 3, 5, 11, 12, 20, 22, 26, 27, 30|, 39]] .= δ #used to be *= δ
@@ -144,30 +202,22 @@ begin
 end
 
 
-# ╔═╡ 10360dd0-c5c6-46bf-96fd-5fa18839febb
-net.A
-
-# ╔═╡ b637cc85-65bd-4048-b818-6f9c8179a51e
-net.pmax
-
 # ╔═╡ 0d42b50d-993e-4eea-9025-2b7479bb3b0e
 begin
-	# TODO: add color to the generator nodes
 	# color 1: non rewable nodes
 	# color 2: renewable nodes
 	# color 3 = generator nodes -- TODO
-	graph_colors = distinguishable_colors(
-		3, [RGB(1,1,1), RGB(0,0,0)], dropseed=true
-	)
+	pal = palette(:tab20)
+	graph_colors = [pal[6], pal[8], pal[16]]
 	# graph_colors = [:green, :blue, :red]
 	node_cols = []
 	for k in 1:n
 		if k in renew_nodes
-			push!(node_cols, graph_colors[2])
-		elseif k in gen_nodes
-			push!(node_cols, graph_colors[3])
-		else
 			push!(node_cols, graph_colors[1])
+		elseif k in gen_nodes
+			push!(node_cols, graph_colors[2])
+		else
+			push!(node_cols, graph_colors[3])
 		end
 	end
 	# node_cols = [k in renew_nodes ? graph_colors[2] : graph_colors[1] for k in 1:n]
@@ -176,8 +226,8 @@ end
 
 # ╔═╡ 23690382-3d30-46e3-b26a-a30875be78ec
 begin
-	using LightGraphs, SimpleWeightedGraphs, GraphPlot
-	Random.seed!(5)
+	#edges with low capacity
+	Random.seed!(17)
 	
 	G = SimpleWeightedGraph(n)
 	for j in 1:size(net.A, 2)
@@ -187,12 +237,41 @@ begin
 		end
 	end
 	
-	plt = gplot(G, nodelabel=1:n, nodefillc=node_cols)
-	plt
+	edge_colors = [
+		k < .5 ? colorant"orange" : colorant"lightgray" for k in capacities
+		]
+	
+	Gplot = gplot(G, nodelabel=1:n, nodefillc=node_cols, edgestrokec=edge_colors)
+	Gplot
+end
+
+# ╔═╡ c92e091e-1111-4bda-8d76-543ad1dd8121
+#nodes with demand
+begin
+	Random.seed!(17)
+	node_demand_color = [
+		d_peak[k] == 0 ? colorant"lightgray" : colorant"orange" for k in 1:n
+	]
+	Gplot_demand = gplot(G, nodelabel=1:n, nodefillc=node_demand_color)
+	Gplot_demand
+end
+
+# ╔═╡ 379598be-2c42-4c29-8a24-91b74592da0f
+# printing origins and destinations of all edges
+begin
+	i = 1
+	for e in edges(G)
+	println(i)
+	println(e)
+	i+=1
+	end
 end
 
 # ╔═╡ 39cdac4b-87bb-441c-99e3-402b40bef7d3
 _, m, l = get_problem_dims(net);
+
+# ╔═╡ 402a32b8-6b86-4701-a84b-eeb224e64a81
+md""" you could also walk mthrough the nodes and make sure that not all edges getting to a node are low capacity?"""
 
 # ╔═╡ 1bd72281-4a7f-44f4-974d-632e9d0aaf28
 md"""
@@ -231,7 +310,7 @@ begin
 end
 
 # ╔═╡ c82ef027-740a-49b1-93d2-1554c411a896
-renewable_penetration = 0.2 # set properly!
+renewable_penetration = 0.1 # set properly!
 
 # ╔═╡ 9873abd2-fc2f-4a35-8689-51d558debbf0
 md"""the number of nodes that have zero demand is $(sum(d_peak.==0))"""
@@ -242,15 +321,18 @@ begin
 	demand_profiles = rand(1:n_demand, n)
 	
 	d_dyn = [
-		d_peak .* demand_data[t, demand_profiles]
+		1.0 * d_peak .* demand_data[t, demand_profiles]
 		for t in 1:T
 	]
 	
-	total_demands = [sum([d[i] for d in d_dyn]) for i in 1:n] 
+	total_demands = sum(d_dyn)
 end;
 
 # ╔═╡ 9e5a1672-d452-42f5-ba5a-a2fa0b1eaada
 n_renew = size(renew_data, 2)
+
+# ╔═╡ 73875562-ad97-4880-8694-0de3d088372a
+renewable_penetration
 
 # ╔═╡ 522e95d5-15a8-47ec-a79c-c4cc17cf86fd
 begin
@@ -260,16 +342,23 @@ begin
 	# renew_profiles = vcat(rand(1:n_renew, length(renew_nodes)))
 	renew_profiles = [1, 2, 3, 4]
 
+	@assert length(renew_profiles) == length(renew_nodes)
+
 	get_renew = (t, renew_profile) -> 
 		renew_profile == 0 ? 0.0 : renew_data[t, renew_profile]
 	
-	renew_gmax = [get_renew.(t, renew_profiles) .* total_demands[renew_nodes] * renewable_penetration for t in 1:T]
+	renew_gmax = [
+		get_renew.(t, renew_profiles) .* total_demands[renew_nodes] * renewable_penetration for t in 1:T
+	]
 	
 	dyn_gmax = [deepcopy(net.gmax) for t in 1:T]
 	for t in 1:T
 		dyn_gmax[t][end-length(renew_nodes)+1:end] .= max.(δ, renew_gmax[t])
 	end
 end;
+
+# ╔═╡ 2b634b6d-dc54-4ccb-8b41-7a881a018184
+renew_gmax
 
 # ╔═╡ bfa4a8f9-cfcd-4e22-b2dc-751226f3a73c
 begin
@@ -319,9 +408,6 @@ end;
 # ╔═╡ 1098efd7-8477-4749-8ed5-b62044bebdc7
 node_storage = 0
 
-# ╔═╡ 06498d79-f20a-4691-8c72-8f1f962e6a6f
-@bind node_single Slider(1:n)
-
 # ╔═╡ c5f31bf6-5cca-4b0e-86f0-b44321fec874
 begin
 	println("Solving first problem")
@@ -346,9 +432,9 @@ begin
 	opf_dyn = DynamicPowerManagementProblem(net_dyn, d_dyn)
 	solve!(opf_dyn, OPT, verbose=false)
 
-	if opf_dyn.problem.status != Convex.MOI.OPTIMAL
+	# if opf_dyn.problem.status != Convex.MOI.OPTIMAL
 		@show opf_dyn.problem.status
-	end
+	# end
 
 	# Compute MEFs
 	mefs_ = compute_mefs(opf_dyn, net_dyn, d_dyn, emissions_rates)
@@ -356,8 +442,12 @@ begin
 	for ind_t in 1:T
 		mefs[:, :, ind_t] .= mefs_[ind_t];
 	end
-	opf_dyn.problem.status
+	status_ = opf_dyn.problem.status
+	status_
 end
+
+# ╔═╡ 15245a9a-8a42-4ec1-ba2c-9bf95d6c85fa
+status_
 
 # ╔═╡ af6d4ef0-f59f-42be-af36-7cf447478e4c
 begin
@@ -372,6 +462,9 @@ begin
 		d_vals[:, t] = d_dyn[t]
 	end
 end
+
+# ╔═╡ 06498d79-f20a-4691-8c72-8f1f962e6a6f
+node_single = 2
 
 # ╔═╡ 49aea0fc-1e0b-4e9c-8d7b-5d3727e95e1f
 begin
@@ -441,6 +534,43 @@ begin
 	
 	plots
 end
+
+# ╔═╡ 871ca595-9d9e-4f06-9119-c2b07bfdeb04
+begin
+tt = 1
+mef_bar_plt = bar(
+	[sum(mefs[k, tt, :]) for k in 1:n]
+		)
+mef_bar_plt
+end
+
+# ╔═╡ 0ace8911-c28f-47cd-8117-581b0cc5e1d7
+mef_bar_plt
+
+# ╔═╡ 5ae84f68-a0e6-47bb-9206-cd1384200581
+md""" adding colors to the edges based on their flow
+I can create a `cgrad` or a `palette` from julia colorschemes
+"""
+
+# ╔═╡ e33f9e0f-7c4c-465e-9793-ed790d3256b2
+begin
+	ps = evaluate(opf_dyn.p[tt])./net.pmax
+	idx = Int.(round.(abs.(100*ps))) .+1
+	cmap = colormap("Blues", 101) 
+	edge_flow_colors = [cmap[id] for id in idx]
+end;
+
+# ╔═╡ f15393ae-5c04-473e-ae28-ead5554896a3
+begin
+	Random.seed!(17)
+	g_edge_flow_plot = gplot(
+		G, nodelabel=1:n, nodefillc=node_cols, edgestrokec=edge_flow_colors
+	)
+	g_edge_flow_plot
+end
+
+# ╔═╡ 83e265f4-0a62-4c53-9203-6a7768c6220e
+g_edge_flow_plot
 
 # ╔═╡ 3f9eb091-059c-44a5-9b50-ae3cabe24060
 md"""
@@ -582,7 +712,7 @@ md"""
 """
 
 # ╔═╡ 856a78d9-7b4c-453b-b73b-c81eee014e52
-RUN_BIG_CELL2 = true
+RUN_BIG_CELL2 = false
 
 # ╔═╡ 98a0d7c5-b1a8-4ebe-bb73-7ca88b475592
 storage_penetrations = [0.0, 0.05, 0.10]
@@ -882,7 +1012,7 @@ The cell below perturbs demand at a given time and then we will plot the differe
 """
 
 # ╔═╡ 110f3329-c847-47f1-8427-ee959adc8745
-RUN_CELL_SENSITIVITY = true
+RUN_CELL_SENSITIVITY = false
 
 # ╔═╡ 91f7d63c-9e30-4fd4-ab39-9fbf58d101dc
 begin
@@ -973,8 +1103,6 @@ Emissions time: $t_display|
 
 # ╔═╡ 30511293-8ba5-486e-956b-e9f2a1ed0505
 let
-	println("----------------")
-	println(" Making plots")
 	γ = 1e-4
 	Δ = .02
 	ylims = (1-Δ, 1+Δ)
@@ -1081,6 +1209,9 @@ let
 	title!("MEF at node $node_matrix and consumption time $cons_time for different emsissions times")
 end
 
+# ╔═╡ 16094734-d7a1-4bb2-990b-8de1c367b134
+
+
 # ╔═╡ Cell order:
 # ╟─c39005df-61e0-4c08-8321-49cc5fe71ef3
 # ╠═5867a4eb-470a-4a8a-84e1-6f150de1dcde
@@ -1096,13 +1227,19 @@ end
 # ╟─75dfaefd-abec-47e2-acc3-c0ff3a01048e
 # ╠═f70aa9bd-4956-4e5a-8b3d-a1ad5b0b54d0
 # ╠═7d738cd3-1edf-4348-aa16-5ade0f87ae6f
-# ╠═10360dd0-c5c6-46bf-96fd-5fa18839febb
-# ╠═a5726053-cce1-422b-a350-c283ca5abbff
+# ╠═63db8d8b-8229-47e0-a309-75813120aaab
+# ╠═1ff66201-1d03-4c2e-95e5-d3387b0ddd57
 # ╠═f999d732-14b3-4ac5-b803-3df7a96ef898
-# ╠═b637cc85-65bd-4048-b818-6f9c8179a51e
-# ╠═0d42b50d-993e-4eea-9025-2b7479bb3b0e
-# ╠═23690382-3d30-46e3-b26a-a30875be78ec
+# ╠═35dccacb-8780-4f37-8dc5-29064a84d49c
+# ╟─15245a9a-8a42-4ec1-ba2c-9bf95d6c85fa
+# ╟─0d42b50d-993e-4eea-9025-2b7479bb3b0e
+# ╠═83e265f4-0a62-4c53-9203-6a7768c6220e
+# ╟─0ace8911-c28f-47cd-8117-581b0cc5e1d7
+# ╟─23690382-3d30-46e3-b26a-a30875be78ec
+# ╟─c92e091e-1111-4bda-8d76-543ad1dd8121
+# ╟─379598be-2c42-4c29-8a24-91b74592da0f
 # ╠═39cdac4b-87bb-441c-99e3-402b40bef7d3
+# ╠═402a32b8-6b86-4701-a84b-eeb224e64a81
 # ╟─1bd72281-4a7f-44f4-974d-632e9d0aaf28
 # ╠═0c786da1-7f44-40af-b6d6-e0d6db2242b2
 # ╠═5b80ca83-0719-437f-9e51-38f2bed02fb4
@@ -1113,6 +1250,8 @@ end
 # ╟─9873abd2-fc2f-4a35-8689-51d558debbf0
 # ╠═0239e1da-caf5-4593-af1b-5d1e8d2f2b3e
 # ╠═9e5a1672-d452-42f5-ba5a-a2fa0b1eaada
+# ╠═2b634b6d-dc54-4ccb-8b41-7a881a018184
+# ╠═73875562-ad97-4880-8694-0de3d088372a
 # ╠═522e95d5-15a8-47ec-a79c-c4cc17cf86fd
 # ╠═bfa4a8f9-cfcd-4e22-b2dc-751226f3a73c
 # ╟─a8ccbc8e-24e6-4214-a179-4edf3cf26dad
@@ -1124,10 +1263,14 @@ end
 # ╠═a9d16b8a-a488-4a9e-bb6f-4ee05873e86b
 # ╠═6cc82262-cc73-4483-b97e-664d5093d69c
 # ╠═1098efd7-8477-4749-8ed5-b62044bebdc7
-# ╠═06498d79-f20a-4691-8c72-8f1f962e6a6f
 # ╠═c5f31bf6-5cca-4b0e-86f0-b44321fec874
 # ╟─af6d4ef0-f59f-42be-af36-7cf447478e4c
-# ╠═49aea0fc-1e0b-4e9c-8d7b-5d3727e95e1f
+# ╠═06498d79-f20a-4691-8c72-8f1f962e6a6f
+# ╟─49aea0fc-1e0b-4e9c-8d7b-5d3727e95e1f
+# ╠═871ca595-9d9e-4f06-9119-c2b07bfdeb04
+# ╠═5ae84f68-a0e6-47bb-9206-cd1384200581
+# ╠═f15393ae-5c04-473e-ae28-ead5554896a3
+# ╠═e33f9e0f-7c4c-465e-9793-ed790d3256b2
 # ╟─3f9eb091-059c-44a5-9b50-ae3cabe24060
 # ╠═4a8c7752-6de8-4ea7-aafe-702b17507185
 # ╠═6e6b15b1-7685-4a20-9d94-dd703caa2fe9
@@ -1194,3 +1337,4 @@ end
 # ╟─e94c4b92-ceec-412f-adfb-6e9a7344ca39
 # ╟─c76f2ebe-ce41-47fd-b31a-2851aca53567
 # ╟─25063860-6109-46e7-9dd5-a7fc0c12159e
+# ╠═16094734-d7a1-4bb2-990b-8de1c367b134
