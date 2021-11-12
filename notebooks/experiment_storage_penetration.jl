@@ -38,34 +38,14 @@ md"""
 ## Description
 """
 
-# ╔═╡ 5867a4eb-470a-4a8a-84e1-6f150de1dcde
-md"""
-## ToDo
-- Make sure there is renewable curtailment
-"""
-
-# ╔═╡ 751a51bb-97c6-4608-8195-7ed465b9eb7c
-md"""
-## Things to figure out
-- Storage patterns
-- Why is a given timestep more significant than other timesteps
-- Be careful about the value of the time, when storage is and is not...
-- why do I need to increase `p` so significantly to get something that is feasible? 
-"""
-
 # ╔═╡ 0510ec8c-2f1b-4704-bb59-cd8a67ef0dc5
 md"""
-## *TODO*
-- Update pmax: I think this is the big one: how do you allocate the pmax so that you have interesting phenomena
-- update renewable penetration
+## *TODO* in order of priority
+- Figure out why when solving the same problem (i.e. in the beginning of the notebook vs when exploring charging efficiency and storage penetration impact of MEF) the mefs are not the same!? Namely, we see that we have a few significantly negative mefs (node 30 for instance) which are wrong and are not recovered in the other computations. What is the difference between computations? 
 - PICK REALISTIC VALUES FOR THE SYSTEM and scale the values properly. This is what you need!
-- handle renewable location: done
-- handle storage location
+- handle storage location: do we want storage everywhere? Is it not easier to add one big battery somewhere on the network?
 - make sure we know exactly how to flip the mef matrix, and we avoid confusion
-- add colors for the flows, to see which one is congested vs non congeste
-- play with the location of renewables to get something more interesting
 - make sure renewable generation is properly allocated
-- another way to generate interesting results is to increase demand instead of changing line capacities
 """
 
 # ╔═╡ 44275f74-7e7c-48d5-80a0-0f24609ef327
@@ -721,7 +701,7 @@ md"""
 """
 
 # ╔═╡ 856a78d9-7b4c-453b-b73b-c81eee014e52
-RUN_BIG_CELL2 = false
+RUN_BIG_CELL2 = true
 
 # ╔═╡ 98a0d7c5-b1a8-4ebe-bb73-7ca88b475592
 storage_penetrations = [0.0, 0.05, 0.10]
@@ -818,11 +798,6 @@ md"""
 The cursor below allows choosing for a specific value of charge/discharge efficiency
 """
 
-# ╔═╡ 19f4e0cc-0c93-42dc-8ee4-17f52d4e5e90
-
-# @bind idx_η Slider(1:1:length(η_vals))
-
-
 # ╔═╡ 4925c50b-12c0-4217-94de-bdcc72c01ccf
 idx_η = 3
 
@@ -875,19 +850,12 @@ begin
 end
 
 # ╔═╡ 1da34733-fee3-42e1-b5e0-cac3f5f196c9
-@bind node_matrix Slider(1:1:n)
+node_matrix = 30
 
 # ╔═╡ 6fc320b1-b60d-4f49-89ab-bf029ead6b55
 md"""
 MEF as a function of consumption and emission times for node $node_matrix
 """
-
-# ╔═╡ 32cd894b-ee5d-44b7-8983-82a4b72524a8
-begin
-plot([d_dyn[i][node_matrix] for i in 1:T], size=(300, 300))
-xlabel!("Demand at node $node_matrix")
-ylabel!("Time")
-end
 
 # ╔═╡ f7e0d09c-40bf-4936-987a-a3bcadae5487
 let
@@ -942,7 +910,7 @@ end
 nn = round.(results[idx_η][10, :, :, 1]'[16:20, 16:20])
 
 # ╔═╡ aff80d55-df50-4d4b-aba4-e62f3c7ec10e
-crt_mefs
+diag(crt_mefs)
 
 # ╔═╡ 62f66995-bd02-4b6f-8eb8-6aeae5436713
 md"""
@@ -993,7 +961,7 @@ md"""Cons time = $cons_time"""
 s_idx_ = 1
 
 # ╔═╡ a1e23c58-6d7b-4a69-8e33-411a7c051d37
-results[idx_η][node_matrix, :, :, s_idx_]
+diag(results[idx_η][node_matrix, :, :, s_idx_])
 
 # ╔═╡ e5806501-044e-4667-a9b2-5d3417a7a49d
 storage_penetrations[s_idx_]
@@ -1021,7 +989,7 @@ The cell below perturbs demand at a given time and then we will plot the differe
 """
 
 # ╔═╡ 110f3329-c847-47f1-8427-ee959adc8745
-RUN_CELL_SENSITIVITY = false
+RUN_CELL_SENSITIVITY = true
 
 # ╔═╡ 91f7d63c-9e30-4fd4-ab39-9fbf58d101dc
 begin
@@ -1113,7 +1081,7 @@ Emissions time: $t_display|
 # ╔═╡ 30511293-8ba5-486e-956b-e9f2a1ed0505
 let
 	γ = 1e-4
-	Δ = .02
+	Δ = .05
 	ylims = (1-Δ, 1+Δ)
 	plt_s = plot(
 		x_axis_vals, 
@@ -1161,6 +1129,10 @@ let
 	plot([plt_s, plt_E, plt_g, plt_E_tot]..., size = (650, 650), lw = 3)
 	
 end
+
+# ╔═╡ ba2edfaf-66f3-442a-9633-35251259784d
+md"""TODO: add a graph of how TOTAL emissions change with demand at a node, not only emissions at time t
+"""
 
 # ╔═╡ d8d1fb74-0018-4685-a283-e768ae877fe4
 md"""
@@ -1223,8 +1195,6 @@ end
 
 # ╔═╡ Cell order:
 # ╟─c39005df-61e0-4c08-8321-49cc5fe71ef3
-# ╠═5867a4eb-470a-4a8a-84e1-6f150de1dcde
-# ╠═751a51bb-97c6-4608-8195-7ed465b9eb7c
 # ╠═0510ec8c-2f1b-4704-bb59-cd8a67ef0dc5
 # ╟─44275f74-7e7c-48d5-80a0-0f24609ef327
 # ╠═db59921e-e998-11eb-0307-e396d43191b5
@@ -1296,11 +1266,10 @@ end
 # ╠═856a78d9-7b4c-453b-b73b-c81eee014e52
 # ╠═98a0d7c5-b1a8-4ebe-bb73-7ca88b475592
 # ╟─bbbb358c-e645-4989-bed3-73d9217f7447
-# ╠═6f08828b-4c4b-4f50-bd40-35805a37aae0
+# ╟─6f08828b-4c4b-4f50-bd40-35805a37aae0
 # ╟─cd5fe410-6264-4381-b19f-31d050bc3930
 # ╠═0740dc70-a532-4818-b09d-b3b8d60fa6ba
 # ╟─f26187fb-d4b2-4f0d-8a80-5d831e0de6c3
-# ╠═19f4e0cc-0c93-42dc-8ee4-17f52d4e5e90
 # ╠═4925c50b-12c0-4217-94de-bdcc72c01ccf
 # ╟─4d9a4b36-6b3d-4836-8501-7f46cd7ab5cc
 # ╟─75d956fc-bcf6-40fe-acd5-b5eef0fc7902
@@ -1308,11 +1277,10 @@ end
 # ╠═6186798f-6711-4222-94bb-f53b2d0fad7d
 # ╟─d27ef0d8-70b2-4897-9000-8fa70b1862fc
 # ╟─6fc320b1-b60d-4f49-89ab-bf029ead6b55
-# ╟─1da34733-fee3-42e1-b5e0-cac3f5f196c9
-# ╟─32cd894b-ee5d-44b7-8983-82a4b72524a8
+# ╠═1da34733-fee3-42e1-b5e0-cac3f5f196c9
 # ╠═c7deae02-3dad-4335-9449-a7e8f8bd5b4f
 # ╠═b674af27-307b-4dbb-8a75-a54bde1f123d
-# ╠═f7e0d09c-40bf-4936-987a-a3bcadae5487
+# ╟─f7e0d09c-40bf-4936-987a-a3bcadae5487
 # ╠═52c889e4-753c-447c-a9e1-862750b3643f
 # ╠═aff80d55-df50-4d4b-aba4-e62f3c7ec10e
 # ╠═a1e23c58-6d7b-4a69-8e33-411a7c051d37
@@ -1333,7 +1301,7 @@ end
 # ╠═4aed3df5-441b-445b-9277-a38690eb8603
 # ╟─c9b41436-e0a0-4e57-908f-b45e42122e63
 # ╠═110f3329-c847-47f1-8427-ee959adc8745
-# ╠═91f7d63c-9e30-4fd4-ab39-9fbf58d101dc
+# ╟─91f7d63c-9e30-4fd4-ab39-9fbf58d101dc
 # ╠═77943ac8-36fe-4a13-a36d-db957780d869
 # ╟─4fd2833c-6c23-4009-8734-980d3dd08c91
 # ╟─e0f5c93c-e1dd-4a9e-baf1-cbb8daf540dc
@@ -1342,6 +1310,7 @@ end
 # ╟─506e9360-2c25-4ea7-830b-68b4a6bf9026
 # ╠═b85b85d0-e1bc-4fc9-81cf-3792b55e3684
 # ╠═30511293-8ba5-486e-956b-e9f2a1ed0505
+# ╠═ba2edfaf-66f3-442a-9633-35251259784d
 # ╟─d8d1fb74-0018-4685-a283-e768ae877fe4
 # ╟─5f73f4e6-4eff-41b9-b68d-3baa5e77e924
 # ╟─e94c4b92-ceec-412f-adfb-6e9a7344ca39
