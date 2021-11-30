@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.15.1
+# v0.16.4
 
 using Markdown
 using InteractiveUtils
@@ -305,6 +305,8 @@ begin
 	plot!(size=in_to_pix(0.4*textwidth, figheight/2), bottom_margin=8Plots.pt)
 	plot!(legend=(0.8, 1))
 	
+	plt2na = deepcopy(plt2)
+	
 	
 	annotate!(20, 30, text("B", :Times, :left, :bottom, 14))
 end
@@ -327,17 +329,17 @@ begin
 		bar_width=bw, color=:Green, label="Penalty")
 	bar!((1:m) .+ bw, θB[1:m] .- P.net.pmax, 
 		bar_width=bw, c=:Red, label="Tax")
-	annotate!(0.25, 1.5, text("C", :Times, :left, :top, 14))
+	
+	
 	
 	
 	plt3_bot = plot(
 		xlabel="Bus", xlim=(0, n+1), xticks=[1, 2, 4, 7, 8, 9, 10, 11, 14],
 		ylim=(0, 1.55), ylabel="Storage [MWh]",
-		
+		legend=false,
 	)
-	bar!(1:n, θA[m+1:end], bar_width=bw, color=:Green)
-	bar!((1:n) .+ bw, θB[m+1:end], bar_width=bw, c=:Red)
-	annotate!(0.25, 1.5, text("D", :Times, :left, :top, 14))
+	bar!(1:n, θA[m+1:end], bar_width=bw, color=:Green, label="Penalty")
+	bar!((1:n) .+ bw, θB[m+1:end], bar_width=bw, c=:Red, label="Tax")
 	
 	
 	
@@ -345,6 +347,11 @@ begin
 		plt3_bot, plt3_top,
 		layout=(2, 1), grid=false, frame=:box
 	)
+	
+	plt3na = deepcopy(plt3)
+	
+	annotate!(plt3[1], 0.25, 1.5, text("C", :Times, :left, :top, 14))
+	annotate!(plt3[2], 0.25, 1.5, text("D", :Times, :left, :top, 14))
 	
 	plot!(plt3[2], bottom_margin=8Plots.pt)
 	plot!(size=in_to_pix(0.6*textwidth, figheight), link=:y)
@@ -366,6 +373,39 @@ begin
 	
 	savefig("../../img/planning_figure.pdf")
 	main_plt
+end
+
+# ╔═╡ 84264842-4f94-4a7f-92e2-6989754bf6fe
+md"""
+## Slide Plots
+"""
+
+# ╔═╡ 0a053255-fcfb-47ea-a370-faa543657638
+begin
+	plot!(plt2na, 
+		# legend=:outertopright,
+		size=in_to_pix(0.5 * textwidth, 0.65 * figheight),
+		legend=false,
+		#top_margin=10Plots.pt
+	)
+	
+	savefig(plt2na, "../../img/planning_slides_pareto_no_legend.pdf")
+		
+	plt2na
+end
+
+# ╔═╡ 6f071b98-bc42-489e-9944-88bc94996a32
+let
+	plot!(plt3na, legend=false, size=in_to_pix(0.5 * textwidth, figheight))
+	plot!(plt3na[1], legend=:outertopright)
+	
+	savefig(plt3na, "../../img/planning_slides_change_legend.pdf")
+	
+	plot!(plt3na, legend=false)
+	
+	savefig(plt3na, "../../img/planning_slides_change.pdf")
+	
+	plt3na
 end
 
 # ╔═╡ Cell order:
@@ -405,3 +445,6 @@ end
 # ╠═9b7bf97c-4895-4a1b-b97a-359dbd1b4678
 # ╠═21790d04-851a-4f9f-acd0-dfde51f4c7fe
 # ╠═b45669ed-f4c8-42fd-9f78-4d98806884ea
+# ╠═84264842-4f94-4a7f-92e2-6989754bf6fe
+# ╠═0a053255-fcfb-47ea-a370-faa543657638
+# ╠═6f071b98-bc42-489e-9944-88bc94996a32
