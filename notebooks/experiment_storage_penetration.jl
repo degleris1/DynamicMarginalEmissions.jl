@@ -4,16 +4,6 @@
 using Markdown
 using InteractiveUtils
 
-# This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
-macro bind(def, element)
-    quote
-        local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
-        local el = $(esc(element))
-        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
-        el
-    end
-end
-
 # ╔═╡ db59921e-e998-11eb-0307-e396d43191b5
 begin
 	import Pkg
@@ -33,6 +23,12 @@ begin
 	using CarbonNetworks
 end
 
+# ╔═╡ 571d1cff-7311-4db8-8ac3-9e10afefaf18
+using LaTeXStrings
+
+# ╔═╡ 9af03cdd-8cb8-4221-b962-05e6ae1634cc
+using HDF5
+
 # ╔═╡ c39005df-61e0-4c08-8321-49cc5fe71ef3
 md"""
 ## Description
@@ -50,6 +46,11 @@ md"""
 
 - clip the colorbars for the main heatmaps and see if they compare
 - just finalize figure
+
+
+??? - should we add bar plots as a function of congestion? we did this experiment, showing that as congestion increases, some mefs become negative?
+
+- should we add something about renewable curtailment? I am guessing that negative mefs means more renewable used. We could do emissions decrease and percentage of total renewable generation used increases, same for nonrenewable. that would I think be useful to drive the point home
 """
 
 # ╔═╡ 44275f74-7e7c-48d5-80a0-0f24609ef327
@@ -498,6 +499,10 @@ begin
 	mef_bar_plt
 end
 
+# ╔═╡ 4d056537-3ec5-47d1-9f51-a603b8ae91ff
+# data to save
+MEFS_to_save = [sum(mefs[k, tt, :]) for k in 1:n]
+
 # ╔═╡ 0d99fc04-0353-4170-a23e-f21460ceaf7e
 interesting_nodes = [10, 17, 19, 21, 22, 23, 24]
 
@@ -771,26 +776,35 @@ interesting_nodes
 # ╔═╡ 6186798f-6711-4222-94bb-f53b2d0fad7d
 begin
 	subplots_mef_storage = Dict()
-	curves = [1, 3]
+	curves_ = [1, 3]
 	
 	for (ind_plt, i) in enumerate(interesting_nodes)
-		plt = plot(xticks=xticks_hr, xlim=(1, 24))
-		plot!(legend=nothing)
-		plot!(
-			mef_times, total_mefs[idx_η][i, :, curves], lw=4, alpha=0.8,
-			ylim=(-1000, 4000), yticks = [0, 2000, 4000]
-			# labels=storage_penetrations[curves]', 
+		subplots_mef_storage[i] = plot(
+			mef_times, total_mefs[idx_η][i, :, curves_], 
+			lw=4, alpha=0.8,
+			xlim=(1, 24),
+			ylim=(-1000, 4000), 
+			yticks = [0, 2000, 4000], 
+			xticks=xticks_hr,  
+			xlabel=L"t_c", 
+			ylabel="MEF", 
+			legend=:topright
 		)
+		# plot!(legend=nothing)
+		# plot!(
+			# 
+			# labels=storage_penetrations[curves]', 
+		# )
 		# title!("Node = $i")
 		
 		# ind_plt in [1, 4] && plot!(ylabel="Δco2 (lbs) / Δmwh")
 		# ind_plt in 4:6 && plot!(xlabel="hour")
 		# ind_plt in [3] && plot!(legend=:topright)
-		xlabel!("Consumption time")
-		ylabel!("MEF [kgCO2/MWh]")
-		plot!(legend=:topright)
+		# xlabel!(L"t_c")
+		# ylabel!("MEF")
+		# plot!(legend=:topright)
 		
-		subplots_mef_storage[i] = plt
+		# subplots_mef_storage[i] = plt
 	end
 
 	# plot(subplots_mef_storage..., layout=(2, Int(length(interesting_nodes)/2)), leftmargin=4Plots.mm, size=(800, 400))
@@ -819,6 +833,12 @@ subplots_mef_storage[23]
 
 # ╔═╡ 1da34733-fee3-42e1-b5e0-cac3f5f196c9
 nodes_heatmaps = [21, 23]
+
+# ╔═╡ 57643580-0a1d-4ad5-ba21-533dcbd73c2f
+# data to save mef_storage
+begin
+data_total_mef = ([k for k in mef_times], [total_mefs[idx_η][n, :, :] for n in nodes_heatmaps])
+end
 
 # ╔═╡ f7e0d09c-40bf-4936-987a-a3bcadae5487
 begin
@@ -860,12 +880,13 @@ begin
 				c=:balance, #https://docs.juliaplots.org/latest/generated/colorschemes/
 				clim=clims_hm[node], 
 				colorbar=false,
-				xlabel="Consumption Time",
+				xlabel=L"t_c",
+				ylabel=L"t_e",
 				title="$(100*storage_penetrations[s_idx])% storage, η=$crt_η_",
 				xticks=xticks_hr, yticks=xticks=xticks_hr
 			)
 			
-			s_idx == 1 && plot!(ylabel="Emissions Time")
+			# s_idx == 1 && plot!(ylabel=L"t_e")
 			s_idx == 3 && plot!(
 				colorbar=true, 
 				colorbar_tickfontsize=8,
@@ -886,7 +907,7 @@ begin
 			# length(η_vals), length(storage_penetrations), widths=[.29, 0.29, 0.42]
 			# ), 
 		layout = layout_hm,
-		size=(650, 650/3*length(η_vals)), 
+		size=(650, 450/3*length(η_vals)), 
 		bottom_margin=8Plots.pt
 	)
 	end
@@ -912,6 +933,10 @@ diag(crt_mefs)
 md"""
 *Question* : why don't I get *exactly* the same values from both matrices. Some diagonal elements are substantially different -- I have to make sure I did not leave any mistake pending
 """
+
+# ╔═╡ 60c89e52-bcb4-41ed-9490-95c7ad7c2288
+#data to save
+hm_to_save = ([results[1][21, :, :, k]' for k in 1:length(storage_penetrations)], [results[1][23, :, :, k]' for k in 1:length(storage_penetrations)])
 
 # ╔═╡ 59f3559b-aabe-42d7-9975-5fcc0b3de978
 md"""
@@ -940,7 +965,8 @@ begin
 		[sum(results[idx_η][k, cons_time, :, 1]) for k in 1:n]
 		)
 	xlabel!("Node")
-	ylabel!("MEF [kgCO2/MWh]")
+	# ylabel!("MEF [kgCO2/MWh]")
+	ylabel!("MEF")
 end
 
 # ╔═╡ bd116217-0e1c-45a0-9239-e239dc2d639b
@@ -1054,7 +1080,7 @@ sum(E_sensitivity[npoints+1, :, :], dims=1)
 E_ref[:]
 
 # ╔═╡ b85b85d0-e1bc-4fc9-81cf-3792b55e3684
-@bind t_display Slider(1:1:T)
+t_display=17
 
 # ╔═╡ b674af27-307b-4dbb-8a75-a54bde1f123d
 t_display
@@ -1095,10 +1121,12 @@ begin
 	
 	plt_E_tot = plot(
 		x_axis_vals, 
-		sum(E_sensitivity[:, :, t_display], dims=2)./sum(E_sensitivity[idx_ref, :, t_display]), ylim=ylims
+		sum(E_sensitivity[:, :, t_display], dims=2)./sum(E_sensitivity[idx_ref, :, t_display]), ylim=(0.98, 1.05)
 		)
-	xlabel!("Change in demand at node $node_sens at time $cons_time")
-	ylabel!("Change in total emissions")
+	# xlabel!("Change in demand at node $node_sens at time $cons_time")
+	# ylabel!("Change in total emissions")
+	xlabel!(L"\Delta d/d")
+	ylabel!(L"\Delta E/E")
 	
 	#adding the theoretical curve for the sensitivity
 	E_th = (
@@ -1116,6 +1144,58 @@ begin
 	
 end
 
+# ╔═╡ 49dc5403-f19b-458d-b9d5-f2baf2e68d17
+# data to save
+begin
+x_sens = x_axis_vals
+y_sens_exp = vec(sum(E_sensitivity[:, :, t_display], dims=2)./sum(E_sensitivity[idx_ref, :, t_display]))
+y_sens_th = E_th
+
+data_sensitivity = (x_sens, y_sens_exp, y_sens_th)
+end;
+
+# ╔═╡ a1d7b77f-14e4-4a8a-806f-ebf70d4f1e3c
+# change in generators, renewable vs non renewable
+begin
+rel_g_not_renew = sum(g_sensitivity[:, 1:l_no_renew, t_display], dims=2)./sum(g_sensitivity[idx_ref, 1:l_no_renew, t_display].*(1+γ));
+rel_g_renew = sum(g_sensitivity[:, l_no_renew+1:end, t_display], dims=2)./sum(g_sensitivity[idx_ref, l_no_renew+1:end, t_display].*(1+γ));
+	
+plt_curt = plot(
+	x_axis_vals, 
+	rel_g_not_renew, 
+	label="Non renewable"
+		)
+	plot!(
+		x_axis_vals, 
+		rel_g_renew,
+		label="Renewable"
+	)
+	title!("Generators at time $t_display")
+	xlabel!("Change in demand at node $node_sens at time $cons_time")
+	ylabel!("Change in generation at all generators at time $t_display")
+
+end
+
+# ╔═╡ c291accc-8774-4319-a7b5-a5129e699ec0
+begin
+plot_gt = plot()
+for gt in unique(tags)
+	g_idx = findall(tags.==gt)
+	rel_g_crt = sum(g_sensitivity[:, g_idx, t_display], dims=2)./sum(g_sensitivity[idx_ref, g_idx, t_display].*(1+γ));
+	plot!(
+		x_axis_vals, 
+		rel_g_crt,
+		label=gt
+	)
+end
+
+
+	title!("Generators at time $t_display")
+	xlabel!("Change in demand at node $node_sens at time $cons_time")
+	ylabel!("Change in generation at all generators at time $t_display")
+	plot_gt
+end
+
 # ╔═╡ e9e1f2b7-bbbc-4f7c-9997-1b3ee1796c14
 #plot of total emissions in theory (predicted by total mefs) vs practice
 begin
@@ -1125,8 +1205,8 @@ begin
 		dims=(2,3)))./vec(sum(E_sensitivity[idx_ref, :, :], dims = (1, 2))), 
 		ylim = (.99, 1.01)
 		)
-	xlabel!("Change in demand at node $node_sens at time $cons_time")
-	ylabel!("Change in total emissions over the entire horizon")
+	xlabel!(L"\Delta d/d")
+	ylabel!(L"\Delta E/E")
 		
 		#adding the theoretical curve for the sensitivity
 		E_th_T = (
@@ -1142,25 +1222,11 @@ md"""
 ## Complete figure
 """
 
-# ╔═╡ 5f73f4e6-4eff-41b9-b68d-3baa5e77e924
-# begin
-# l_ = @layout [
-# 		a [b; c]
-# 		d{.3h}
-# 		]
-# Fig = plot(
-# 		plt_time_series, plt_dynamic_mef, plt_tot_emissions_vs_η, plt_emissions_heatmap,  
-# 		layout = l_, size=(800, 600), lw=2, legend=:outertopright, title = ["($i)" for j in 1:1, i in 1:7], titleloc = :right
-# 	)
-	
-# #save
-# savefig(Fig, 
-# 	"../img/Fig_storage.png")
-# Fig
-# end
-
 # ╔═╡ e14a1d29-477d-4ed5-908f-f436f00b7fa2
 begin
+
+lw = 2
+fs = 8
 l_top = @layout [
 		a{.6w} b{.4w}
 ]
@@ -1179,8 +1245,8 @@ plts_21 = [
 ]
 plt_middle = plot(
 		plts_21...,
-		layout = l_, size=(800, 150), lw=2, 
-		legend=:outertopright, title = ["($i)" for j in 1:1, i in 1:10], titleloc = :right
+		layout = l_, size=(800, 150), lw=lw, fs = fs, 
+		legend=:outertopright, title = ["($i)" for j in 1:1, i in 3:10], titleloc = :right
 	)
 
 l_ = @layout[
@@ -1191,8 +1257,8 @@ plts_23 = [
 ]
 plt_bottom = plot(
 		plts_23..., 
-		layout = l_, size=(800, 150), lw=2, 
-		legend=:outertopright, title = ["($i)" for j in 1:1, i in 1:10], titleloc = :right
+		layout = l_, size=(800, 150), lw=lw, fs=fs,
+		legend=:outertopright, title = ["($i)" for j in 1:1, i in 7:10], titleloc = :right
 	)
 
 l_fig = @layout[
@@ -1202,7 +1268,7 @@ l_fig = @layout[
 ]
 Fig = plot(
 	[plt_top, plt_middle, plt_bottom]..., layout = l_fig, size=(650, 400),
-	lw = 2
+	lw=lw, fs=fs,
 )
 	
 #save
@@ -1211,9 +1277,40 @@ savefig(Fig,
 Fig
 end
 
+# ╔═╡ 062ffc7d-86da-48b0-bb63-8aa16c4bb5b7
+
+
 # ╔═╡ ec65009f-cda6-4874-be4a-2326c1c46300
 # subplots_mef_storage[21], plt_emissions_heatmap[21],
 # subplots_mef_storage[23], plt_emissions_heatmap[23],
+
+# ╔═╡ 28ad54e9-2cee-4f99-93e9-40f23471ed94
+md"""
+## HDF5
+"""
+
+# ╔═╡ bec5bfdc-5d4a-41c9-87ea-4429cc12d4ae
+begin
+fname = "/Users/lucasfuentes/sensitivity/results/fig2_data"
+fid = h5open(fname, "w")
+	
+fid["MEFs"] = MEFS_to_save
+fid["exp_vs_th_x"] = data_sensitivity[1]
+fid["exp_vs_th_y_exp"] = data_sensitivity[2]
+fid["exp_vs_th_y_th"] = data_sensitivity[3]
+fid["MEF_vs_t_x"] = data_total_mef[1]
+fid["MEF_vs_t_y1"] = data_total_mef[2][1]
+fid["MEF_vs_t_y2"] = data_total_mef[2][2]
+fid["storage_pens"] = storage_penetrations
+
+for k in 1:length(storage_penetrations)
+	for ni in nodes_heatmaps
+		fid["hm_$(ni)_$k"] = Array(results[idx_η][ni, :, :, k]')
+	end
+end
+	
+close(fid)
+end
 
 # ╔═╡ e94c4b92-ceec-412f-adfb-6e9a7344ca39
 md"""
@@ -1383,6 +1480,8 @@ end
 # ╠═0510ec8c-2f1b-4704-bb59-cd8a67ef0dc5
 # ╟─44275f74-7e7c-48d5-80a0-0f24609ef327
 # ╠═db59921e-e998-11eb-0307-e396d43191b5
+# ╠═571d1cff-7311-4db8-8ac3-9e10afefaf18
+# ╠═9af03cdd-8cb8-4221-b962-05e6ae1634cc
 # ╠═0aac9a3f-a477-4095-9be1-f4babe1e2803
 # ╠═a32d6a56-8da8-44b0-b659-21030692630a
 # ╠═257a6f74-d3c3-42eb-8076-80d26cf164ca
@@ -1414,13 +1513,14 @@ end
 # ╠═bfa4a8f9-cfcd-4e22-b2dc-751226f3a73c
 # ╟─a8ccbc8e-24e6-4214-a179-4edf3cf26dad
 # ╟─496135ec-f720-4d43-8239-d75cc7616f58
-# ╟─806819d5-7b40-4ca4-aa1e-f1cf0a9a7f3f
+# ╠═806819d5-7b40-4ca4-aa1e-f1cf0a9a7f3f
 # ╟─c8f71644-9371-443b-b976-1734cc7ae583
 # ╠═57a37eb0-a547-428c-9f8c-e5f3e30f5260
 # ╠═c5f31bf6-5cca-4b0e-86f0-b44321fec874
 # ╟─af6d4ef0-f59f-42be-af36-7cf447478e4c
 # ╠═06498d79-f20a-4691-8c72-8f1f962e6a6f
 # ╟─49aea0fc-1e0b-4e9c-8d7b-5d3727e95e1f
+# ╠═4d056537-3ec5-47d1-9f51-a603b8ae91ff
 # ╠═871ca595-9d9e-4f06-9119-c2b07bfdeb04
 # ╠═0d99fc04-0353-4170-a23e-f21460ceaf7e
 # ╟─38e73213-d399-43e5-80e8-851b6cf3299d
@@ -1453,6 +1553,7 @@ end
 # ╠═420919bc-f217-4357-bdbb-83e25e83ba56
 # ╠═5f77f4a9-ff5a-4515-9016-bf36571225c7
 # ╠═1da34733-fee3-42e1-b5e0-cac3f5f196c9
+# ╠═57643580-0a1d-4ad5-ba21-533dcbd73c2f
 # ╠═c7deae02-3dad-4335-9449-a7e8f8bd5b4f
 # ╠═b674af27-307b-4dbb-8a75-a54bde1f123d
 # ╠═f7e0d09c-40bf-4936-987a-a3bcadae5487
@@ -1462,6 +1563,7 @@ end
 # ╠═aff80d55-df50-4d4b-aba4-e62f3c7ec10e
 # ╠═a1e23c58-6d7b-4a69-8e33-411a7c051d37
 # ╠═62f66995-bd02-4b6f-8eb8-6aeae5436713
+# ╠═60c89e52-bcb4-41ed-9490-95c7ad7c2288
 # ╟─59f3559b-aabe-42d7-9975-5fcc0b3de978
 # ╠═acddad02-84ee-480f-a65f-716a4c34710c
 # ╟─edabacdd-8d25-4d64-9d4a-ecf1263ac02e
@@ -1484,11 +1586,16 @@ end
 # ╟─506e9360-2c25-4ea7-830b-68b4a6bf9026
 # ╠═b85b85d0-e1bc-4fc9-81cf-3792b55e3684
 # ╠═30511293-8ba5-486e-956b-e9f2a1ed0505
+# ╠═49dc5403-f19b-458d-b9d5-f2baf2e68d17
+# ╠═a1d7b77f-14e4-4a8a-806f-ebf70d4f1e3c
+# ╠═c291accc-8774-4319-a7b5-a5129e699ec0
 # ╠═e9e1f2b7-bbbc-4f7c-9997-1b3ee1796c14
 # ╟─d8d1fb74-0018-4685-a283-e768ae877fe4
-# ╠═5f73f4e6-4eff-41b9-b68d-3baa5e77e924
 # ╠═e14a1d29-477d-4ed5-908f-f436f00b7fa2
+# ╠═062ffc7d-86da-48b0-bb63-8aa16c4bb5b7
 # ╠═ec65009f-cda6-4874-be4a-2326c1c46300
+# ╟─28ad54e9-2cee-4f99-93e9-40f23471ed94
+# ╠═bec5bfdc-5d4a-41c9-87ea-4429cc12d4ae
 # ╟─e94c4b92-ceec-412f-adfb-6e9a7344ca39
 # ╟─c76f2ebe-ce41-47fd-b31a-2851aca53567
 # ╟─25063860-6109-46e7-9dd5-a7fc0c12159e
