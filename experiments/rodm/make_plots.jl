@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.16.4
+# v0.17.7
 
 using Markdown
 using InteractiveUtils
@@ -7,8 +7,9 @@ using InteractiveUtils
 # This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
 macro bind(def, element)
     quote
+        local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
         local el = $(esc(element))
-        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : missing
+        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
         el
     end
 end
@@ -455,7 +456,7 @@ smooth(x, w, δ=0.25) = let
 	n = length(x)
 	vecs = [trim(x[i-w:i+w], prop=0.01) for i in (w+1):(n-w)]
 	
-	return (
+	(
 		mean.(vecs), 
 		quantile.(vecs, 0.5 + δ), 
 		quantile.(vecs, 0.5 - δ)
@@ -571,18 +572,18 @@ main_figure = let
 				ygridvisible=false,
 				xticks=([], []),
 			))
-		ylims!(axr[i], 350, 900)
+		ylims!(axr[i], 350 / 1e3, 900 / 1e3)
 		xlims!(axr[i], minimum(_x), maximum(_x))
 		
-		band!(_x, μdsl, μdsu, color=(:black, 0.25))
-	 	lines!(_x, μds, color=:black)
+		band!(_x, μdsl / 1e3, μdsu / 1e3, color=(:black, 0.25))
+	 	lines!(_x, μds / 1e3, color=:black)
 		
-		band!(_x, μdsal, μdsau, color=set_alpha(get_color(f, i), 0.25))
-		lines!(_x, μdsa, color=get_color(f, i), label=uppercase(string(alg)))
+		band!(_x, μdsal / 1e3, μdsau / 1e3, color=set_alpha(get_color(f, i), 0.25))
+		lines!(_x, μdsa / 1e3, color=get_color(f, i), label=uppercase(string(alg)))
 	end
 	
 	axr[3].xlabel = "Demand [GWh]"
-	axr[2].ylabel = "Marginal Emissions [kg CO2 / MWh]"
+	axr[2].ylabel = "MEF [t / MWh]"
 	axr[3].xticks = collect(20:10:60)
 	rowgap!(gr, 6)
 	
