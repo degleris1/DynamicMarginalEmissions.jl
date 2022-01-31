@@ -951,7 +951,7 @@ md"""
 """
 
 # ╔═╡ 3c5edbc5-8fc7-4d09-98a9-85f2efb699a8
-node_sens = 21
+node_sens = 3 # 21
 
 # ╔═╡ 67ad2564-fb20-4a71-a084-0145e8ed24bc
 cons_time = 17;
@@ -970,7 +970,7 @@ begin
 end
 
 # ╔═╡ bd116217-0e1c-45a0-9239-e239dc2d639b
-s_idx_ = 1
+s_idx_ = 1 #index of storage penetration
 
 # ╔═╡ a1e23c58-6d7b-4a69-8e33-411a7c051d37
 diag(results[idx_η][node_single, :, :, s_idx_])
@@ -1008,6 +1008,8 @@ begin
 	if RUN_CELL_SENSITIVITY
 	println("---------------------------")
 	println("Running sensitivity analysis")
+
+		
 	# size of the matrices are
 	# 2npoints+1: number of different values of demand for which we solve the problem
 	# n: number of nodes in the graph
@@ -1021,6 +1023,10 @@ begin
 			perturb_vals = [ref_val * (1+i*ε) for i in -npoints:npoints]
 			x_axis_vals = [1+i*ε for i in -npoints:npoints]
 			idx_ref = npoints+1
+			idx_105 = findall(x_axis_vals.==1.05)[1]
+			idx_95 = findall(x_axis_vals.==.95)[1]
+			idx_110 = findall(x_axis_vals .== 1.1)[1]
+			idx_90 = findall(x_axis_vals .== .9)[1]
 	else
 			println("""Demand is zero!""")
 			perturb_vals = [i*ε for i in 0:npoints]
@@ -1031,6 +1037,7 @@ begin
 	E_sensitivity = zeros(L, length(emissions_rates), T);
 	s_sensitivity = zeros(L, n, T)
 	g_sensitivity = zeros(L, l, T);
+	mefs_sensitivity = zeros(L, T) #first index is perturbation, second is emissions time
 		
 	net_crt = meta[idx_η][s_idx_].net
 		
@@ -1043,10 +1050,14 @@ begin
 			@show opf_.problem.status
 		end
 
+		mefs_ = compute_mefs(opf_, net_crt, d_crt, emissions_rates)
+
 		for t in 1:T
 			s_sensitivity[k, :, t] = evaluate(opf_.s[t])
 			g_sensitivity[k, :, t] = evaluate(opf_.g[t])
+			# emissions sensitivity at 100% of the demand
 			E_sensitivity[k, :, t] = evaluate(opf_.g[t]).*emissions_rates
+			mefs_sensitivity[k, :] = mefs_[cons_time][node_sens, :]
 		end
 		# println(d_dyn[cons_time][node])
 		# println(d_crt[cons_time][node])
@@ -1118,10 +1129,11 @@ begin
 	title!("Generators at time $t_display")
 	xlabel!("Change in demand at node $node_sens at time $cons_time")
 	ylabel!("Change in generation at all generators at time $t_display")
-	
+
+	norm_E = sum(E_sensitivity[:, :, t_display], dims=2)./sum(E_sensitivity[idx_ref, :, t_display])
 	plt_E_tot = plot(
-		x_axis_vals, 
-		sum(E_sensitivity[:, :, t_display], dims=2)./sum(E_sensitivity[idx_ref, :, t_display]), ylim=(0.98, 1.05)
+		x_axis_vals, norm_E
+		, ylim=(0.98, 1.08)
 		)
 	# xlabel!("Change in demand at node $node_sens at time $cons_time")
 	# ylabel!("Change in total emissions")
@@ -1130,9 +1142,33 @@ begin
 	
 	#adding the theoretical curve for the sensitivity
 	E_th = (
-		sum(E_sensitivity[idx_ref, :, t_display]) .+ (perturb_vals.-ref_val) .* ref_mefs[t_display, cons_time]
+		sum(E_sensitivity[idx_ref, :, t_display]) .+ (perturb_vals.-ref_val) .* mefs_sensitivity[idx_ref, t_display]
 		)./sum(E_sensitivity[idx_ref, :, t_display])
-	plot!(x_axis_vals, E_th, ls=:dash)
+
+	E_th_105 = (
+		sum(E_sensitivity[idx_105, :, t_display]) .+ (perturb_vals.-ref_val * x_axis_vals[idx_105]) .* mefs_sensitivity[idx_105, t_display]
+		)./sum(E_sensitivity[idx_ref, :, t_display])
+
+E_th_95 = (
+		sum(E_sensitivity[idx_95, :, t_display]) .+ (perturb_vals.-ref_val * x_axis_vals[idx_95]) .* mefs_sensitivity[idx_95, t_display]
+		)./sum(E_sensitivity[idx_ref, :, t_display])
+	E_th_110 = (
+		sum(E_sensitivity[idx_110, :, t_display]) .+ (perturb_vals.-ref_val * x_axis_vals[idx_110]) .* mefs_sensitivity[idx_110, t_display]
+		)./sum(E_sensitivity[idx_ref, :, t_display])
+
+	E_th_90 = (
+		sum(E_sensitivity[idx_90, :, t_display]) .+ (perturb_vals.-ref_val * x_axis_vals[idx_90]) .* mefs_sensitivity[idx_90, t_display]
+		)./sum(E_sensitivity[idx_ref, :, t_display])
+	
+	plot!(x_axis_vals, E_th, ls=:dash, c=:orange)
+	plot!(x_axis_vals, E_th_105, ls=:dash, c=:green)
+	plot!(x_axis_vals, E_th_95, ls=:dash, c=:firebrick)
+	plot!(x_axis_vals, E_th_110, ls=:dash, c=:violetred)
+
+	scatter!([x_axis_vals[idx_ref]], [norm_E[idx_ref]], c=:orange)
+	scatter!([x_axis_vals[idx_105]], [norm_E[idx_105]], c=:green)
+	scatter!([x_axis_vals[idx_95]], [norm_E[idx_95]], c=:firebrick)
+	scatter!([x_axis_vals[idx_110]], [norm_E[idx_110]], c=:violetred)
 	title!("Total emissions at time $t_display")
 	
 	@show ref_mefs[t_display, cons_time]
@@ -1149,9 +1185,15 @@ end
 begin
 x_sens = x_axis_vals
 y_sens_exp = vec(sum(E_sensitivity[:, :, t_display], dims=2)./sum(E_sensitivity[idx_ref, :, t_display]))
-y_sens_th = E_th
+y_sens_100 = E_th
+y_sens_105 = E_th_105
+y_sens_110 = E_th_110
+y_sens_90 = E_th_90
+y_sens_95 = E_th_95
 
-data_sensitivity = (x_sens, y_sens_exp, y_sens_th)
+data_sensitivity = (
+	x_sens, y_sens_exp, y_sens_90, y_sens_95, y_sens_100, y_sens_105, y_sens_110
+)
 end;
 
 # ╔═╡ a1d7b77f-14e4-4a8a-806f-ebf70d4f1e3c
@@ -1289,15 +1331,26 @@ md"""
 ## HDF5
 """
 
+# ╔═╡ 2407370d-6cdb-4c36-a8d1-fa8c1e515c61
+let
+fname = "/Users/lucasfuentes/sensitivity/results/fig2_data_sensitivity_node_$(node_sens)"
+fid = h5open(fname, "w")
+fid["x"] = data_sensitivity[1]
+fid["y_exp"] = data_sensitivity[2]
+fid["y_90"] = data_sensitivity[3]
+fid["y_95"] = data_sensitivity[4]
+fid["y_100"] = data_sensitivity[5]
+fid["y_105"] = data_sensitivity[6]
+fid["y_110"] = data_sensitivity[7]
+close(fid)
+end
+
 # ╔═╡ bec5bfdc-5d4a-41c9-87ea-4429cc12d4ae
 begin
-fname = "/Users/lucasfuentes/sensitivity/results/fig2_data"
+fname = "/Users/lucasfuentes/sensitivity/results/fig2_data_1"
 fid = h5open(fname, "w")
 	
 fid["MEFs"] = MEFS_to_save
-fid["exp_vs_th_x"] = data_sensitivity[1]
-fid["exp_vs_th_y_exp"] = data_sensitivity[2]
-fid["exp_vs_th_y_th"] = data_sensitivity[3]
 fid["MEF_vs_t_x"] = data_total_mef[1]
 fid["MEF_vs_t_y1"] = data_total_mef[2][1]
 fid["MEF_vs_t_y2"] = data_total_mef[2][2]
@@ -1311,6 +1364,9 @@ end
 	
 close(fid)
 end
+
+# ╔═╡ a2a1a718-e0e5-4731-ba9b-07f18beee578
+heatmap(results[idx_η][21, :, :, 1], c=:balance, clim=(-700, 700))
 
 # ╔═╡ e94c4b92-ceec-412f-adfb-6e9a7344ca39
 md"""
@@ -1577,7 +1633,7 @@ end
 # ╠═4aed3df5-441b-445b-9277-a38690eb8603
 # ╟─c9b41436-e0a0-4e57-908f-b45e42122e63
 # ╠═110f3329-c847-47f1-8427-ee959adc8745
-# ╟─91f7d63c-9e30-4fd4-ab39-9fbf58d101dc
+# ╠═91f7d63c-9e30-4fd4-ab39-9fbf58d101dc
 # ╠═77943ac8-36fe-4a13-a36d-db957780d869
 # ╟─4fd2833c-6c23-4009-8734-980d3dd08c91
 # ╟─e0f5c93c-e1dd-4a9e-baf1-cbb8daf540dc
@@ -1595,7 +1651,9 @@ end
 # ╠═062ffc7d-86da-48b0-bb63-8aa16c4bb5b7
 # ╠═ec65009f-cda6-4874-be4a-2326c1c46300
 # ╟─28ad54e9-2cee-4f99-93e9-40f23471ed94
+# ╠═2407370d-6cdb-4c36-a8d1-fa8c1e515c61
 # ╠═bec5bfdc-5d4a-41c9-87ea-4429cc12d4ae
+# ╠═a2a1a718-e0e5-4731-ba9b-07f18beee578
 # ╟─e94c4b92-ceec-412f-adfb-6e9a7344ca39
 # ╟─c76f2ebe-ce41-47fd-b31a-2851aca53567
 # ╟─25063860-6109-46e7-9dd5-a7fc0c12159e

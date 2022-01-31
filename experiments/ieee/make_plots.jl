@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.17.2
+# v0.17.1
 
 using Markdown
 using InteractiveUtils
@@ -11,7 +11,29 @@ begin
 	using HDF5
 	using CairoMakie
 	using CarbonNetworks
+	using ColorSchemes
+	using Colors
 end
+
+# ╔═╡ 00c874fc-f087-4c6a-b653-feb5080ff89d
+using ColorSchemeTools
+
+# ╔═╡ 177d72ea-5a88-416e-99ee-4ed694b0384e
+begin
+#Anthony
+DATA_PATH = "/Users/degleris/Data/carbon_networks/fig2_data.h5"
+SAVE_PATH = "/Users/degleris/Documents/Research/CarbonNetworks/img/"
+
+	
+#Lucas
+DATA_PATH = "/Users/lucasfuentes/sensitivity/results/fig2_data"
+SAVE_PATH = "/Users/lucasfuentes/sensitivity/img/"
+
+
+fnm1 = "network_mefs.pdf"
+fnm2 = "mef_heatmaps.pdf"
+
+end;
 
 # ╔═╡ c041f8ff-df9a-4b6a-a73b-b125c3de4495
 md"""
@@ -19,7 +41,8 @@ md"""
 """
 
 # ╔═╡ 9874d30f-c591-48a4-8118-a523bc758509
-f = h5open("/Users/degleris/Data/carbon_networks/fig2_data.h5") do f
+# f = h5open("/Users/degleris/Data/carbon_networks/fig2_data.h5") do f
+f = h5open("/Users/lucasfuentes/sensitivity/results/fig2_data") do f
 	r = Dict()
 
 	for k in keys(f)
@@ -78,7 +101,7 @@ figure_nodal_mefs = let
 	# Decrease size of second column
 	colsize!(fig.layout, 2, Auto(0.5))
 
-	fname = "/Users/degleris/Documents/Research/CarbonNetworks/img/network_mefs.pdf"
+	fname = joinpath(SAVE_PATH, fnm1)
 	save(fname, fig, pt_per_unit=0.75)
 	fig
 end
@@ -88,6 +111,10 @@ md"""
 ### Plot B: MEFs over time
 """
 
+# ╔═╡ 2c443306-d607-42ff-b36a-4822b61e0846
+# http://juliagraphics.github.io/Colors.jl/stable/namedcolors/
+# useful link to choose appropriate colors
+
 # ╔═╡ 4e579820-e404-4a44-900f-cbd588dd931e
 figure_temporal = let
 	hours = f["MEF_vs_t_x"]
@@ -96,6 +123,16 @@ figure_temporal = let
 	mef_grids = [f["hm_$(nodes[j])_$(k)"] for j in 1:2, k in 1:3] ./ 1000
 	cmax = maximum(maximum.(mef_grids))
 	cmin = minimum(minimum.(mef_grids))
+
+	lim = max(abs(cmin), abs(cmax))
+	cmax = lim
+	cmin = -lim
+	
+	colormap = cgrad(
+		[:firebrick4, :orangered2,  :grey96, :skyblue1, :navyblue], 
+		[.3, .49, (0-cmin)/(cmax-cmin), .51, .8]
+	)
+	# colormap=:balance
 	
 	# Setup
 	lw = 3
@@ -133,7 +170,10 @@ figure_temporal = let
 	]
 	for (j, k) in Iterators.product(1:2, 1:3)
 		
-		heatmap!(gr_axes[j, k], f["hm_$(nodes[j])_$(k)"], colorrange=(cmin, cmax))
+		heatmap!(
+			gr_axes[j, k], f["hm_$(nodes[j])_$(k)"]./1000, 
+			colorrange=(cmin, cmax), colormap=colormap
+		)
 		gr_axes[j, k].xticks = 0:6:24
 		gr_axes[j, k].yticks = 0:6:24
 
@@ -146,7 +186,7 @@ figure_temporal = let
 	end
 	cb = Colorbar(
 		fig[1:2, 5], 
-		colormap = :viridis, 
+		colormap = colormap, 
 		limits=(cmin, cmax), 
 		label="MEF [mTCO2 / MWh]"
 	)
@@ -183,7 +223,7 @@ figure_temporal = let
 
 	
 	
-	fname = "/Users/degleris/Documents/Research/CarbonNetworks/img/mef_heatmaps.pdf"
+	fname = joinpath(SAVE_PATH, fnm2)
 	save(fname, fig, pt_per_unit=0.75)
 	fig
 end
@@ -193,10 +233,13 @@ maximum(maximum.([f["hm_$(Dict(1=>21, 2=>23)[j])_$(k)"] for j in 1:2, k in 1:3])
 
 # ╔═╡ Cell order:
 # ╠═85394d0a-6f17-11ec-04e7-89c834098e0c
+# ╠═177d72ea-5a88-416e-99ee-4ed694b0384e
 # ╟─c041f8ff-df9a-4b6a-a73b-b125c3de4495
 # ╠═9874d30f-c591-48a4-8118-a523bc758509
 # ╟─c33a5eb8-ae22-412c-90ef-9cb1ab385ecb
 # ╠═672984c0-eff8-4156-9ce8-0d2f919a4d4c
 # ╟─b6cf83e6-043e-452a-ba72-2e5911c0cffa
+# ╠═00c874fc-f087-4c6a-b653-feb5080ff89d
+# ╠═2c443306-d607-42ff-b36a-4822b61e0846
 # ╠═4e579820-e404-4a44-900f-cbd588dd931e
 # ╠═0b004661-a463-4f00-bad9-3532245000da
