@@ -37,6 +37,8 @@ export make_dynamic, generate_random_data
 export compute_jacobian_kkt_dyn, get_problem_dims
 export make_pfdf_matrix
 
+export generate_network
+
 
 # Files
 include("model.jl")

@@ -26,31 +26,15 @@ end
 # ╔═╡ 571d1cff-7311-4db8-8ac3-9e10afefaf18
 using LaTeXStrings
 
-# ╔═╡ 9af03cdd-8cb8-4221-b962-05e6ae1634cc
-using HDF5
-
 # ╔═╡ c39005df-61e0-4c08-8321-49cc5fe71ef3
 md"""
 ## Description
 """
 
-# ╔═╡ 0510ec8c-2f1b-4704-bb59-cd8a67ef0dc5
-md"""
-## *TODO* in order of priority
-- Figure out why when solving the same problem (i.e. in the beginning of the notebook vs when exploring charging efficiency and storage penetration impact of MEF) the mefs are not the same!? Namely, we see that we have a few significantly negative mefs (node 30 for instance) which are wrong and are not recovered in the other computations. What is the difference between computations? 
-- PICK REALISTIC VALUES FOR THE SYSTEM and scale the values properly. This is what you need!
-- handle storage location: do we want storage everywhere? Is it not easier to add one big battery somewhere on the network?
-- make sure we know exactly how to flip the mef matrix, and we avoid confusion
-- make sure renewable generation is properly allocated
+# ╔═╡ 0f9bfc53-8a1a-4e25-a82e-9bc4dc0a11fc
+md"""This notebook aims at illustrating the method developed for computing marginal emissions, as well as the codebase built around it. 
 
-
-- clip the colorbars for the main heatmaps and see if they compare
-- just finalize figure
-
-
-??? - should we add bar plots as a function of congestion? we did this experiment, showing that as congestion increases, some mefs become negative?
-
-- should we add something about renewable curtailment? I am guessing that negative mefs means more renewable used. We could do emissions decrease and percentage of total renewable generation used increases, same for nonrenewable. that would I think be useful to drive the point home
+Note this is work in progress. 
 """
 
 # ╔═╡ 44275f74-7e7c-48d5-80a0-0f24609ef327
@@ -61,13 +45,6 @@ md"""
 # ╔═╡ a32d6a56-8da8-44b0-b659-21030692630a
 begin
 	ECOS_OPT = () -> ECOS.Optimizer(verbose=false)
-	# GUROBI_ENV = Gurobi.Env()
-	# GUROBI_OPT = Convex.MOI.OptimizerWithAttributes(
-	# 	() -> Gurobi.Optimizer(GUROBI_ENV), "LogToConsole" => false
-	# )
-	# ECOS_OPT_2 = Convex.MOI.OptimizerWithAttributes(
-	# 	ECOS.Optimizer, "maxit"=> 100, "reltol"=>1e-6, "LogToConsole"=>false
-	# 	)
 	OPT = ECOS_OPT
 	δ = 1e-4
 end;
@@ -98,136 +75,6 @@ begin
 	renew_data ./= sum(renew_data, dims=1)
 end;
 
-# ╔═╡ 75dfaefd-abec-47e2-acc3-c0ff3a01048e
-md"""
-### Network
-"""
-
-# ╔═╡ 7d738cd3-1edf-4348-aa16-5ade0f87ae6f
-#define which nodes have renewable generation
-renew_nodes = [12, 14, 15, 18]
-
-# ╔═╡ 63db8d8b-8229-47e0-a309-75813120aaab
-placed_gen_nodes = [9, 11, 6, 8, 28, 7] 
-
-# ╔═╡ 35dccacb-8780-4f37-8dc5-29064a84d49c
-# allocating low/med capacity to some edges. Most likely, most of those allocations are completely wrong
-begin
-	add_low = [1, 6, 13, 21, 25, 26, 33, 30, 32, 9, 3]
-	add_med = [35, 7, 12, 38, 36, 11]
-	level_low = .4
-	level_med = .5
-end;
-
-# ╔═╡ f999d732-14b3-4ac5-b803-3df7a96ef898
-begin
-	Random.seed!(2)# Random.seed!(2) - for n_low_capacity = 10 - .4
-	net, d_peak, _ = load_synthetic_network("case30.m")
-	n = length(d_peak)
-	
-	if placed_gen_nodes != nothing
-		net.B = I(n)[:, placed_gen_nodes]
-	end
-	_, l_no_renew = size(net.B)
-
-	gen_nodes = findall(vec(sum(net.B, dims = 2)) .> 0)
-	
-	# Limit line flows and generation capacities
-	capacities = ones(size(net.A)[2]) * .6
-	capacities[[29, 31]] .= .4 # minimum necessary, edges around gen 22
-	capacities[add_low] .= level_low
-	capacities[add_med] .= level_med
-
-	net.pmax = net.pmax .* capacities 
-	
-	net.gmax *= 2.
-	
-	# Add generators for each renewable source
-	net.B = [net.B I(n)[:, renew_nodes]]
-	net.gmax = [net.gmax; zeros(length(renew_nodes))]
-	net.fq = [net.fq; zeros(length(renew_nodes))]
-	net.fl = [net.fl; zeros(length(renew_nodes))]
-	
-	"Network loaded."
-end
-
-
-# ╔═╡ 0d42b50d-993e-4eea-9025-2b7479bb3b0e
-begin
-	# color 1: non rewable nodes
-	# color 2: renewable nodes
-	# color 3 = generator nodes -- TODO
-	pal = palette(:tab20)
-	graph_colors = [pal[6], pal[8], pal[16]]
-	# graph_colors = [:green, :blue, :red]
-	node_cols = []
-	for k in 1:n
-		if k in renew_nodes
-			push!(node_cols, graph_colors[1])
-		elseif k in gen_nodes
-			push!(node_cols, graph_colors[2])
-		else
-			push!(node_cols, graph_colors[3])
-		end
-	end
-	# node_cols = [k in renew_nodes ? graph_colors[2] : graph_colors[1] for k in 1:n]
-
-end
-
-# ╔═╡ 23690382-3d30-46e3-b26a-a30875be78ec
-begin
-	#edges with low capacity
-	Random.seed!(17)
-	
-	G = SimpleWeightedGraph(n)
-	for j in 1:size(net.A, 2)
-		inds = findall(x -> x != 0, net.A[:, j])
-		if net.pmax[j] > δ 
-			add_edge!(G, inds[1], inds[2], net.pmax[j])
-		end
-	end
-	
-	edge_colors = [
-		k < .6 ? colorant"orange" : colorant"lightgray" for k in capacities
-		]
-	
-	Gplot = gplot(G, nodelabel=1:n, nodefillc=node_cols, edgestrokec=edge_colors)
-	Gplot
-end
-
-# ╔═╡ c92e091e-1111-4bda-8d76-543ad1dd8121
-#nodes with demand
-begin
-	Random.seed!(17)
-	node_demand_color = [
-		d_peak[k] == 0 ? colorant"lightgray" : colorant"orange" for k in 1:n
-	]
-	Gplot_demand = gplot(G, nodelabel=1:n, nodefillc=node_demand_color)
-	Gplot_demand
-end
-
-# ╔═╡ 379598be-2c42-4c29-8a24-91b74592da0f
-# printing origins and destinations of all edges
-begin
-	i = 1
-	for e in edges(G)
-	println(i)
-	println(e)
-	i+=1
-	end
-end
-
-# ╔═╡ 39cdac4b-87bb-441c-99e3-402b40bef7d3
-_, m, l = get_problem_dims(net);
-
-# ╔═╡ 34d4bd62-6be2-4089-8caa-1a8715bee433
-md"""
-### Map time series to network data
-"""
-
-# ╔═╡ b7476391-30b9-4817-babf-7c9078531ee7
-T, n_demand = size(demand_data)
-
 # ╔═╡ cfcba5ad-e516-4223-860e-b1f18a6449ba
 begin
 	plt1 = plot(
@@ -242,59 +89,77 @@ begin
 	plt_time_series
 end
 
-# ╔═╡ c82ef027-740a-49b1-93d2-1554c411a896
-renewable_penetration = 0.1
+# ╔═╡ 75dfaefd-abec-47e2-acc3-c0ff3a01048e
+md"""
+### Network
+"""
 
-# ╔═╡ 9873abd2-fc2f-4a35-8689-51d558debbf0
-md"""the number of nodes that have zero demand is $(sum(d_peak.==0))"""
+# ╔═╡ e87dbd09-8696-43bd-84e0-af17517584dd
+md"""
+Instantiating a random network. 
+"""
 
-# ╔═╡ 0239e1da-caf5-4593-af1b-5d1e8d2f2b3e
+# ╔═╡ 6888f84d-daa9-4cfd-afc8-5aac00aeecab
 begin
-	Random.seed!(1)
-	demand_profiles = rand(1:n_demand, n)
-	
-	d_dyn = [
-		1.0 * d_peak .* demand_data[t, demand_profiles]
-		for t in 1:T
-	]
-	
-	total_demands = sum(d_dyn)
+n = 5 # number of nodes
+l = 5 # number of generators
+T = 5 # number of timesteps
+
+net_dyn, _ = generate_network(n, l, T)
 end;
 
-# ╔═╡ 9e5a1672-d452-42f5-ba5a-a2fa0b1eaada
-n_renew = size(renew_data, 2)
-
-# ╔═╡ 522e95d5-15a8-47ec-a79c-c4cc17cf86fd
+# ╔═╡ 0d42b50d-993e-4eea-9025-2b7479bb3b0e
 begin
-	Random.seed!(3)
-	# here we allocate renewable generation to every node. 
-	# we probably want to sparsify it
-	# renew_profiles = vcat(rand(1:n_renew, length(renew_nodes)))
-	renew_profiles = [1, 2, 3, 4]
+	# color 1: non rewable nodes
+	# color 2: renewable nodes
+	# color 3 = generator nodes -- TODO
+	pal = palette(:tab20)
+	graph_colors = [pal[6], pal[8], pal[16]]
+	# graph_colors = [:green, :blue, :red]
+	# node_cols = []
+	# for k in 1:n
+	# 	if k in renew_nodes
+	# 		push!(node_cols, graph_colors[1])
+	# 	elseif k in gen_nodes
+	# 		push!(node_cols, graph_colors[2])
+	# 	else
+	# 		push!(node_cols, graph_colors[3])
+	# 	end
+	# end
+	# node_cols = [k in renew_nodes ? graph_colors[2] : graph_colors[1] for k in 1:n]
 
-	@assert length(renew_profiles) == length(renew_nodes)
+end
 
-	get_renew = (t, renew_profile) -> 
-		renew_profile == 0 ? 0.0 : renew_data[t, renew_profile]
+# ╔═╡ 23690382-3d30-46e3-b26a-a30875be78ec
+begin
+	#edges with low capacity
+	Random.seed!(17)
 	
-	renew_gmax = [
-		get_renew.(t, renew_profiles) .* total_demands[renew_nodes] * renewable_penetration for t in 1:T
-	]
-	
-	dyn_gmax = [deepcopy(net.gmax) for t in 1:T]
-	for t in 1:T
-		dyn_gmax[t][end-length(renew_nodes)+1:end] .= max.(δ, renew_gmax[t])
+	G = SimpleWeightedGraph(n)
+	for j in 1:size(net_dyn.A, 2)
+		inds = findall(x -> x != 0, net_dyn.A[:, j])
+		if net_dyn.pmax[1][j] > δ 
+			add_edge!(G, inds[1], inds[2], net_dyn.pmax[1][j])
+		end
 	end
-end;
+	
+	# edge_colors = [
+	# 	k < .6 ? colorant"orange" : colorant"lightgray" for k in capacities
+	# 	]
+	
+	Gplot = gplot(G, nodelabel=1:n)#, nodefillc=node_cols)#, edgestrokec=edge_colors)
+	Gplot
+end
 
-# ╔═╡ bfa4a8f9-cfcd-4e22-b2dc-751226f3a73c
+# ╔═╡ 379598be-2c42-4c29-8a24-91b74592da0f
+# printing origins and destinations of all edges
 begin
-	net_d_dyn = hcat(d_dyn...)' - ((I(n)[:, renew_nodes]) * hcat(renew_gmax...))'
-	Random.seed!(7)
-	plot(size=(600, 200))
-	plot!(net_d_dyn[:, rand(1:n, 10)], lw=2, c=repeat(renew_profiles, outer=T)')
-	xlabel!("Time")
-	ylabel!("Net demand")
+	i = 1
+	for e in edges(G)
+	println(i)
+	println(e)
+	i+=1
+	end
 end
 
 # ╔═╡ a8ccbc8e-24e6-4214-a179-4edf3cf26dad
@@ -304,6 +169,14 @@ md"""
 
 # ╔═╡ 496135ec-f720-4d43-8239-d75cc7616f58
 md"""Emissions rates:"""
+
+# ╔═╡ aeb57a4c-4bbc-428b-a683-d8839a3cc01e
+md"""
+Specify the nature of generators in the network: 
+"""
+
+# ╔═╡ 1f730f92-20ed-4fba-a563-c326c033c5d6
+tags = ["NG", "NUC", "COL", "OIL", "GEO"]
 
 # ╔═╡ 806819d5-7b40-4ca4-aa1e-f1cf0a9a7f3f
 begin
@@ -323,185 +196,10 @@ begin
         "BIO" => 230,
         "GEO" => 42,
 	)
-	
-	gen_type = ["NG", "NUC", "COL", "OIL", "NG", "COL"]
-	renew_tags = []
-	rl = renew_labels[renew_profiles]
-	for l in rl
-		if l == "solar"
-			push!(renew_tags, "SUN")
-		elseif l == "wind"
-			push!(renew_tags, "WND")
-		else 
-			println("WRONG TAG")
-		end
-	end
-
-	tags = vcat(gen_type, renew_tags)
 
 	emissions_rates = [EMISSIONS_FACTORS[tag] for tag in tags]
-	emissions_rates
-end
 
-# ╔═╡ c8f71644-9371-443b-b976-1734cc7ae583
-md"""
-## What is the impact of charging/discharging efficiency on storage dynamics?
-"""
-
-# ╔═╡ 57a37eb0-a547-428c-9f8c-e5f3e30f5260
-# Parameters
-begin
-	c_rate = .25 #charging rate
-	s_rel = 0.0 #storage penetration
-	mef_times = 1:24
-	η_c = 1
-	η_d = η_c
-	node_storage = 0
 end;
-
-# ╔═╡ c5f31bf6-5cca-4b0e-86f0-b44321fec874
-# Simply solving the problem
-begin
-	println("Solving first problem")
-	mefs = zeros(
-			n, T, length(mef_times)
-		)
-	
-	# Construct dynamic network
-	C = sum(d_dyn) .* (s_rel + δ)/T .+ δ
-	
-	if node_storage >= 1 # to update
-		nodes_on = zeros(n)
-		nodes_on[node_storage] = 1
-		C = C.* nodes_on
-	end
-	P = C*c_rate
-
-
-	net_dyn = make_dynamic(net, T, P, C, η_c);
-|
-	# Construct and solve OPF problem
-	opf_dyn = DynamicPowerManagementProblem(net_dyn, d_dyn)
-	solve!(opf_dyn, OPT, verbose=false)
-
-	# if opf_dyn.problem.status != Convex.MOI.OPTIMAL
-		@show opf_dyn.problem.status
-	# end
-
-	# Compute MEFs
-	mefs_ = compute_mefs(opf_dyn, net_dyn, d_dyn, emissions_rates)
-
-	for ind_t in 1:T
-		mefs[:, :, ind_t] .= mefs_[ind_t];
-	end
-	status_ = opf_dyn.problem.status
-	status_
-end
-
-# ╔═╡ 15245a9a-8a42-4ec1-ba2c-9bf95d6c85fa
-status_
-
-# ╔═╡ af6d4ef0-f59f-42be-af36-7cf447478e4c
-begin
-	s_vals = zeros(n, T+1)
-	g_vals = zeros(l, T)
-	p_vals = zeros(m, T)
-	d_vals = zeros(n, T)
-	for t in 1:T
-    	s_vals[:, t+1] = evaluate(opf_dyn.s[t])./C
-		g_vals[:, t] = evaluate(opf_dyn.g[t])./dyn_gmax[t]
-		p_vals[:, t] = evaluate(opf_dyn.p[t])./net.pmax
-		d_vals[:, t] = d_dyn[t]
-	end
-end
-
-# ╔═╡ 06498d79-f20a-4691-8c72-8f1f962e6a6f
-#node to be displayed here below
-node_single = 21
-
-# ╔═╡ 49aea0fc-1e0b-4e9c-8d7b-5d3727e95e1f
-begin
-	subplts = []
-		
-	
-	
-	plot_p = plot(abs.(p_vals)', xlabel="t", ylabel="p(t)/pmax", ylim=(-0.1, 1.1));
-	push!(subplts, plot_p)
-	
-	t_axis = [t for t in 0:T]
-	s_subplt = plot(t_axis, s_vals', ylim=(-.1, 1.1))
-	title!("Relative SOC \n η = $η_c")
-	xlabel!("Hour")
-	ylabel!("SOC")
-	
-	push!(subplts, s_subplt)
-	g_plt = plot(g_vals', xlabel="t", ylabel="g(t)/gmax", ylim=(-.1, 1.1))
-	# plot!([sum(d_dyn[i]) for i in 1:T], ls=:dash)
-	# plot!(sum(g_vals', 1), ls=:dash)
-	push!(subplts, g_plt)
-	
-	g_s_plt = plot(
-		[sum(d_vals[:, i]) for i=1:T], label="demand", lw=2, legend=:outertopright,
-		xlabel="t", ylabel="E(t)"
-	)
-	# p_tot = [sum(p_vals[:, i]) for i=1:T]
-	# plot(p_tot)
-	g_tot = [sum(g_vals[:, i] .* net_dyn.gmax[i]) for i=1:T]
-	plot!(g_tot, ls=:dash, label="g", lw = 4)
-	# ds = [sum(evaluate(opf_dyn.s[1]))] 
-	ds = vcat(
-			sum(evaluate(opf_dyn.s[1])),
-			[sum((evaluate(opf_dyn.s[i]) - evaluate(opf_dyn.s[i-1]))) for i=2:T]
-			)
-
-	plot!(ds, ls=:dash, label="ds", lw=4)
-	plot!(g_tot - ds, ls=:dash, label="g-ds", lw=4)
-	
-	push!(subplts, g_s_plt)
-	
-	
-	crt_mefs = mefs[node_single, :, :]
-	lim = max(abs(maximum(crt_mefs)), abs(minimum(crt_mefs)));
-	clims = (-lim, lim)
-	subplt = heatmap(crt_mefs, 
-		c=:balance, colorbar=true,
-		xlabel="Consumption Time",
-		title="$(100*s_rel)% storage, η=$η_c, node=$node_single", 
-		xticks=xticks_hr, yticks=xticks_hr, 
-		clim=clims
-	)
-		
-	plot!(ylabel="Emissions Time")
-	# plot!(colorbar=true)
-	push!(subplts, subplt)
-	
-	
-	lay = @layout [Plots.grid(1, 3); Plots.grid(1, 2)]
-	
-	plots = plot(subplts..., 
-		layout=lay
-		# size=(650, 200), 
-		# bottom_margin=8Plots.pt
-	)
-
-	
-	plots
-end
-
-# ╔═╡ 871ca595-9d9e-4f06-9119-c2b07bfdeb04
-begin
-	tt = 17
-	mef_bar_plt = bar(
-		[sum(mefs[k, tt, :]) for k in 1:n]
-			)
-	xlabel!("Node number")
-	ylabel!("MEF [kg/MWh]")
-	mef_bar_plt
-end
-
-# ╔═╡ 4d056537-3ec5-47d1-9f51-a603b8ae91ff
-# data to save
-MEFS_to_save = [sum(mefs[k, tt, :]) for k in 1:n]
 
 # ╔═╡ 0d99fc04-0353-4170-a23e-f21460ceaf7e
 interesting_nodes = [10, 17, 19, 21, 22, 23, 24]
@@ -521,127 +219,6 @@ begin
 		G, nodelabel=1:n, nodefillc=node_cols, edgestrokec=edge_flow_colors
 	)
 	g_edge_flow_plot
-end
-
-# ╔═╡ 83e265f4-0a62-4c53-9203-6a7768c6220e
-g_edge_flow_plot
-
-# ╔═╡ 1bd70b8a-90ff-45f3-8ef4-dee0340a02f0
-md"""
-## What is the impact of congestion on MEFs
-"""
-
-# ╔═╡ a1517984-dfdb-4be7-94cd-16fbf2dbc453
-begin
-
-	mef_congestion = Dict()
-	congestion = Dict()
-	factors = [1 1.5 2 2.5 3 5 10]
-	for f in factors
-		println("Solving problem with line capacities at $f x")
-		net_crt = deepcopy(net_dyn)
-		net_crt.pmax *= f
-		# Construct and solve OPF problem
-		opf_crt = DynamicPowerManagementProblem(net_crt, d_dyn)
-		solve!(opf_crt, OPT, verbose=false)
-
-		@show opf_crt.problem.status
-
-		mefs_crt = compute_mefs(opf_crt, net_crt, d_dyn, emissions_rates)
-		mef_congestion[f] = mefs_crt
-		congestion[f] = [abs.(evaluate(opf_crt.p[t])./net_crt.pmax[t]) for t in 1:T]
-	end
-
-
-end
-
-# ╔═╡ 58368b3b-c042-4f37-81f0-f8dd0388e5aa
-# prepare plotting data
-begin
-	# x = congestion level, over one time step (mean, min, max)
-	x_mean, x_min, x_max = [], [], []
-	# y = different statistics of mefs (median, mean, min, max)
-	y_mean, y_median, y_min, y_max = [], [], [], []
-	# num congested lines
-	n_cong = []
-	
-	for f in factors
-		for t in 1:T
-			mefs_cong = mef_congestion[f][t]
-			cong_level = congestion[f][t]
-			push!(x_mean, mean(cong_level))
-			push!(x_min, minimum(cong_level))
-			push!(x_max, maximum(cong_level))
-			push!(y_mean, mean(mefs_cong))
-			push!(y_median, median(mefs_cong))
-			push!(y_min, minimum(mefs_cong))
-			push!(y_max, maximum(mefs_cong))
-			push!(n_cong, sum(cong_level .>= .999))
-		end
-	end
-end
-
-# ╔═╡ 0ffb55c7-1371-45ac-9823-406eb86bd8e4
-begin
-	scatter(x_mean, y_mean, label = "mean")
-	scatter!(x_mean, y_min, label = "min")
-	scatter!(x_mean, y_max, label = "max")
-	plot!(ylims = (-1000, 7000))
-	plot!(x_mean, maximum(emissions_rates) .* ones(length(x_mean)))
-	xlabel!("Average congestion level across the network")
-	ylabel!("MEF")
-end
-
-# ╔═╡ 794b4672-0d30-4df6-9fa1-2d68d34c2502
-begin
-	scatter(x_max, y_mean, label = "mean")
-	scatter!(x_max, y_min, label = "min")
-	scatter!(x_max, y_max, label = "max")
-	plot!(x_max, maximum(emissions_rates) .* ones(length(x_mean)))
-	plot!(ylims = (-1000, 2000))
-	xlabel!("Max congestion level across the network")
-	ylabel!("MEF")
-end
-
-# ╔═╡ 2bde6957-46e5-4697-9451-40b135f8523c
-begin
-	# scatter(n_cong, y_mean)
-	scatter(n_cong, y_max, label = "max", legend=:topleft)
-	scatter!(n_cong, y_min, label = "min")
-	xlabel!("Number of congested lines")
-	ylabel!("MEFs")
-end
-
-# ╔═╡ a4e2b01f-6ea9-4129-954b-3404b0e16e8f
-begin
-	function get_ribbon_params(y, n_cong)
-		ymid = []
-		dev_up, dev_down = [], []
-		x = sort(unique(n_cong))
-		for k in x
-			idx = findall(n_cong .== k)
-			ymid_ = median(y[idx])
-			dev_up_ = maximum(y[idx] .- ymid_)
-			dev_down_ = maximum(ymid_ .- y[idx])
-			push!(ymid, ymid_)
-			push!(dev_up, dev_up_)
-			push!(dev_down, dev_down_)
-		end
-
-		return ymid, dev_up, dev_down, x
-	end
-end
-
-# ╔═╡ cf7430e5-c46b-4db7-adf0-8058f9ac8640
-#ribbon plot
-begin
-	ymid1, devup1, devdown1, x = get_ribbon_params(y_max, n_cong)
-	ymid2, devup2, devdown2, _ = get_ribbon_params(y_min, n_cong)
-	plot(x, ymid1, ribbon = (devdown1, devup1), lw = 3, label = "Max", legend=:topleft)
-	plot!(x, ymid2, ribbon = (devdown2, devup2), lw=3, label = "Min")
-	xlabel!("Number of congested lines")
-	ylabel!("MEFs")
-	# plot!(ylims = (-2000, 10000))
 end
 
 # ╔═╡ 30ec492c-8d21-43f6-bb09-32810494f21e
@@ -1533,11 +1110,10 @@ end
 
 # ╔═╡ Cell order:
 # ╟─c39005df-61e0-4c08-8321-49cc5fe71ef3
-# ╠═0510ec8c-2f1b-4704-bb59-cd8a67ef0dc5
+# ╟─0f9bfc53-8a1a-4e25-a82e-9bc4dc0a11fc
 # ╟─44275f74-7e7c-48d5-80a0-0f24609ef327
 # ╠═db59921e-e998-11eb-0307-e396d43191b5
 # ╠═571d1cff-7311-4db8-8ac3-9e10afefaf18
-# ╠═9af03cdd-8cb8-4221-b962-05e6ae1634cc
 # ╠═0aac9a3f-a477-4095-9be1-f4babe1e2803
 # ╠═a32d6a56-8da8-44b0-b659-21030692630a
 # ╠═257a6f74-d3c3-42eb-8076-80d26cf164ca
@@ -1548,47 +1124,19 @@ end
 # ╠═5b80ca83-0719-437f-9e51-38f2bed02fb4
 # ╠═cfcba5ad-e516-4223-860e-b1f18a6449ba
 # ╟─75dfaefd-abec-47e2-acc3-c0ff3a01048e
-# ╟─7d738cd3-1edf-4348-aa16-5ade0f87ae6f
-# ╟─63db8d8b-8229-47e0-a309-75813120aaab
-# ╠═35dccacb-8780-4f37-8dc5-29064a84d49c
-# ╠═f999d732-14b3-4ac5-b803-3df7a96ef898
-# ╠═15245a9a-8a42-4ec1-ba2c-9bf95d6c85fa
+# ╟─e87dbd09-8696-43bd-84e0-af17517584dd
+# ╠═6888f84d-daa9-4cfd-afc8-5aac00aeecab
 # ╠═0d42b50d-993e-4eea-9025-2b7479bb3b0e
-# ╠═83e265f4-0a62-4c53-9203-6a7768c6220e
-# ╠═23690382-3d30-46e3-b26a-a30875be78ec
-# ╠═c92e091e-1111-4bda-8d76-543ad1dd8121
+# ╟─23690382-3d30-46e3-b26a-a30875be78ec
 # ╟─379598be-2c42-4c29-8a24-91b74592da0f
-# ╠═39cdac4b-87bb-441c-99e3-402b40bef7d3
-# ╟─34d4bd62-6be2-4089-8caa-1a8715bee433
-# ╠═b7476391-30b9-4817-babf-7c9078531ee7
-# ╠═c82ef027-740a-49b1-93d2-1554c411a896
-# ╟─9873abd2-fc2f-4a35-8689-51d558debbf0
-# ╠═0239e1da-caf5-4593-af1b-5d1e8d2f2b3e
-# ╠═9e5a1672-d452-42f5-ba5a-a2fa0b1eaada
-# ╠═522e95d5-15a8-47ec-a79c-c4cc17cf86fd
-# ╠═bfa4a8f9-cfcd-4e22-b2dc-751226f3a73c
 # ╟─a8ccbc8e-24e6-4214-a179-4edf3cf26dad
 # ╟─496135ec-f720-4d43-8239-d75cc7616f58
+# ╟─aeb57a4c-4bbc-428b-a683-d8839a3cc01e
+# ╠═1f730f92-20ed-4fba-a563-c326c033c5d6
 # ╠═806819d5-7b40-4ca4-aa1e-f1cf0a9a7f3f
-# ╟─c8f71644-9371-443b-b976-1734cc7ae583
-# ╠═57a37eb0-a547-428c-9f8c-e5f3e30f5260
-# ╠═c5f31bf6-5cca-4b0e-86f0-b44321fec874
-# ╟─af6d4ef0-f59f-42be-af36-7cf447478e4c
-# ╠═06498d79-f20a-4691-8c72-8f1f962e6a6f
-# ╟─49aea0fc-1e0b-4e9c-8d7b-5d3727e95e1f
-# ╠═4d056537-3ec5-47d1-9f51-a603b8ae91ff
-# ╠═871ca595-9d9e-4f06-9119-c2b07bfdeb04
 # ╠═0d99fc04-0353-4170-a23e-f21460ceaf7e
 # ╟─38e73213-d399-43e5-80e8-851b6cf3299d
 # ╟─f15393ae-5c04-473e-ae28-ead5554896a3
-# ╠═1bd70b8a-90ff-45f3-8ef4-dee0340a02f0
-# ╠═a1517984-dfdb-4be7-94cd-16fbf2dbc453
-# ╠═58368b3b-c042-4f37-81f0-f8dd0388e5aa
-# ╠═0ffb55c7-1371-45ac-9823-406eb86bd8e4
-# ╠═794b4672-0d30-4df6-9fa1-2d68d34c2502
-# ╠═2bde6957-46e5-4697-9451-40b135f8523c
-# ╠═a4e2b01f-6ea9-4129-954b-3404b0e16e8f
-# ╠═cf7430e5-c46b-4db7-adf0-8058f9ac8640
 # ╟─30ec492c-8d21-43f6-bb09-32810494f21e
 # ╠═856a78d9-7b4c-453b-b73b-c81eee014e52
 # ╠═98a0d7c5-b1a8-4ebe-bb73-7ca88b475592
