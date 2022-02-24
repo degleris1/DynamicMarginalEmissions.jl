@@ -36,21 +36,7 @@ md"""
 
 # ╔═╡ 0510ec8c-2f1b-4704-bb59-cd8a67ef0dc5
 md"""
-## *TODO* in order of priority
-- Figure out why when solving the same problem (i.e. in the beginning of the notebook vs when exploring charging efficiency and storage penetration impact of MEF) the mefs are not the same!? Namely, we see that we have a few significantly negative mefs (node 30 for instance) which are wrong and are not recovered in the other computations. What is the difference between computations? 
-- PICK REALISTIC VALUES FOR THE SYSTEM and scale the values properly. This is what you need!
-- handle storage location: do we want storage everywhere? Is it not easier to add one big battery somewhere on the network?
-- make sure we know exactly how to flip the mef matrix, and we avoid confusion
-- make sure renewable generation is properly allocated
-
-
-- clip the colorbars for the main heatmaps and see if they compare
-- just finalize figure
-
-
-??? - should we add bar plots as a function of congestion? we did this experiment, showing that as congestion increases, some mefs become negative?
-
-- should we add something about renewable curtailment? I am guessing that negative mefs means more renewable used. We could do emissions decrease and percentage of total renewable generation used increases, same for nonrenewable. that would I think be useful to drive the point home
+## *TODO*
 """
 
 # ╔═╡ 44275f74-7e7c-48d5-80a0-0f24609ef327
