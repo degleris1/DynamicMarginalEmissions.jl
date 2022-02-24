@@ -4,24 +4,24 @@ function make_dynamic(net::PowerNetwork, T, P, C, dyn_gmax, η_c, η_d)
 	fqs = [net.fq for t in 1:T]
 	fls = [net.fl for t in 1:T]
 	pmaxs = [net.pmax for t in 1:T]
-    gmaxs = [net.gmax for t in 1:T]
-	return DynamicPowerNetwork(fqs, fls, pmaxs, dyn_gmax, net.A, net.B, P, C, T; η_c=η_c, η_d=η_d)
+	return DynamicPowerNetwork(fqs, fls, pmaxs, dyn_gmax, net.A, net.B, net.F, P, C, T; η_c=η_c, η_d=η_d)
 end
 
-function make_dynamic(net::PowerNetwork, T, P, C; η_c=1.0, η_d=1.0, ρ=nothing)
-	fqs = [net.fq for t in 1:T]
-	fls = [net.fl for t in 1:T]
-	pmaxs = [net.pmax for t in 1:T]
-    gmaxs = [net.gmax for t in 1:T]
-	return DynamicPowerNetwork(fqs, fls, pmaxs, gmaxs, net.A, net.B, P, C, T; η_c=η_c, η_d=η_d, ρ=ρ)
-end
-
+make_dynamic(net::PowerNetwork, T, P, C, η) = make_dynamic(net, T, P, C, [net.gmax for _ in 1:T], η, η);
 
 function generate_random_data(n, l, T)
     Random.seed!(2)
 
     # Make graph
+    if n > 3
     G = watts_strogatz(n, 3, 0.3)
+    else
+        G = Graph(3)
+        add_edge!(G, 1, 2)
+        add_edge!(G, 1, 3)
+        add_edge!(G, 2, 3)
+    end
+
 
     # Convert to incidence matrix
     A = incidence_matrix(G, oriented=true)
@@ -35,7 +35,7 @@ function generate_random_data(n, l, T)
     end
 
     # Generate carbon costs
-    cq = zeros(l)
+    cq = rand(Exponential(2), l)
     cl = rand(Exponential(2), l)
 
     # Generate demands
@@ -56,4 +56,16 @@ function generate_random_data(n, l, T)
     ;
     
     return A, B, cq_dyn, cl_dyn, d_dyn, gmax_dyn, pmax_dyn, P, C
+end
+
+function generate_network(n, l, T)
+
+    A, B, cq_dyn, cl_dyn, d_dyn, gmax_dyn, pmax_dyn, P, C = generate_random_data(n, l, T)
+    β = rand(Exponential(10), n)
+    F = make_pfdf_matrix(A, β)
+
+    net_dyn = DynamicPowerNetwork(
+        cq_dyn, cl_dyn, pmax_dyn, gmax_dyn, A, B, F, P, C, T
+    )
+    return net_dyn, d_dyn
 end

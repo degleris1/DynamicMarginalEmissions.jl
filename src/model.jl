@@ -14,11 +14,21 @@ mutable struct PowerNetwork
     gmax
     A
     B
+    F
     τ
 end
 
-PowerNetwork(fq, fl, pmax, gmax, A, B; τ=TAU) =
-    PowerNetwork(fq, fl, pmax, gmax, A, B, τ)
+"""
+    PowerNetwork(fq, fl, pmax, gmax, A, B, F; τ=TAU)
+
+Create a power network with quadratic and linear prices `fq` and `fl`, line capacities
+`pmax`, generation capacities `gmax`, incidence matrix `A`, node-generator matrix `B`,
+and PFDF matrix `F`.
+
+Optionally, quadratically penalize power flows with weight `(1/2) τ^2`.
+"""
+PowerNetwork(fq, fl, pmax, gmax, A, B, F; τ=TAU) =
+    PowerNetwork(fq, fl, pmax, gmax, A, B, F, τ)
 
 mutable struct PowerManagementProblem
     problem::Problem
@@ -41,7 +51,7 @@ incidence matrix `A`.
 The parameter `τ` is a regularization weight used to make the problem
 strongly convex by adding τ ∑ᵢ pᵢ² to the objective.
 """
-function PowerManagementProblem(fq::Vector, fl::Vector, d, pmax, gmax, A, B; τ=TAU, ch=0, dis=0, η_c=1.0, η_d=1.0)
+function PowerManagementProblem(fq, fl, d, pmax, gmax, A, B, F; τ=TAU, ch=0, dis=0, η_c=1.0, η_d=1.0)
     n, m = size(A)
     n, l = size(B)
     g = Variable(l)
@@ -53,20 +63,21 @@ function PowerManagementProblem(fq::Vector, fl::Vector, d, pmax, gmax, A, B; τ=
         + (τ/2)*sumsquares(p)
     )
     add_constraints!(problem, [
-        -p <= pmax, #λpl
-        p <= pmax, #λpu
-        -g <= 0, #λgl
-        g <= gmax, #λgu
-        0 == A*p - B*g + d + ch - dis, #ν
+        -p <= pmax,  # λpl
+        p <= pmax,  # λpu
+        -g <= 0,  # λgl
+        g <= gmax,  # λgu
+        0 == p - F*(B*g - d - ch + dis),  # ν
+        0 == ones(n)' * (B*g - d - ch + dis),  # νE
     ])
 
-    params = (fq=fq, fl=fl, d=d, pmax=pmax, gmax=gmax, A=A, B=B, τ=τ, η_c=η_c, η_d=η_d)
+    params = (fq=fq, fl=fl, d=d, pmax=pmax, gmax=gmax, A=A, B=B, F=F, τ=τ, η_c=η_c, η_d=η_d)
 
     return PowerManagementProblem(problem, p, g, zeros(n), zeros(n), zeros(n), params)
 end
 
 PowerManagementProblem(net::PowerNetwork, d) =
-    PowerManagementProblem(net.fq, net.fl, d, net.pmax, net.gmax, net.A, net.B; τ=net.τ)
+    PowerManagementProblem(net.fq, net.fl, d, net.pmax, net.gmax, net.A, net.B, net.F; τ=net.τ)
 
 """
     Convex.solve!(P::PowerManagementProblem, opt; verbose=false)
@@ -81,7 +92,7 @@ Return the locational marginal prices of `P` (assumes the problem has
 already been solved). The LMPs are the dual variables of the power
 conservation constraint.
 """
-get_lmps(P::PowerManagementProblem) = P.problem.constraints[end].dual[:, 1]
+get_lmps(P::PowerManagementProblem) = -P.problem.constraints[end-1].dual[:, 1] .- P.problem.constraints[end].dual[1]
 
 
 
@@ -97,7 +108,7 @@ Compute the dimensions of the input / output of the KKT operator for
 a network with `n` nodes and `m` edges and `l` generator per node
 
 """
-kkt_dims(n, m, l) = 3m + 3l + n
+kkt_dims(n, m, l) = 4m + 3l + 1
 
 """
     kkt(x, fq, fl, d, pmax, gmax, A; τ=TAU)
@@ -105,27 +116,28 @@ kkt_dims(n, m, l) = 3m + 3l + n
 Compute the KKT operator applied to `x`, with parameters given by `fq`,
 `fl`, `d`, `pmax`, `gmax`, `A`, and `τ`.
 """
-function kkt(x, fq, fl, d, pmax, gmax, A, B; τ=TAU, ch=0, dis=0)
+function kkt(x, fq, fl, d, pmax, gmax, A, B, F; τ=TAU, ch=0, dis=0)
     n, m = size(A)
     n, l = size(B)
 
-    g, p, λpl, λpu, λgl, λgu, ν = unflatten_variables(x, n, m, l)
+    g, p, λpl, λpu, λgl, λgu, ν, νE = unflatten_variables(x, n, m, l)
 
     # Lagragian is
-    # L = J + λpl'(-p - pmax) + ... + λgu'(g - gmax) + v'(Ap - g - d)
+    # L = J + λpl'(-p - pmax) + ... + λgu'(g - gmax) + v'(Ap - g - d) + νF'(p - F*(B*g - d))
     return [
-        Diagonal(fq)*g + fl - B'ν - λgl + λgu; # ∇_g L
-        A'ν + λpu - λpl + τ*p; # ∇_p L
+        Diagonal(fq)*g + fl - λgl + λgu - B'*F'*ν + νE[1]*B'*ones(n); # ∇_g L
+        ν + λpu - λpl + τ*p; # ∇_p L
         λpl .* (-p - pmax); 
         λpu .* (p - pmax);
         -λgl .* g;
         λgu .* (g - gmax);
-        A*p - B*g + d .+ ch .- dis;
+        p - F*(B*g - d .- ch .+ dis);
+        ones(n)' * (B*g - d .- ch .+ dis);
     ]
 end
 
 kkt(x, net::PowerNetwork, d) =
-    kkt(x, net.fq, net.fl, d, net.pmax, net.gmax, net.A, net.B; τ=net.τ, ch=zeros(size(net.A)[1]), dis=zeros(size(net.A)[1]))
+    kkt(x, net.fq, net.fl, d, net.pmax, net.gmax, net.A, net.B, net.F; τ=net.τ, ch=zeros(size(net.A)[1]), dis=zeros(size(net.A)[1]))
 
 
 """
@@ -163,6 +175,11 @@ function unflatten_variables(x, n, m, l)
     λgu = x[i+1:i+l]
     i += l
     
-    ν = x[i+1:i+n]
-    return g, p, λpl, λpu, λgl, λgu, ν
+    ν = x[i+1:i+m]
+    i += m
+
+    νE = x[i+1:i+1]
+    i += 1
+
+    return g, p, λpl, λpu, λgl, λgu, ν, νE
 end
