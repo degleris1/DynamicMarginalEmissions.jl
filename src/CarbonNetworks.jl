@@ -5,6 +5,7 @@ using CSV
 using Convex
 using DataFrames
 using ECOS
+using Gurobi
 using LightGraphs
 using LinearAlgebra
 using SimpleWeightedGraphs
@@ -33,7 +34,10 @@ export compute_mefs
 export plot_sensitivity_check
 export make_dynamic, generate_random_data
 
-export compute_jacobian_kkt_dyn
+export compute_jacobian_kkt_dyn, get_problem_dims
+export make_pfdf_matrix
+
+export generate_network
 
 
 # Files
@@ -47,6 +51,11 @@ include("descent.jl")
 
 include("utils.jl")
 
-OPT = () -> ECOS.Optimizer(verbose=false)
+ECOS_OPT = () -> ECOS.Optimizer(verbose=false)
+# GUROBI_ENV = Gurobi.Env()
+# GUROBI_OPT = Convex.MOI.OptimizerWithAttributes(
+#     () -> Gurobi.Optimizer(GUROBI_ENV), "LogToConsole" => false
+# )
+OPT = ECOS_OPT
 
 end

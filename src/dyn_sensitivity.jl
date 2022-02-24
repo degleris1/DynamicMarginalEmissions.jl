@@ -14,10 +14,6 @@ function sensitivity_demand_dyn(P::PowerManagementProblem, net::DynamicPowerNetw
 
     # Get partial Jacobians of KKT operator
     _, ∂K_xT = Zygote.forward_jacobian(x -> kkt_dyn(x, net, d), x)
-    _, ∂K_θT = Zygote.forward_jacobian(
-        dt -> kkt_dyn(x, net, [tp == t ? dt : d[tp] for tp in 1:T]), 
-        d[t]
-    )
 
     # Now compute ∇C(g*(θ)) = -∂K_θ' * inv(∂K_x') * ∇C 
     v = ∂K_xT \ ∇C
@@ -35,12 +31,14 @@ function sensitivity_demand_dyn(P::PowerManagementProblem, net::DynamicPowerNetw
     x = flatten_variables_dyn(P)
 
     # Get partial Jacobians of KKT operator
+    ∂K_xT = sparse(adjoint(compute_jacobian_kkt_dyn(x, net, d)))
 
-    #@show size(x)
-    _, ∂K_xT = Zygote.forward_jacobian(x -> kkt_dyn(x, net, d), x)
-    #@show size(∂K_xT)
+    v = ∂K_xT \ ∇C
 
-    v = sparse(∂K_xT) \ ∇C
+    # Checking inversion of the Jacobian
+    # cond_n = cond(Array(∂K_xT))
+    # println("Condition number = $cond_n")
+
 
     ∇C_θ = []
     for t in 1:T
@@ -193,8 +191,8 @@ with `dims` being the dimension of the static system, `n` the number of nodes, a
 the number of generators.
 """
 function compute_jacobian_kkt_charge_discharge_ramp(dims, n, m, l, F)
-    dKdch = [spzeros(dims-m-1, n); -F; ones(1, n)]
-    dKddis = [spzeros(dims-m-1, n); F; -ones(1, n)]
+    dKdch = [spzeros(dims-m-1, n); F; -ones(1, n)]
+    dKddis = [spzeros(dims-m-1, n); -F; ones(1, n)]
     dKdλl = [-I(l); spzeros(dims-l, l)]
     dKdλu = [I(l); spzeros(dims-l, l)]
 
@@ -216,7 +214,13 @@ function compute_jacobian_kkt_future_ramp(dims, n, l)
     return [spzeros(dims, 9n) dKdλl dKdλu spzeros(dims, n)]
 end
 
-
+###################################################################################
+#
+# Below contains functions for automated testing of the sensitivity
+#
+# TODO: update, and make sure they work
+#
+####################################################################################
 
 """
     compute_obj_sensitivity(P::PowerManagementProblem, net::DynamicPowerNetwork, d, t)
@@ -425,8 +429,8 @@ function compute_jacobian_kkt_dyn_t(
             spzeros(l, (t-2)*kdims) -Diagonal(λrampu) spzeros(l, kdims-l) Diagonal(λrampu) spzeros(l, kdims-l+(T-t)*kdims)
         ]
     )
-    @show T*kdims
-    @show size(Dλramp)
+    # @show T*kdims
+    # @show size(Dλramp)
     K_static = [
         spzeros(n, T*kdims);
         spzeros(n, t*kdims - m - 1) -F' ones(n) spzeros(n, (T-t)*kdims);
