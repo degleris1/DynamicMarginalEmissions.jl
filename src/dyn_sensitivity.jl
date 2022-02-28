@@ -35,10 +35,10 @@ function sensitivity_demand_dyn(P::PowerManagementProblem, net::DynamicPowerNetw
 
     v = ∂K_xT \ ∇C
 
-    # Checking inversion of the Jacobian
-    # cond_n = cond(Array(∂K_xT))
-    # println("Condition number = $cond_n")
-
+    if norm(∂K_xT*v - ∇C) / length(v) > 1e-6
+        @warn "KKT Jacobian is ill-conditioned. Solutions may be innaccurate."
+        @show norm(∂K_xT*v - ∇C), length(v)
+    end
 
     ∇C_θ = []
     for t in 1:T
@@ -49,10 +49,6 @@ function sensitivity_demand_dyn(P::PowerManagementProblem, net::DynamicPowerNetw
 
         # Now compute ∇C(g*(θ)) = -∂K_θ' * inv(∂K_x') * v
         push!(∇C_θ, -∂K_θT * v)
-    end
-
-    if norm(∂K_xT*v - ∇C) > 1e-3
-        @warn "KKT Jacobian is ill-conditioned. Solutions may be innaccurate."
     end
 
     return ∇C_θ
@@ -429,8 +425,6 @@ function compute_jacobian_kkt_dyn_t(
             spzeros(l, (t-2)*kdims) -Diagonal(λrampu) spzeros(l, kdims-l) Diagonal(λrampu) spzeros(l, kdims-l+(T-t)*kdims)
         ]
     )
-    # @show T*kdims
-    # @show size(Dλramp)
     K_static = [
         spzeros(n, T*kdims);
         spzeros(n, t*kdims - m - 1) -F' ones(n) spzeros(n, (T-t)*kdims);

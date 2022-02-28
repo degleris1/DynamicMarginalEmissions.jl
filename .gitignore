@@ -6,7 +6,10 @@ src/__pycache__/*
 notebooks/gr-temp/
 
 results/
+img/
 
+*.DS_Store
 *.png
 *.gif
 *.jld
+*.pdf
