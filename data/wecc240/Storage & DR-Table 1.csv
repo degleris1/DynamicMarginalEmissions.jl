@@ -1,0 +1,9 @@
+Resource,Max Gen Capacity (MW),Gen Rating (MW),Gen Min Stable Level (MW),Ramp Rate (MW/min.),Max Load (MW),Min Load (MW),Storage Efficiency (%),Storage Volume (GWh)
+CASTAI4G 20 {2638 P} ,1272,1107,1,10.6,1272,212,93,12.72
+COLOEAST 20 {7031 P} ,333,290,1,2.78,333,150,95,1.332
+CRAIG    20 {7032 P},200,174,1,1.67,246,123,95,1
+HELMS PP 20 {3432 NP},1218,1060,1,10.15,924,308,96,186.354
+CISO DWR,,,,,1974,"See ""Load & Gen Profiles"" and ""Typical Week Profiles"" pages for hourly loads.",,
+SCE Responsive Storage,1000,1000,50,10,1000,50,100,8
+SCE Responsive Charging,,,,10,1000,0,100,8
+SCE Vehicles,,,,,500 or 1000,0,,

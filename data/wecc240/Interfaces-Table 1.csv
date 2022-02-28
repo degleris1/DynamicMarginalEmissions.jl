@@ -1,0 +1,112 @@
+Interface Name,Max Flow (MW),Min Flow (MW),Branch Name,Direction (Flow Coefficient)
+Arizona to California,3500,,Line ( PALOVRDE 500 ~ DEVERS   500 # 1 ),1
+,,,Line ( PALOVRDE 500 ~ IMPRLVLY 500 # 1 ),1
+Arizona to Imperial Valley Corridor,1000,,Line ( PALOVRDE 500 ~ IMPRLVLY 500 # 1 ),1
+AZ+NV+LA Import,13500,,Line ( LUGO     500 ~ ELDORADO 500 # 1 ),-1
+,,,Line ( LUGO     500 ~ MOHAVE   500 # 1 ),-1
+,,,Line ( LUGO     500 ~ VICTORVL 500 # 1 ),-1
+,,,Line ( PALOVRDE 500 ~ DEVERS   500 # 1 ),1
+,,,Line ( PALOVRDE 500 ~ IMPRLVLY 500 # 1 ),1
+,,,Line ( SYLMAR S 230 ~ SYLMARLA 230 # 1 ),-1
+Bay Area,5000,,Line ( C.COSTA  230 ~ TESLA    230 # 1 ),-1
+,,,Line ( C.COSTA  230 ~ TESLA    230 # 2 ),-1
+,,,Line ( C.COSTA  230 ~ VACA-DIX 230 # 1 ),-1
+,,,Line ( C.COSTA  230 ~ VACA-DIX 230 # 2 ),-1
+,,,Line ( METCALF  230 ~ MOSSLAND 230 # 1 ),-1
+,,,Line ( METCALF  230 ~ MOSSLAND 230 # 2 ),-1
+,,,Line ( METCALF  500 ~ MOSSLAND 500 # 1 ),-1
+,,,Line ( METCALF  500 ~ TESLA    500 # 1 ),-1
+,,,Line ( MORAGA   230 ~ VACA-DIX 230 # 1 ),-1
+,,,Line ( NEWARK   230 ~ TESLA    230 # 1 ),-1
+,,,Line ( NEWARK   230 ~ TESLA    230 # 2 ),-1
+,,,Line ( PITSBURG 230 ~ TESLA    230 # 1 ),-1
+,,,Line ( PITSBURG 230 ~ TESLA    230 # 2 ),-1
+,,,Line ( RAVENSWD 230 ~ TESLA    230 # 1 ),-1
+,,,Line ( SOBRANTE 230 ~ IGNACIO  230 # 1 ),-1
+,,,Line ( SOBRANTE 230 ~ LAKEVILE 230 # 1 ),-1
+Borah West (P-17),2307,,Line ( MIDPOINT 345 ~ BORAH    345 # 1 ),-1
+Canada - Northwest (P-3),3150,-2000,Line ( BELL     230 ~ CA230    230 # 1 ),-1
+,,,Line ( NORTH    500 ~ CANADA   500 # 1 ),-1
+CFE - SDGE,800,-500,Line ( MEXICO   230 ~ IMPRLVLY 230 # 1 ),1
+,,,Line ( MEXICO   230 ~ MIGUEL   230 # 1 ),1
+Fresno Area,900,,Line ( GREGG    230 ~ GATES    230 # 1 ),-1
+,,,Line ( MC CALL  230 ~ GATES    230 # 1 ),-1
+,,,Line ( PANOCHE  230 ~ GATES    230 # 1 ),-1
+,,,Line ( PANOCHE  230 ~ GATES    230 # 2 ),-1
+,,,Line ( PANOCHE  230 ~ LOSBANOS 230 # 1 ),-1
+,,,Line ( PANOCHE  230 ~ MOSSLAND 230 # 1 ),-1
+,,,Line ( WILSON   230 ~ BELLOTA  230 # 1 ),-1
+,,,Line ( WILSON   230 ~ BELLOTA  230 # 2 ),-1
+Humboldt Area,70,,Line ( HUMBOLDT 115 ~ COTWDPGE 115 # 1 ),-1
+LADWP to CAISO,4200,-4200,Line ( LUGO     500 ~ VICTORVL 500 # 1 ),-1
+,,,Line ( MEAD     500 ~ VICTORVL 500 # 1 ),-1
+,,,Line ( SYLMAR S 230 ~ SYLMARLA 230 # 1 ),-1
+,,,Line ( VICTORVL 500 ~ ELDORADO 500 # 1 ),1
+Miguel Corridor,1800,,Line ( MEXICO   230 ~ IMPRLVLY 230 # 1 ),-1
+,,,Line ( MIGUEL   500 ~ IMPRLVLY 500 # 1 ),-1
+Montana to Northwest (P-8),3250,,Line ( BORAH    230 ~ GARRISON 230 # 1 ),1
+,,,Line ( COLSTRP  500 ~ GARRISON 500 # 1 ),1
+,,,Line ( GARRISON 230 ~ MONTANA  230 # 1 ),-1
+North Bay Area,625,-625,Line ( FULTON   230 ~ IGNACIO  230 # 1 ),-1
+,,,Line ( FULTON   230 ~ LAKEVILE 230 # 1 ),-1
+North of SONGS Corridor,1175,,Line ( MIRALOMA 230 ~ S.ONOFRE 230 # 1 ),-1
+,,,Line ( SERRANO  230 ~ S.ONOFRE 230 # 1 ),-1
+,,,Line ( SERRANO  230 ~ S.ONOFRE 230 # 2 ),-1
+Northwest Import (COI),4800,-3650,Line ( MALIN    500 ~ OLINDA   500 # 1 ),1
+,,,Line ( ROUND MT 500 ~ MALIN    500 # 1 ),-1
+,,,Line ( ROUND MT 500 ~ MALIN    500 # 2 ),-1
+Path 15,3925,,Line ( GATES    500 ~ LOSBANOS 500 # 1 ),1
+,,,Line ( GREGG    230 ~ GATES    230 # 1 ),-1
+,,,Line ( MC CALL  230 ~ GATES    230 # 1 ),-1
+,,,Line ( MIDWAY   500 ~ LOSBANOS 500 # 1 ),1
+,,,Line ( PANOCHE  230 ~ GATES    230 # 1 ),-1
+,,,Line ( PANOCHE  230 ~ GATES    230 # 2 ),-1
+Path 26,3350,,Line ( VINCENT  500 ~ MIDWAY2  500 # 1 ),-1
+,,,Line ( VINCENT  500 ~ MIDWAY4  500 # 1 ),-1
+,,,Line ( VINCENT  500 ~ MIDWAY6  500 # 1 ),-1
+Path C (UT - ID) (P-20),1200,-1200,Line ( BORAH    230 ~ NAUGHTON 230 # 1 ),-1
+,,,Line ( BORAH    345 ~ BENLOMND 345 # 1 ),-1
+,,,Line ( BORAH    345 ~ BENLOMND 345 # 2 ),-1
+S.Nevada to CAISO,6250,,Line ( LUGO     500 ~ ELDORADO 500 # 1 ),-1
+,,,Line ( LUGO     500 ~ MOHAVE   500 # 1 ),-1
+San Francisco Area,960,,Line ( MARTIN   230 ~ JEFFERSN 230 # 1 ),-1
+,,,Line ( MARTIN   230 ~ SANMATEO 230 # 1 ),-1
+,,,Line ( MARTIN   230 ~ SANMATEO 230 # 2 ),-1
+,,,Line ( MARTIN   230 ~ SANMATEO 230 # 3 ),-1
+Southern California Import Transmission (SCIT),9000,,Line ( ADELANTO 500 ~ RINALDI  500 # 1 ),1
+,,,Line ( ADELANTO 500 ~ STA E    500 # 1 ),1
+,,,Line ( ADELANTO 500 ~ VICTORVL 500 # 1 ),1
+,,,Line ( ADELANTO 500 ~ VICTORVL 500 # 2 ),1
+,,,Line ( BIG EDDY 230 ~ CELILO   230 # 1 ),1
+,,,Line ( BIG EDDY 230 ~ CELILO   230 # 2 ),1
+,,,Line ( CELILOCA 500 ~ CELILO   230 # 1 ),1
+,,,Line ( IMPERIAL 230 ~ DEVERS   500 # 1 ),1
+,,,Line ( IMPERIAL 230 ~ IMPRLVLY 230 # 1 ),1
+,,,Line ( LUGO     500 ~ ELDORADO 500 # 1 ),-1
+,,,Line ( LUGO     500 ~ MOHAVE   500 # 1 ),-1
+,,,Line ( MEAD     500 ~ VICTORVL 500 # 1 ),1
+,,,Line ( PALOVRDE 500 ~ DEVERS   500 # 1 ),1
+,,,Line ( PALOVRDE 500 ~ IMPRLVLY 500 # 1 ),1
+,,,Line ( VICTORVL 500 ~ ELDORADO 500 # 1 ),-1
+,,,Line ( VINCENT  500 ~ MIDWAY2  500 # 1 ),-1
+,,,Line ( VINCENT  500 ~ MIDWAY4  500 # 1 ),-1
+,,,Line ( VINCENT  500 ~ MIDWAY6  500 # 1 ),-1
+SDGE Area,2925,,Line ( MEXICO   230 ~ MIGUEL   230 # 1 ),1
+,,,Line ( MIGUEL   500 ~ IMPRLVLY 500 # 1 ),-1
+,,,Line ( MISSION  230 ~ S.ONOFRE 230 # 1 ),-1
+,,,Line ( MISSION  230 ~ S.ONOFRE 230 # 2 ),-1
+South of Lugo Corridor,4000,,Line ( LUGO     500 ~ MIRALOMA 500 # 1 ),1
+,,,Line ( LUGO     500 ~ MIRALOMA 500 # 2 ),1
+,,,Line ( LUGO     500 ~ SERRANO  500 # 1 ),1
+South of SONGS Corridor,2200,,Line ( MIGUEL   230 ~ S.ONOFRE 230 # 1 ),-1
+,,,Line ( MISSION  230 ~ S.ONOFRE 230 # 1 ),-1
+,,,Line ( MISSION  230 ~ S.ONOFRE 230 # 2 ),-1
+SW of 4 Corners (P-22),4150,,Line ( FOURCORN 345 ~ CHOLLA   345 # 1 ),1
+,,,Line ( FOURCORN 345 ~ CHOLLA   345 # 2 ),1
+,,,Line ( FOURCORN 500 ~ MOENKOPI 500 # 1 ),1
+TOT 1 (CO - UT) (P-30),650,,Line ( MONA     345 ~ CRAIG    345 # 1 ),-1
+TOT 2 (CO+UT - NM+AZ+NV) (P-31+35+78+79),1350,,Line ( FOURCORN 345 ~ PINTO PS 345 # 1 ),-1
+,,,Line ( H ALLEN  345 ~ SIGURD   345 # 1 ),-1
+,,,Line ( SAN JUAN 345 ~ COLOEAST 345 # 1 ),-1
+,,,Line ( SAN JUAN 345 ~ CRAIG    345 # 1 ),-1
+TOT 3 (WY - CO) (P-36),1605,,Line ( LARAMIE  345 ~ COLOEAST 345 # 1 ),1
