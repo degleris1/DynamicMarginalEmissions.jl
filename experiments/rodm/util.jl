@@ -45,6 +45,11 @@ results_path_static(f) = joinpath(RESULTS_DIRECTORY, FILE_PREFIX_STATIC*f*FILE_S
 
 results_path_dynamic(f) = joinpath(RESULTS_DIRECTORY, FILE_PREFIX_DYNAMIC*f*FILE_SUFFIX)
 
+"""
+    load_results_dynamic(savename)
+
+Load results from a dynamic dispatch model on the WECC dataset.
+"""
 function load_results_dynamic(savename)
     r = JLD.load(results_path_dynamic(savename))
 
@@ -61,6 +66,11 @@ function load_results_dynamic(savename)
     return config, df, data, dynamic_data, r["results"]
 end
 
+"""
+    load_results_static(savename)
+
+Load results from a static dispatch model on the WECC dataset.
+"""
 function load_results_static(savename)
     r = JLD.load(results_path_static(savename))
 
@@ -75,6 +85,11 @@ function load_results_static(savename)
     return r["config"], df, data, r["results"]
 end
 
+"""
+    run_rodm_dynamic(config, savename)
+
+Run dynamic model on the WECC dataset, with parameters specified in `config`.
+"""
 function run_rodm_dynamic(config, savename)
     println("Loading data...")
     data, df = create_dispatch_time_series(config)
@@ -93,11 +108,6 @@ function run_rodm_dynamic(config, savename)
         end
     end
 
-    # results = [
-    #     formulate_and_solve_problem_dynamic(P, config, df.gen.is_coal) 
-    #     for P in dynamic_data
-    # ]
-
     println("Saving results...")
     f = results_path_dynamic(savename)
     JLD.save(f, "config", config, "results", results)
@@ -106,6 +116,11 @@ function run_rodm_dynamic(config, savename)
     return config, df, data, dynamic_data, results
 end
 
+"""
+    run_rodm_static(config, savename)
+
+Run static model on the WECC dataset, with parameters specified in `config`.
+"""
 function run_rodm_static(config, savename)
     println("Loading data...")
     data, df = create_dispatch_time_series(config)
@@ -121,6 +136,12 @@ function run_rodm_static(config, savename)
     return config, df, data, results
 end
 
+"""
+    make_dynamic_data(data)
+
+Take a sequence of individual snapshots (in `data`) and convert them into block snapshots
+that specify dynamic problems.
+"""
 function make_dynamic_data(data)
     dynamic_data = [
         data[((w-1)*HOURS_PER_BLOCK+1) : (w*HOURS_PER_BLOCK)]
@@ -130,9 +151,12 @@ function make_dynamic_data(data)
     return dynamic_data
 end
 
-function formulate_and_solve_problem_dynamic(Ps, config, is_coal)
-    # println("Formulating and solving problem...")
+"""
+    formulate_and_solve_problem_dynamic(Ps, config, is_coal)
 
+Solve the dynamic problem with data `Ps` and configurgation `config`.
+"""
+function formulate_and_solve_problem_dynamic(Ps, config, is_coal)
     # Unpack
     C_rel = config[:storage_percentage]
     C_rate = config[:charge_rate]
@@ -179,6 +203,11 @@ function formulate_and_solve_problem_dynamic(Ps, config, is_coal)
     return (g=g, dq=mefs)
 end
 
+"""
+    make_unit_commitment!(net, d, is_uc, gmin_uc_pc)
+
+Convert a dynamic problem with network `net` and demand `d` into a unit committment problem.
+"""
 function make_unit_commitment!(net, d, is_uc, gmin_uc_pc)
     # Make UC selector matrix
     T = length(net.gmax)
@@ -251,6 +280,12 @@ function make_unit_commitment!(net, d, is_uc, gmin_uc_pc)
     return opf, new_net, new_d, active_inds
 end
 
+"""
+    reduce_problem(opf, net; tol=1e-4)
+
+Given a solved dynamic OPF problem `opf`, eliminate inactive constraints and return the
+(solved) reduced problem.
+"""
 function reduce_problem(opf, net; tol=1e-4)
     gmax = net.gmax
 
@@ -289,15 +324,17 @@ function reduce_problem(opf, net; tol=1e-4)
         for (t, dt) in enumerate(opf.params.d)
     ]
 
-    # sum(relevant_gens) / l
-
-
     opf_red = DynamicPowerManagementProblem(net_red, demand_red)
     solve_ecos!(opf_red)
 
     return opf_red, net_red, relevant_gens
 end
 
+"""
+    formulate_and_solve_problem_static(P)
+
+Given a problem specification `P`, formulate and solve the static problem.
+"""
 function formulate_and_solve_problem_static(P)
     d, θ, q = P
     opf = PowerManagementProblem(θ, d)
@@ -309,6 +346,12 @@ function formulate_and_solve_problem_static(P)
     return (g=g, dq=mefs)
 end
 
+"""
+    create_dispatch_time_series(config=DEFAULT_CONFIG)
+
+Given a configuration file `config`, load the time series of demands, generation capacities,
+costs, etc.
+"""
 function create_dispatch_time_series(config=DEFAULT_CONFIG)
     # Unpack
     carbon_tax = config[:carbon_tax]

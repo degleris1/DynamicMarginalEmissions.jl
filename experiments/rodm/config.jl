@@ -8,6 +8,8 @@ function set_config(default, config)
     return config
 end
 
+# Run with default set of parameters
+# Specifically: no storage, no carbon tax, and no unit commitment
 DEFAULT_CONFIG = Dict(
     :datadir => "~/Data/carbon_networks/",
     :multithread => false,
@@ -21,6 +23,7 @@ DEFAULT_CONFIG = Dict(
     :coal_min => 0.40,
 )
 
+# Run with ramping constraints (of various magnitude)
 RAMP_CONFIG = [
     set_config(DEFAULT_CONFIG, Dict{Symbol, Any}(
         :coal_ramping_rate => ρ,
@@ -28,6 +31,7 @@ RAMP_CONFIG = [
     for ρ in [0.05, 0.10, 0.20, 0.40]
 ]
 
+# Run with storage constraints (of various magnitude)
 STORAGE_CONFIG = [
     set_config(DEFAULT_CONFIG, Dict{Symbol, Any}(
         :storage_percentage => s_rel,
@@ -36,6 +40,7 @@ STORAGE_CONFIG = [
     for s_rel in [0.0, 0.02, 0.05, 0.10]
 ]
 
+# Run with unit commitment
 UNIT_CONFIG = set_config(DEFAULT_CONFIG, Dict{Symbol, Any}(
     :unit_commitment => true,
 ))
