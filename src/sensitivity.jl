@@ -46,20 +46,12 @@ function sensitivity_demand(P::PowerManagementProblem, ∇C, fq, fl, d, pmax, gm
     x = flatten_variables(P)
 
     # Get partial Jacobians of KKT operator
-    #_, ∂K_xT2 = Zygote.forward_jacobian(x -> kkt(x, fq, fl, d, pmax, gmax, A, B), x)
-    ∂K_x = compute_jacobian_kkt(fq, fl, d, pmax, gmax, A, B, F, x)
-    ∂K_xT = ∂K_x'
-    #@show norm(∂K_xT - ∂K_xT2)
-
-    _foo = kkt(x, fq, fl, d, pmax, gmax, A, B, F)
-
+    ∂K_xT = adjoint(compute_jacobian_kkt(fq, fl, d, pmax, gmax, A, B, F, x))
     _, ∂K_θT = Zygote.forward_jacobian(d -> kkt(x, fq, fl, d, pmax, gmax, A, B, F), d)
 
     # Now compute ∇C(g*(θ)) = -∂K_θ' * inv(∂K_x') * v
     v = ∂K_xT \ ∇C
     ∇C_θ = -∂K_θT * v
-
-    #@show norm(∂K_xT*v - ∇C)
 
     return ∇C_θ
 end
@@ -77,8 +69,8 @@ function compute_mefs(P::PowerManagementProblem, net::PowerNetwork, d, c)
     n, m, l = get_problem_dims(net)
 
     # Construct ∇_x C(x)
-    ∇C = zeros(kkt_dims(n, m, l))
-	∇C[1:l] .= c
+    ∇C = zeros(kkt_dims(n, m, l), size(c, 2))
+	∇C[1:l, :] .= c
 
     # Return sensitivity
 	return sensitivity_demand(P, ∇C, net, d)

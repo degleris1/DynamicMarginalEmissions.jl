@@ -9,7 +9,6 @@ end
 
 make_dynamic(net::PowerNetwork, T, P, C, η) = make_dynamic(net, T, P, C, [net.gmax for _ in 1:T], η, η);
 
-
 function generate_random_data(n, l, T)
     Random.seed!(2)
 
