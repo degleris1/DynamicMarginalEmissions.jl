@@ -83,9 +83,10 @@ Return the demand for each WECC region and output for each renewable generator d
 specified time period.
 """
 function get_demand_map(hour, day, month, year, df_demand)
+    df = filter(r -> r.Year == year && r.Month == month && r.Day == day && r.Period == hour, df_demand)
     d = Dict()
 
-    for (c, v) in zip(names(df_demand), eachcol(df_demand))
+    for (c, v) in zip(names(df), eachcol(df))
         if occursin("future", c)  # Skip these
             continue
         end
