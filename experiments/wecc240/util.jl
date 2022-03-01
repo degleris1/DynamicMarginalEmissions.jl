@@ -1,4 +1,4 @@
-using Pkg; Pkg.activate(joinpath(@__DIR__, "../../dev"))
+using Pkg; Pkg.activate(joinpath(@__DIR__, "../../dev")); Pkg.instantiate()
 
 using CSV
 using DataFrames
@@ -16,10 +16,24 @@ STORAGE_PATH = joinpath(DATA_DIR, "Storage & DR-Table 1.csv")
 HEAT_RATE_COAL = 10.3
 
 # https://www.eia.gov/totalenergy/data/annual/showtext.php?t=ptb0303
-GAS_PRICE = 7.91
-COAL_PRICE = 1.41
-NUCLEAR_PRICE = 0.42
+FUEL_COSTS = Dict('G' => 7.91, 'C' => 1.41)
 
+# https://www.epa.gov/sites/default/files/2015-07/documents/emission-factors_2014.pdf
+FUEL_EMISSIONS = Dict('G' => 53.0, 'C' => 97.0)
+
+
+"""
+    get_costs(heat, fuel)
+
+Return the cost of electricity for each generator.
+"""
+function get_costs(heat, fuel, fuel_costs)
+    k = length(heat)
+
+    fuel_costs = [get(fuel_costs, f, 0.0) for f in fuel]
+
+    return heat .* fuel_costs
+end
 
 """
     make_static_case(hour, day, month, year=2004)
@@ -40,7 +54,7 @@ function make_static_case(hour, day, month, year=2004)
     # Generator data
     B, gmin, gmax, ramp, heat, fuel = get_generator_data(demand_map, node_ids, df.gen, df.heat)
 
-    meta = (node_names=node_names, node_ids=node_ids)
+    meta = (node_names=node_names, node_ids=node_ids, df=df)
     case = (
         A=A, β=β, fmax=fmax, cf=cf, d=d, 
         B=B, gmin=gmin, gmax=gmax, ramp=ramp, heat=heat, fuel=fuel
@@ -176,8 +190,8 @@ function get_network_structure(df_branch)
     node_names, node_ids = get_node_info(df_branch)
     n, m = length(node_names), nrow(df_branch)
 
-    β = 1 ./ df_branch.reactance
-    fmax = df_branch.capacity
+    β = abs.(1 ./ df_branch.reactance)
+    fmax = Float64.(df_branch.capacity)
     cf = df_branch.hurdle_rate
 
     A = spzeros(n, m)

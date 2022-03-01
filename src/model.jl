@@ -83,7 +83,7 @@ PowerManagementProblem(net::PowerNetwork, d) =
     Convex.solve!(P::PowerManagementProblem, opt; verbose=false)
 """
 Convex.solve!(P::PowerManagementProblem, opt; verbose=false) = 
-    solve!(P.problem, opt; verbose=verbose)
+    solve!(P.problem, opt; silent_solver=!verbose, verbose=verbose)
 
 """
     get_lmps(P::PowerManagementProblem)
