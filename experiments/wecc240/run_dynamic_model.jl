@@ -10,7 +10,7 @@ HOURS = 1:24
 
 function formulate_and_solve_dynamic(hour, day, month, T; Z=1e3, line_max=50_000.0, line_weight=1.3)
     case, _ = make_dynamic_case(hour, day, month, T)
-
+    n, _ = size(case.A)
     # Construct flow matrix
     F = make_pfdf_matrix(case.A, case.β)
 
@@ -41,17 +41,23 @@ function formulate_and_solve_dynamic(hour, day, month, T; Z=1e3, line_max=50_000
     co2_rates = get_costs(case.heat, case.fuel, FUEL_EMISSIONS)
 
     # Compute MEFs
+    mefs = zeros(n, T, T)
     λ = compute_mefs(pmp, net, d, co2_rates)
+    for ind_t in 1:T
+		mefs[:, :, ind_t] .= λ[ind_t];
+	end
 
     @show (hour, day, month, pmp.problem.status)
 
-    return (d=d, gmax=gmax, g=g, λ=λ, status=pmp.problem.status)
+    return (d=d, gmax=gmax, g=g, λ=mefs, status=pmp.problem.status)
 end
 
+# TODO: solve for all days for a duration of 24 hours
 # case, meta = make_dynamic_case(1, 1, 1, 1)
 # results = [formulate_and_solve_static(h, day(d), month(d)) for h in HOURS, d in DATES]
-results = formulate_and_solve_dynamic(1, 1, 1, 1)
+results = formulate_and_solve_dynamic(1, 1, 1, 2)
 
+# TODO: use a config file to store data paths for compatibility
 # bson(
 #     "/Users/degleris/Data/carbon_networks/wecc240_static_results.bson", 
 #     case=case, meta=meta, results=results

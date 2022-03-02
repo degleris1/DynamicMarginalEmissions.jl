@@ -71,7 +71,7 @@ end
 
 Return data for specifying a dynamic case, for a given duration T in number of timesteps.
 """
-function make_dynamic_case(hour, day, month, T, year=2004)
+function make_dynamic_case(hour, day, month, T, year=2004, δ=1e-4)
     df = load_wecc_240_dataset()
 
     # Network structure
@@ -111,11 +111,11 @@ function make_dynamic_case(hour, day, month, T, year=2004)
 
     meta = (node_names=node_names, node_ids=node_ids, df=df)
     # storage parameters are multiplied by S to make them vector valued
-    # TODO: check whether the non-zero component of C needs to be included here
+    # TODO: δ has been added to C - is that good enough
     case = (
         A=A, β=β, fmax=fmax, cf=cf, d=d_dyn, 
         B=B, gmin=gmin_dyn, gmax=gmax_dyn, ramp=ramp_dyn, heat=heat, fuel=fuel, 
-        η=mean(efficiency), C=S*s_capacity, P=S*s_rate
+        η=mean(efficiency), C=S*s_capacity.+δ, P=S*s_rate
     )
     return case, meta
 end
@@ -247,7 +247,7 @@ function get_storage_map(df_storage, nodes_ids)
 
     S = zeros(length(nodes_ids), length(storage_nodes_ids))
     for (i, s_ids) in enumerate(storage_nodes_ids)
-        idx = findall(x->x==s_ids, node_ids)
+        idx = findall(x->x==s_ids, nodes_ids)
         if length(idx)!=1
             # TODO: handle that in the proper way (e.g. exceptions)
             println("Duplicate nodes - breaking")
