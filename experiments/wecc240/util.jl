@@ -5,7 +5,10 @@ using DataFrames
 using SparseArrays: spzeros
 using StatsBase: mean
 
-DATA_DIR = joinpath(@__DIR__, "../../data/wecc240")
+# TODO: fix this problem -- command does not work on lucas laptop
+# DATA_DIR = joinpath(@__DIR__, "../../data/wecc240")
+DATA_DIR = "/Users/lucasfuentes/sensitivity/data/wecc240"
+
 BRANCH_PATH = joinpath(DATA_DIR, "Branches-Table 1.csv")
 DEMAND_PATH = joinpath(DATA_DIR, "Load & Gen Profiles-Table 1.csv")
 DEMAND_PARTICIPATION_PATH = joinpath(DATA_DIR, "Load Participation Factors-Table 1.csv")
@@ -62,18 +65,79 @@ function make_static_case(hour, day, month, year=2004)
     return case, meta
 end
 
+
+"""
+    make_dynamic_case(hour, day, month, duration, year=2004)
+
+Return data for specifying a dynamic case, for a given duration T in number of timesteps.
+"""
+function make_dynamic_case(hour, day, month, T, year=2004, δ=1e-4)
+    df = load_wecc_240_dataset()
+
+    # Network structure
+    node_names, node_ids = get_node_info(df.branch)
+    A, β, fmax, cf = get_network_structure(df.branch) 
+
+    # Demand and Generator data
+    # Needs to be extracted at every time step
+    # TODO: make sure this is the case
+    d_dyn = [] 
+    gmin_dyn = []
+    gmax_dyn = []
+    ramp_dyn = []
+
+    # TODO: look for a better way to keep variables outside of for loops
+    B = nothing
+    heat = nothing
+    fuel = nothing
+
+    for dt = 0:T-1
+        demand_map = get_demand_map(hour+dt, day, month, year, df.demand)
+        d = make_demand_vector(demand_map, node_names, df.participation)
+        push!(d_dyn, d)
+
+        B, gmin, gmax, ramp, heat, fuel = get_generator_data(demand_map, node_ids, df.gen, df.heat)
+        push!(gmin_dyn, gmin)
+        push!(gmax_dyn, gmax)
+        push!(ramp_dyn, ramp)
+    end
+
+    # Storage data
+    # TODO: clarify the meaning of each parameter
+    efficiency, s_capacity, s_rate, s_ramp, nodes_storage = get_storage_data(df.storage)
+    S = get_storage_map(df.storage, node_ids)
+
+    # TODO: make vector-valued efficiencies compatible with the code
+
+    meta = (node_names=node_names, node_ids=node_ids, df=df)
+    # storage parameters are multiplied by S to make them vector valued
+    # TODO: δ has been added to C - is that good enough
+    case = (
+        A=A, β=β, fmax=fmax, cf=cf, d=d_dyn, 
+        B=B, gmin=gmin_dyn, gmax=gmax_dyn, ramp=ramp_dyn, heat=heat, fuel=fuel, 
+        η=mean(efficiency), C=S*s_capacity.+δ, P=S*s_rate
+    )
+    return case, meta
+end
+
 """
     get_storage_data(df_storage)
 
 Return storage info.
+
+TODO: clarify rate vs ramp vs capacity?
 """
 function get_storage_data(df_storage)
     efficiency = df_storage.efficiency / 100
     s_capacity = df_storage.capacity * 1000
-    s_rate = df_storage.max_power
+    # A multiplicative factor seems to be
+    # needed to avoid Union{Missing, Float64}
+    # which generates errors down the line
+    s_rate = df_storage.max_power * 1 
     s_ramp = df_storage.ramp * 60
+    nodes = df_storage.resource
 
-    return efficiency, s_capacity, s_rate, s_ramp
+    return efficiency, s_capacity, s_rate, s_ramp, nodes
 end
 
 """
@@ -168,6 +232,30 @@ function make_demand_vector(demand_map, nodes, df_participation)
     end
 
     return d
+end
+
+"""
+    get_storage_map(storage_nodes, nodes)
+
+Constructs matrix that maps storage data to vector-valued quantities
+compatible with the codebase.
+"""
+function get_storage_map(df_storage, nodes_ids)
+
+    storage_nodes_nms = df_storage.resource
+    storage_nodes_ids = map(x -> parse(Int, match(r"[0-9]{4}", x).match), storage_nodes_nms)
+
+    S = zeros(length(nodes_ids), length(storage_nodes_ids))
+    for (i, s_ids) in enumerate(storage_nodes_ids)
+        idx = findall(x->x==s_ids, nodes_ids)
+        if length(idx)!=1
+            # TODO: handle that in the proper way (e.g. exceptions)
+            println("Duplicate nodes - breaking")
+            break
+        end
+        S[idx, i] .= 1
+    end
+    return S
 end
 
 """
