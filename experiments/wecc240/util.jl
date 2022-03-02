@@ -1,4 +1,4 @@
-using Pkg; Pkg.activate(joinpath(@__DIR__, "../../dev")); Pkg.instantiate()
+# using Pkg; Pkg.activate(joinpath(@__DIR__, "../../dev")); Pkg.instantiate()
 
 using CSV
 using DataFrames

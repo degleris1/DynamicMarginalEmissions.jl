@@ -4,11 +4,11 @@ using Dates
 using BSON
 using CarbonNetworks
 
-DATES = Date(2004, 01, 01) .+ Day.(0:365)
+DATES = Date(2004, 01, 01) .+ Day.(0:364)
 HOURS = 1:24
 
 
-function formulate_and_solve_static(hour, day, month; Z=1e3, line_max=50_000.0, line_weight=1.3)
+function formulate_and_solve_static(hour, day, month; Z=1e3, line_max=100.0, line_weight=2.0)
     case, meta = make_static_case(hour, day, month)
 
     # Construct flow matrix
@@ -20,7 +20,7 @@ function formulate_and_solve_static(hour, day, month; Z=1e3, line_max=50_000.0, 
 
     # Get line capacities
     # (Specifically, increase them a little bit)
-    pmax = min.(line_weight * case.fmax, line_max) / Z
+    pmax = line_weight * min.(case.fmax / Z, line_max)
     gmax = case.gmax / Z
     d = case.d / Z
 
@@ -38,7 +38,9 @@ function formulate_and_solve_static(hour, day, month; Z=1e3, line_max=50_000.0, 
     # Compute MEFs
     λ = compute_mefs(pmp, net, d, co2_rates)
 
-    @show (hour, day, month, pmp.problem.status)
+    f_slack = pmax - abs.(F*(case.B * g - d))
+    num_constr = sum(f_slack .< 1e-4)
+    @show (hour, day, month, pmp.problem.status, num_constr)
 
     return (d=d, gmax=gmax, g=g, λ=λ, status=pmp.problem.status)
 end
