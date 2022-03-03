@@ -104,10 +104,9 @@ function make_dynamic_case(hour, day, month, T, year=2004, δ=1e-4)
 
     # Storage data
     # TODO: clarify the meaning of each parameter
-    efficiency, s_capacity, s_rate, s_ramp, nodes_storage = get_storage_data(df.storage)
-    S = get_storage_map(df.storage, node_ids)
-
     # TODO: make vector-valued efficiencies compatible with the code
+    efficiency, s_capacity, s_rate, _ = get_storage_data(df.storage)
+    S = get_storage_map(df.storage, node_ids)
 
     meta = (node_names=node_names, node_ids=node_ids, df=df)
     # storage parameters are multiplied by S to make them vector valued
@@ -115,7 +114,7 @@ function make_dynamic_case(hour, day, month, T, year=2004, δ=1e-4)
     case = (
         A=A, β=β, fmax=fmax, cf=cf, d=d_dyn, 
         B=B, gmin=gmin_dyn, gmax=gmax_dyn, ramp=ramp_dyn, heat=heat, fuel=fuel, 
-        η=mean(efficiency), C=S*s_capacity.+δ, P=S*s_rate
+        η=sqrt(mean(efficiency)), C=S*s_capacity.+δ, P=S*s_rate
     )
     return case, meta
 end
@@ -125,7 +124,10 @@ end
 
 Return storage info.
 
-TODO: clarify rate vs ramp vs capacity?
+Notes
+-----
+s_rate: constraint on the rate of charge
+s_ramp: constraint on the change of the rate of charge
 """
 function get_storage_data(df_storage)
     efficiency = df_storage.efficiency / 100
@@ -135,9 +137,8 @@ function get_storage_data(df_storage)
     # which generates errors down the line
     s_rate = df_storage.max_power * 1 
     s_ramp = df_storage.ramp * 60
-    nodes = df_storage.resource
 
-    return efficiency, s_capacity, s_rate, s_ramp, nodes
+    return efficiency, s_capacity, s_rate, s_ramp
 end
 
 """

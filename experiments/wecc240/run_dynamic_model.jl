@@ -15,7 +15,6 @@ function formulate_and_solve_dynamic(hour, day, month, T; Z=1e3, line_max=50_000
     F = make_pfdf_matrix(case.A, case.β)
 
     # Get generator costs
-    # TODO: check whether the fuel costs change over time
     fl = [get_costs(case.heat, case.fuel, FUEL_COSTS) for _ in 1:T]
     fq = [zeros(length(fl[k])) for k in 1:length(fl)]
 
