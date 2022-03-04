@@ -3,9 +3,15 @@ include("util.jl")
 using Dates
 using BSON
 using CarbonNetworks
+using TOML
 
-DATES = Date(2004, 01, 01) .+ Day.(0:365)
+config = TOML.parsefile("../../config.toml")
+SAVE_DIR = config["data"]["SAVE_DIR"]
+
+NUMBER_DAYS = 364
+DATES = Date(2004, 01, 01) .+ Day.(0:NUMBER_DAYS)
 HOURS = 1:24
+DURATION = 24
 
 
 function formulate_and_solve_dynamic(hour, day, month, T; Z=1e3, line_max=50_000.0, line_weight=1.3)
@@ -50,14 +56,12 @@ function formulate_and_solve_dynamic(hour, day, month, T; Z=1e3, line_max=50_000
 
     return (d=d, gmax=gmax, g=g, λ=mefs, status=pmp.problem.status)
 end
+case, meta = make_dynamic_case(1, 1, 1, DURATION)
+results = [
+    formulate_and_solve_dynamic(h, day(d), month(d), DURATION) for h in HOURS, d in DATES
+    ]
 
-# TODO: solve for all days for a duration of 24 hours
-# case, meta = make_dynamic_case(1, 1, 1, 1)
-# results = [formulate_and_solve_static(h, day(d), month(d)) for h in HOURS, d in DATES]
-results = formulate_and_solve_dynamic(1, 1, 1, 2)
-
-# TODO: use a config file to store data paths for compatibility
-# bson(
-#     "/Users/degleris/Data/carbon_networks/wecc240_static_results.bson", 
-#     case=case, meta=meta, results=results
-# )
+bson(
+    joinpath(SAVE_DIR, "wecc240_dynamic_results.bson")
+    case=case, meta=meta, results=results
+)

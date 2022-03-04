@@ -1,13 +1,11 @@
-# using Pkg; Pkg.activate(joinpath(@__DIR__, "../../dev")); Pkg.instantiate()
-
 using CSV
 using DataFrames
 using SparseArrays: spzeros
 using StatsBase: mean
+using TOML
 
-# TODO: fix this problem -- command does not work on lucas laptop
-# DATA_DIR = joinpath(@__DIR__, "../../data/wecc240")
-DATA_DIR = "/Users/lucasfuentes/sensitivity/data/wecc240"
+config = TOML.parsefile("../../config.toml")
+DATA_DIR = config["data"]["DATA_DIR"]
 
 BRANCH_PATH = joinpath(DATA_DIR, "Branches-Table 1.csv")
 DEMAND_PATH = joinpath(DATA_DIR, "Load & Gen Profiles-Table 1.csv")

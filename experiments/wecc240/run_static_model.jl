@@ -3,13 +3,17 @@ include("util.jl")
 using Dates
 using BSON
 using CarbonNetworks
+using TOML
+
+config = TOML.parsefile("../../config.toml")
+SAVE_DIR = config["data"]["SAVE_DIR"]
 
 DATES = Date(2004, 01, 01) .+ Day.(0:364)
 HOURS = 1:24
 
 
 function formulate_and_solve_static(hour, day, month; Z=1e3, line_max=100.0, line_weight=2.0)
-    case, meta = make_static_case(hour, day, month)
+    case, _ = make_static_case(hour, day, month)
 
     # Construct flow matrix
     F = make_pfdf_matrix(case.A, case.β)
@@ -49,6 +53,6 @@ case, meta = make_static_case(1, 1, 1)
 results = [formulate_and_solve_static(h, day(d), month(d)) for h in HOURS, d in DATES]
 
 bson(
-    "/Users/degleris/Data/carbon_networks/wecc240_static_results.bson", 
+    joinpath(SAVE_DIR, "wecc240_static_results.bson")
     case=case, meta=meta, results=results
 )
