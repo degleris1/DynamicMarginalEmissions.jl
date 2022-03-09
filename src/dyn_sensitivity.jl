@@ -137,7 +137,7 @@ function compute_jacobian_kkt_dyn(x, net, d_dyn)
         for t in 1:T
     ]
     Kτ2 = [
-        compute_jacobian_kkt_charge_discharge_ramp(dim_t, n, m, l, net.F)
+        compute_jacobian_kkt_charge_discharge_ramp(dim_t, n, m, l, net.F, net.S)
         for t in 1:T
     ]
     Kτ3 = [
