@@ -138,11 +138,11 @@ function compute_jacobian_kkt_dyn(x, net, d_dyn)
     ]
     Kτ2 = [
         compute_jacobian_kkt_charge_discharge_ramp(dim_t, n, m, l, net.F, net.S)
-        for t in 1:T
+        for _ in 1:T
     ]
     Kτ3 = [
         compute_jacobian_kkt_future_ramp(dim_t, n, l)
-        for t in 1:(T-1)
+        for _ in 1:(T-1)
     ]
 
     # Stack matrices
@@ -199,7 +199,7 @@ function compute_jacobian_kkt_charge_discharge_ramp(dims, ns, m, l, F, S)
 
     # TODO: check that the szeros vectors added here are good in terms of dims
     # Basically, some of those (dims, XXn) should probably be (dims, XXns)
-    return [spzeros(dims, n) dKdch dKddis spzeros(dims, 6n) dKdλl dKdλu spzeros(dims, n)]
+    return [spzeros(dims, ns) dKdch dKddis spzeros(dims, 6ns) dKdλl dKdλu spzeros(dims, n)]
 end
 
 
