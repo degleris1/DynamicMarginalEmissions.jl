@@ -15,6 +15,7 @@ mutable struct PowerNetwork
     A
     B
     F
+    S
     τ
 end
 
@@ -51,7 +52,7 @@ incidence matrix `A`.
 The parameter `τ` is a regularization weight used to make the problem
 strongly convex by adding τ ∑ᵢ pᵢ² to the objective.
 """
-function PowerManagementProblem(fq, fl, d, pmax, gmax, A, B, F; τ=TAU, ch=0, dis=0, η_c=1.0, η_d=1.0)
+function PowerManagementProblem(fq, fl, d, pmax, gmax, A, B, F, S; τ=TAU, ch=0, dis=0, η_c=1.0, η_d=1.0)
     n, m = size(A)
     n, l = size(B)
     g = Variable(l)
@@ -67,17 +68,17 @@ function PowerManagementProblem(fq, fl, d, pmax, gmax, A, B, F; τ=TAU, ch=0, di
         p <= pmax,  # λpu
         -g <= 0,  # λgl
         g <= gmax,  # λgu
-        0 == p - F*(B*g - d - ch + dis),  # ν
-        0 == ones(n)' * (B*g - d - ch + dis),  # νE
+        0 == p - F*(B*g - d - S*ch + S*dis),  # ν
+        0 == ones(n)' * (B*g - d - S*ch + S*dis),  # νE
     ])
 
-    params = (fq=fq, fl=fl, d=d, pmax=pmax, gmax=gmax, A=A, B=B, F=F, τ=τ, η_c=η_c, η_d=η_d)
+    params = (fq=fq, fl=fl, d=d, pmax=pmax, gmax=gmax, A=A, B=B, F=F, S=S, τ=τ, η_c=η_c, η_d=η_d)
 
     return PowerManagementProblem(problem, p, g, zeros(n), zeros(n), zeros(n), params)
 end
 
 PowerManagementProblem(net::PowerNetwork, d) =
-    PowerManagementProblem(net.fq, net.fl, d, net.pmax, net.gmax, net.A, net.B, net.F; τ=net.τ)
+    PowerManagementProblem(net.fq, net.fl, d, net.pmax, net.gmax, net.A, net.B, net.F, net.S; τ=net.τ)
 
 """
     Convex.solve!(P::PowerManagementProblem, opt; verbose=false)
@@ -116,7 +117,7 @@ kkt_dims(n, m, l) = 4m + 3l + 1
 Compute the KKT operator applied to `x`, with parameters given by `fq`,
 `fl`, `d`, `pmax`, `gmax`, `A`, and `τ`.
 """
-function kkt(x, fq, fl, d, pmax, gmax, A, B, F; τ=TAU, ch=0, dis=0)
+function kkt(x, fq, fl, d, pmax, gmax, A, B, F, S; τ=TAU, ch=0, dis=0)
     n, m = size(A)
     n, l = size(B)
 
@@ -131,13 +132,13 @@ function kkt(x, fq, fl, d, pmax, gmax, A, B, F; τ=TAU, ch=0, dis=0)
         λpu .* (p - pmax);
         -λgl .* g;
         λgu .* (g - gmax);
-        p - F*(B*g - d .- ch .+ dis);
-        ones(n)' * (B*g - d .- ch .+ dis);
+        p - F*(B*g - d .- S*ch .+ S*dis);
+        ones(n)' * (B*g - d .- S*ch .+ S*dis);
     ]
 end
 
 kkt(x, net::PowerNetwork, d) =
-    kkt(x, net.fq, net.fl, d, net.pmax, net.gmax, net.A, net.B, net.F; τ=net.τ, ch=zeros(size(net.A)[1]), dis=zeros(size(net.A)[1]))
+    kkt(x, net.fq, net.fl, d, net.pmax, net.gmax, net.A, net.B, net.F, net.S; τ=net.τ, ch=zeros(size(net.A)[1]), dis=zeros(size(net.A)[1]))
 
 
 """

@@ -38,6 +38,7 @@ mutable struct DynamicPowerNetwork
     F
     P
     C
+    S
     T
     τ
     η_c
@@ -68,7 +69,7 @@ via the presence of nodal storage. Arguments are arrays of dimension `T`. `fq` a
 are the quadratic and linear components of the generator costs, respectively. `d` is the 
 nodal demand. `pmax`, `gmax` are the maximum transmission and generation power. 
 `A` is the incidence matrix, `B` is a generator-to-node mapping. `P` and `C` are the maximum
-charge/discharge power for batteries and the maximum SOC, respectively. 
+charge/discharge power for batteries and the maximum SOC, respectively. `S` maps storage to associated nodes.
 
 Note:
 -----
@@ -76,19 +77,20 @@ Note:
 - There is currently no final condition on the storage. 
 """
 function DynamicPowerManagementProblem(
-    fq, fl, d, pmax, gmax, A, B, F, P, C; 
+    fq, fl, d, pmax, gmax, A, B, F, P, C, S; 
     τ=TAU, η_c=1.0, η_d=1.0, ρ=nothing
 )
     ρ = something(ρ, 2*[maximum(x -> x[i], gmax) for i in 1:length(gmax[1])])
 
     T = length(fq)
     n, _ = size(A)
+    _, ns = size(S) #ns indicates the number of storage nodes
 
     # Define a storage variable for n nodes over T timesteps
-    s = [Variable(n) for _ in 1:T]
+    s = [Variable(ns) for _ in 1:T]
     # Define a charge and discharge variable for n nodes over T timesteps
-    ch = [Variable(n) for _ in 1:T]
-    dis = [Variable(n) for _ in 1:T]
+    ch = [Variable(ns) for _ in 1:T]
+    dis = [Variable(ns) for _ in 1:T]
 
     subproblems = vcat(
         [PowerManagementProblem(
