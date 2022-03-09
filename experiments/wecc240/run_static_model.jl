@@ -53,6 +53,6 @@ case, meta = make_static_case(1, 1, 1)
 results = [formulate_and_solve_static(h, day(d), month(d)) for h in HOURS, d in DATES]
 
 bson(
-    joinpath(SAVE_DIR, "wecc240_static_results.bson")
+    joinpath(SAVE_DIR, "wecc240_static_results.bson"),
     case=case, meta=meta, results=results
 )

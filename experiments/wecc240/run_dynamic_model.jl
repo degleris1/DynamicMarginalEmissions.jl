@@ -8,14 +8,16 @@ using TOML
 config = TOML.parsefile("../../config.toml")
 SAVE_DIR = config["data"]["SAVE_DIR"]
 
-NUMBER_DAYS = 364
+NUMBER_DAYS = 0
 DATES = Date(2004, 01, 01) .+ Day.(0:NUMBER_DAYS)
-HOURS = 1:24
-DURATION = 24
+HOURS = 1:3
+DURATION = 5
 
 
 function formulate_and_solve_dynamic(hour, day, month, T; Z=1e3, line_max=50_000.0, line_weight=1.3)
-    case, _ = make_dynamic_case(hour, day, month, T)
+    println("-------")
+    @time case, _ = make_dynamic_case(hour, day, month, T)
+    # println("Time to make dynamic case: $(time_make_case)")
     n, _ = size(case.A)
     # Construct flow matrix
     F = make_pfdf_matrix(case.A, case.β)
@@ -29,17 +31,18 @@ function formulate_and_solve_dynamic(hour, day, month, T; Z=1e3, line_max=50_000
     pmax = [min.(line_weight * case.fmax, line_max) / Z for _ in 1:T]
     gmax = case.gmax / Z
     d = case.d / Z
-    # TODO: probably need to divide C and P etc. by Z, too! Check. 
+    P = case.P / Z # TODO: is it correct to scale P and C by Z? 
+    C = case.C / Z
 
     # Formulate problem
     net = DynamicPowerNetwork(
         fq, fl, pmax, gmax, case.A, case.B, F, 
-        case.P, case.C, T; η_c=case.η, η_d=case.η
+        P, C, T; η_c=case.η, η_d=case.η
         )
     pmp = DynamicPowerManagementProblem(net, d)
 
     # Solve
-    solve!(pmp, CarbonNetworks.OPT)
+    @time solve!(pmp, CarbonNetworks.OPT)
     g = CarbonNetworks.evaluate(pmp.g)
 
     # Get generator emissions rates
@@ -47,7 +50,8 @@ function formulate_and_solve_dynamic(hour, day, month, T; Z=1e3, line_max=50_000
 
     # Compute MEFs
     mefs = zeros(n, T, T)
-    λ = compute_mefs(pmp, net, d, co2_rates)
+    @time λ = compute_mefs(pmp, net, d, co2_rates)
+    # println("Time to compute MEFS: $(time_mefs)")
     for ind_t in 1:T
 		mefs[:, :, ind_t] .= λ[ind_t];
 	end
@@ -62,6 +66,6 @@ results = [
     ]
 
 bson(
-    joinpath(SAVE_DIR, "wecc240_dynamic_results.bson")
+    joinpath(SAVE_DIR, "wecc240_dynamic_results.bson"),
     case=case, meta=meta, results=results
 )

@@ -5,7 +5,7 @@ using StatsBase: mean
 using TOML
 
 config = TOML.parsefile("../../config.toml")
-DATA_DIR = config["data"]["DATA_DIR"]
+DATA_DIR = joinpath(config["data"]["DATA_DIR"], "wecc240")
 
 BRANCH_PATH = joinpath(DATA_DIR, "Branches-Table 1.csv")
 DEMAND_PATH = joinpath(DATA_DIR, "Load & Gen Profiles-Table 1.csv")
@@ -108,7 +108,7 @@ function make_dynamic_case(hour, day, month, T, year=2004, δ=1e-4)
 
     meta = (node_names=node_names, node_ids=node_ids, df=df)
     # storage parameters are multiplied by S to make them vector valued
-    # TODO: δ has been added to C - is that good enough
+    # TODO: δ has been added to C - is that good enough?
     case = (
         A=A, β=β, fmax=fmax, cf=cf, d=d_dyn, 
         B=B, gmin=gmin_dyn, gmax=gmax_dyn, ramp=ramp_dyn, heat=heat, fuel=fuel, 
