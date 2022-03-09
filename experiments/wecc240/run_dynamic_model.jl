@@ -11,7 +11,7 @@ SAVE_DIR = config["data"]["SAVE_DIR"]
 NUMBER_DAYS = 0
 DATES = Date(2004, 01, 01) .+ Day.(0:NUMBER_DAYS)
 HOURS = 1:3
-DURATION = 5
+DURATION = 2
 
 
 function formulate_and_solve_dynamic(hour, day, month, T; Z=1e3, line_max=50_000.0, line_weight=1.3)

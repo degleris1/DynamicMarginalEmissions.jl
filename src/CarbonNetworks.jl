@@ -51,7 +51,7 @@ include("descent.jl")
 
 include("utils.jl")
 
-ECOS_OPT = () -> ECOS.Optimizer(verbose=false)
+ECOS_OPT = () -> ECOS.Optimizer()
 # GUROBI_ENV = Gurobi.Env()
 # GUROBI_OPT = Convex.MOI.OptimizerWithAttributes(
 #     () -> Gurobi.Optimizer(GUROBI_ENV), "LogToConsole" => false
