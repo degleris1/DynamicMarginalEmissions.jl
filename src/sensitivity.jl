@@ -23,9 +23,10 @@ and `T` is the number of timesteps in the dynamic problem.
 """
 function get_problem_dims(net::DynamicPowerNetwork)
     n, m = size(net.A)
-    n, l = size(net.B)
+    _, l = size(net.B)
+    _, ns = size(net.S)
 
-    return n, m, l, net.T
+    return n, m, l, ns, net.T
 end
 
 
@@ -42,12 +43,12 @@ Compute `∇_d C( x_opt(d) )`, where `x_opt(d)` is the optimal solution (primal
 and dual variables) of the power management problem `P` with parameters 
 `(fq, fl, d, pmax, gmax, A, B)` and `∇C` is the gradient `∇_x C(x)`.
 """
-function sensitivity_demand(P::PowerManagementProblem, ∇C, fq, fl, d, pmax, gmax, A, B, F)
+function sensitivity_demand(P::PowerManagementProblem, ∇C, fq, fl, d, pmax, gmax, A, B, F, S)
     x = flatten_variables(P)
 
     # Get partial Jacobians of KKT operator
     ∂K_xT = adjoint(compute_jacobian_kkt(fq, fl, d, pmax, gmax, A, B, F, x))
-    _, ∂K_θT = Zygote.forward_jacobian(d -> kkt(x, fq, fl, d, pmax, gmax, A, B, F), d)
+    _, ∂K_θT = Zygote.forward_jacobian(d -> kkt(x, fq, fl, d, pmax, gmax, A, B, F, S), d)
 
     # Now compute ∇C(g*(θ)) = -∂K_θ' * inv(∂K_x') * v
     v = ∂K_xT \ ∇C
@@ -57,7 +58,10 @@ function sensitivity_demand(P::PowerManagementProblem, ∇C, fq, fl, d, pmax, gm
 end
 
 sensitivity_demand(P::PowerManagementProblem, ∇C, net::PowerNetwork, d) = 
-    sensitivity_demand(P::PowerManagementProblem, ∇C, net.fq, net.fl, d, net.pmax, net.gmax, net.A, net.B, net.F)
+    sensitivity_demand(
+        P::PowerManagementProblem, ∇C, net.fq, net.fl, d, net.pmax, 
+        net.gmax, net.A, net.B, net.F, net.S
+    )
 
 """
     compute_mefs(P::PowerManagementProblem, net::PowerNetwork, d, c)
@@ -107,7 +111,10 @@ function sensitivity_price(P::PowerManagementProblem, ∇C, fq, fl, d, pmax, gma
 end
 
 sensitivity_price(P::PowerManagementProblem, ∇C, net::PowerNetwork, d) = 
-    sensitivity_price(P::PowerManagementProblem, ∇C, net.fq, net.fl, d, net.pmax, net.gmax, net.A, net.B, net.F)
+    sensitivity_price(
+        P::PowerManagementProblem, ∇C, net.fq, net.fl, 
+        d, net.pmax, net.gmax, net.A, net.B, net.F
+    )
 
 
 # ===
@@ -145,6 +152,10 @@ end
     compute_jacobian_kkt(fq, fl, d, pmax, gmax, A, x; τ=TAU)
 
 Compute the Jacobian of the KKT operator.
+
+Notes 
+-----
+The Jacobian below is computed by decomposing it in several blocks, following Barrat 2018. 
 """
 function compute_jacobian_kkt(fq, fl, d, pmax, gmax, A, B, F, x; τ=TAU)
     n, m = size(A)
@@ -152,32 +163,36 @@ function compute_jacobian_kkt(fq, fl, d, pmax, gmax, A, B, F, x; τ=TAU)
 
     g, p, λpl, λpu, λgl, λgu, _, _ = unflatten_variables(x, n, m, l)
 
+    # Jacobian of stationarity conditions wrt primal variables
+    # Here primal variables include (p, g) only
     K11 = [
         Diagonal(fq)     spzeros(l, m);
         spzeros(m, l)    τ * I(m)
     ]
-   
+
+    # Jacobian of stationarity conditions wrt dual variables of inequality constraints
     K12 = [
         spzeros(l, 2 * m)   -I(l)       I(l);
         -I(m)             I(m)        spzeros(m, 2l)
     ]
 
-    #K13 = [[-B'; A'] [-B'*F'; I(m)]]
-    K31 = [
-        #-B A;
-        -F*B I(m);
-        ones(n)'B spzeros(1, m);
-    ]
-
+    # Jacobian of complementary slackness wrt primal variables
     K21 = [
         spzeros(m, l) -Diagonal(λpl);
         spzeros(m, l) Diagonal(λpu);
         -Diagonal(λgl) spzeros(l, m);
         Diagonal(λgu) spzeros(l, m)
     ]
-
+    
+    # Jacobian of complementary slackness wrt dual variables of inequality constraints
     K22 = Diagonal([-p - pmax; p - pmax; -g; g - gmax])
     
+    # Jacobian of stationarity wrt dual variables of equality constraints
+    K31 = [
+        -F*B I(m);
+        ones(n)'B spzeros(1, m);
+    ]
+
     return [
         K11 K12 K31';
         K21 K22 spzeros(2 * (m + l), m + 1);
