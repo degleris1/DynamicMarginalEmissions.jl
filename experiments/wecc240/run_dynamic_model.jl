@@ -4,20 +4,12 @@ using Dates
 using BSON
 using CarbonNetworks
 
-NUMBER_DAYS = 60
+NUMBER_DAYS = 365
 DATES = Date(2004, 01, 01) .+ Day.(0:(NUMBER_DAYS-1))
 HOUR = 1
 DURATION = 24
 
 ECOS_OPT = CarbonNetworks.OPT
-
-# Optional: use Gurobi
-using Gurobi
-GUROBI_ENV = Gurobi.Env()
-GUROBI_OPT = CarbonNetworks.Convex.MOI.OptimizerWithAttributes(
-    () -> Gurobi.Optimizer(GUROBI_ENV), "LogToConsole" => false, "QCPDual" => 1,
-)
-
 
 function formulate_and_solve_dynamic(
     hour, day, month, T; 
@@ -40,11 +32,12 @@ function formulate_and_solve_dynamic(
     d = case.d / Z
     P = case.P / Z
     C = case.C / Z
+    ρ = case.ramp[1] / Z
 
     # Formulate problem
     net = DynamicPowerNetwork(
         fq, fl, pmax, gmax, case.A, case.B, F, case.S,
-        P, C, T; η_c=case.η, η_d=case.η
+        P, C, T; η_c=case.η, η_d=case.η, ρ=ρ,
     )
     pmp = DynamicPowerManagementProblem(net, d)
 
