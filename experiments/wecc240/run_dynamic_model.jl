@@ -4,7 +4,7 @@ using Dates
 using BSON
 using CarbonNetworks
 
-NUMBER_DAYS = 1
+NUMBER_DAYS = 60
 DATES = Date(2004, 01, 01) .+ Day.(0:(NUMBER_DAYS-1))
 HOUR = 1
 DURATION = 24
@@ -77,7 +77,7 @@ for d in DATES
         push!(results, r)
     catch
         @warn "No mefs on $d"
-        push!(results, θ)
+        push!(results, missing)
     end
 end
 
