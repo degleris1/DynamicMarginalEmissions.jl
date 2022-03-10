@@ -137,11 +137,11 @@ function compute_jacobian_kkt_dyn(x, net, d_dyn)
         for t in 1:T
     ]
     Kτ2 = [
-        compute_jacobian_kkt_charge_discharge_ramp(dim_t, n, m, l, net.F, net.S)
+        compute_jacobian_kkt_charge_discharge_ramp(dim_t, ns, m, l, net.F, net.S)
         for _ in 1:T
     ]
     Kτ3 = [
-        compute_jacobian_kkt_future_ramp(dim_t, n, l)
+        compute_jacobian_kkt_future_ramp(dim_t, ns, l)
         for _ in 1:(T-1)
     ]
 
@@ -187,7 +187,7 @@ end
 """
     compute_jacobian_kkt_charge_discharge(dims, n)
 
-Compute the part of the Jacobian associated with charge and discharge, 
+Compute the part of the Jacobian of the static problem associated with charge and discharge, 
 with `dims` being the dimension of the static system, `ns` the number of storage nodes, and `l` 
 the number of generators.
 """
@@ -199,7 +199,7 @@ function compute_jacobian_kkt_charge_discharge_ramp(dims, ns, m, l, F, S)
 
     # TODO: check that the szeros vectors added here are good in terms of dims
     # Basically, some of those (dims, XXn) should probably be (dims, XXns)
-    return [spzeros(dims, ns) dKdch dKddis spzeros(dims, 6ns) dKdλl dKdλu spzeros(dims, n)]
+    return [spzeros(dims, ns) dKdch dKddis spzeros(dims, 6ns) dKdλl dKdλu spzeros(dims, ns)]
 end
 
 
@@ -209,12 +209,17 @@ end
 Compute the part of the Jacobian (dStatic / dRamp), where `dims` is the 
 dimension of the static system, `n` is the number of nodes, and `l` is
 the number of generators.
+
+Note: this function computes it only for the future timestep. 
+The ramping constraints associated with the current timestep are accounted for 
+in `compute_jacobian_kkt_charge_discharge_ramp`.
+
 """
-function compute_jacobian_kkt_future_ramp(dims, n, l)
+function compute_jacobian_kkt_future_ramp(dims, ns, l)
     dKdλl = [I(l); spzeros(dims-l, l)]
     dKdλu = [-I(l); spzeros(dims-l, l)]
 
-    return [spzeros(dims, 9n) dKdλl dKdλu spzeros(dims, n)]
+    return [spzeros(dims, 9ns) dKdλl dKdλu spzeros(dims, ns)]
 end
 
 """

@@ -206,7 +206,7 @@ function kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, F, S, P, C, η_c, η_d, ρ; τ=
         # ?? TODO: figure out if there is an edge case for ch and dis? 
         # are they actually variables in n x T or n x (T-1)
         t == 1 ? s_prev = INIT_COND : s_prev = s[t-1]
-        t < T ? νs_next = νs[t + 1] : νs_next = zeros(n)
+        t < T ? νs_next = νs[t + 1] : νs_next = zeros(ns)
 
         # compute the KKTs for the static subproblem
         λrampl_next, λrampu_next = (t == T) ? (zeros(l), zeros(l)) : (λrampl[t+1], λrampu[t+1])
@@ -219,8 +219,8 @@ function kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, F, S, P, C, η_c, η_d, ρ; τ=
         gt_prev = (t == 1) ? zeros(l) : g[t-1]
         KKT_s = kkt_storage(
             s[t], s_prev, ch[t], dis[t], λsu[t], λsl[t], λchu[t], λchl[t],
-            λdisu[t], λdisl[t], λrampl[t], λrampu[t], ν[t], νE[t], νs[t], νs_next, F, P, C, η_c, η_d, 
-            ρ, g[t], gt_prev,
+            λdisu[t], λdisl[t], λrampl[t], λrampu[t], ν[t], νE[t], νs[t], νs_next, F, S, P, C, 
+            η_c, η_d, ρ, g[t], gt_prev,
         )
 
         # check the sizes of both matrices computed above
@@ -256,13 +256,17 @@ Notes:
 function kkt_storage(
     s, s_prev, ch, dis, 
     λsu, λsl, λchu, λchl, λdisu, λdisl, λrampl, λrampu, ν, νE, νs_t, νs_next, 
-    F, P, C, η_c, η_d, ρ, gt, gt_prev
+    F, S, P, C, η_c, η_d, ρ, gt, gt_prev
 )
-    n = length(ch)
+    # todo: show size of all variables
+    @show length(s), length(s_prev), length(ch), length(dis)
+    @show length(λsu), length(λsl), length(λchu), length(λchl), length(λdisu), length(λdisl)
+    @show length(λrampl), length(λrampu), length(ν), length(νE), length(νs_t), length(νs_next)
+    @show size(F), size(P), size(C), size(ρ), size(gt), size(gt_prev)
     return [
         (λsu - λsl) + (νs_next - νs_t);  # ∇_s L, dim = ns
-        (λchu - λchl) - F'*ν .+ νE + νs_t * η_c ;  # ∇_ch L, dim = ns
-        (λdisu - λdisl) + F'*ν .- νE - νs_t/η_d;  # ∇_dis L, dim = ns
+        (λchu - λchl) - (F*S)'*ν .+ νE + νs_t * η_c ;  # ∇_ch L, dim = ns
+        (λdisu - λdisl) + (F*S)'*ν .- νE - νs_t/η_d;  # ∇_dis L, dim = ns
         λsl .* (-s); # dim = ns
         λsu .* (s - C); # dim = ns
         λchl .* (-ch); # dim = ns
@@ -443,29 +447,29 @@ function unflatten_variables_dyn(x, n, m, l, ns, T)
     for t in 1:T
         crt_idx = T * static_length + (t - 1) * storage_length
         i = 0
-        s = vcat(s, [x[crt_idx + i + 1:crt_idx + i + n]])
+        s = vcat(s, [x[crt_idx + i + 1:crt_idx + i + ns]])
         i += ns
-        ch = vcat(ch, [x[crt_idx + i + 1:crt_idx + i + n]])
+        ch = vcat(ch, [x[crt_idx + i + 1:crt_idx + i + ns]])
         i += ns
-        dis = vcat(dis, [x[crt_idx + i + 1:crt_idx + i + n]])
+        dis = vcat(dis, [x[crt_idx + i + 1:crt_idx + i + ns]])
         i += ns
-        λsl = vcat(λsl, [x[crt_idx + i + 1:crt_idx + i + n]])
+        λsl = vcat(λsl, [x[crt_idx + i + 1:crt_idx + i + ns]])
         i += ns
-        λsu = vcat(λsu, [x[crt_idx + i + 1:crt_idx + i + n]])
+        λsu = vcat(λsu, [x[crt_idx + i + 1:crt_idx + i + ns]])
         i += ns
-        λchl = vcat(λchl, [x[crt_idx + i + 1:crt_idx + i + n]])
+        λchl = vcat(λchl, [x[crt_idx + i + 1:crt_idx + i + ns]])
         i += ns
-        λchu = vcat(λchu, [x[crt_idx + i + 1:crt_idx + i + n]])
+        λchu = vcat(λchu, [x[crt_idx + i + 1:crt_idx + i + ns]])
         i += ns
-        λdisl = vcat(λdisl, [x[crt_idx + i + 1:crt_idx + i + n]])
+        λdisl = vcat(λdisl, [x[crt_idx + i + 1:crt_idx + i + ns]])
         i += ns
-        λdisu = vcat(λdisu, [x[crt_idx + i + 1:crt_idx + i + n]])
+        λdisu = vcat(λdisu, [x[crt_idx + i + 1:crt_idx + i + ns]])
         i += ns
         λrampl = vcat(λrampl, [x[crt_idx + i + 1:crt_idx + i + l]])
         i += l
         λrampu = vcat(λrampu, [x[crt_idx + i + 1:crt_idx + i + l]])
         i += l
-        νs = vcat(νs, [x[crt_idx + i + 1:crt_idx + i + n]])
+        νs = vcat(νs, [x[crt_idx + i + 1:crt_idx + i + ns]])
         i += ns
     end
     @assert crt_idx + i == T * (static_length + storage_length)

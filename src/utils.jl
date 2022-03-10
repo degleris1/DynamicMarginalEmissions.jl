@@ -9,7 +9,7 @@ end
 
 make_dynamic(net::PowerNetwork, T, P, C, η) = make_dynamic(net, T, P, C, [net.gmax for _ in 1:T], η, η);
 
-function generate_random_data(n, l, T)
+function generate_random_data(n, l, ns, T)
     Random.seed!(2)
 
     # Make graph
@@ -51,21 +51,26 @@ function generate_random_data(n, l, T)
     d_dyn = [d for _ in 1:T]
 
     
-    C = rand(Exponential(10), n)
+    C = rand(Exponential(10), ns)
     P = 0.25 * C
-    ;
+
+    S = zeros(n, ns)
+    nodes_storage = sample(1:n,  ns)
+    for i in 1:ns
+        S[nodes_storage[i], i] = 1
+    end
     
-    return A, B, cq_dyn, cl_dyn, d_dyn, gmax_dyn, pmax_dyn, P, C
+    return A, B, cq_dyn, cl_dyn, d_dyn, gmax_dyn, pmax_dyn, P, C, S
 end
 
-function generate_network(n, l, T)
+function generate_network(n, l, T, ns)
 
-    A, B, cq_dyn, cl_dyn, d_dyn, gmax_dyn, pmax_dyn, P, C = generate_random_data(n, l, T)
+    A, B, cq_dyn, cl_dyn, d_dyn, gmax_dyn, pmax_dyn, P, C, S = generate_random_data(n, l, ns, T)
     β = rand(Exponential(10), n)
     F = make_pfdf_matrix(A, β)
 
     net_dyn = DynamicPowerNetwork(
-        cq_dyn, cl_dyn, pmax_dyn, gmax_dyn, A, B, F, P, C, T
+        cq_dyn, cl_dyn, pmax_dyn, gmax_dyn, A, B, F, S, P, C, T
     )
     return net_dyn, d_dyn
 end
