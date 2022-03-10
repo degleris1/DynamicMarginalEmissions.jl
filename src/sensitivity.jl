@@ -43,12 +43,12 @@ Compute `∇_d C( x_opt(d) )`, where `x_opt(d)` is the optimal solution (primal
 and dual variables) of the power management problem `P` with parameters 
 `(fq, fl, d, pmax, gmax, A, B)` and `∇C` is the gradient `∇_x C(x)`.
 """
-function sensitivity_demand(P::PowerManagementProblem, ∇C, fq, fl, d, pmax, gmax, A, B, F, S)
+function sensitivity_demand(P::PowerManagementProblem, ∇C, fq, fl, d, pmax, gmax, A, B, F)
     x = flatten_variables(P)
 
     # Get partial Jacobians of KKT operator
     ∂K_xT = adjoint(compute_jacobian_kkt(fq, fl, d, pmax, gmax, A, B, F, x))
-    _, ∂K_θT = Zygote.forward_jacobian(d -> kkt(x, fq, fl, d, pmax, gmax, A, B, F, S), d)
+    _, ∂K_θT = Zygote.forward_jacobian(d -> kkt(x, fq, fl, d, pmax, gmax, A, B, F), d)
 
     # Now compute ∇C(g*(θ)) = -∂K_θ' * inv(∂K_x') * v
     v = ∂K_xT \ ∇C
@@ -60,7 +60,7 @@ end
 sensitivity_demand(P::PowerManagementProblem, ∇C, net::PowerNetwork, d) = 
     sensitivity_demand(
         P::PowerManagementProblem, ∇C, net.fq, net.fl, d, net.pmax, 
-        net.gmax, net.A, net.B, net.F, net.S
+        net.gmax, net.A, net.B, net.F
     )
 
 """

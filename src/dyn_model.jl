@@ -94,7 +94,8 @@ function DynamicPowerManagementProblem(
 
     subproblems = vcat(
         [PowerManagementProblem(
-            fq[t], fl[t], d[t], pmax[t], gmax[t], A, B, F, S; τ=τ, ch=ch[t], dis=dis[t], η_c=η_c, η_d=η_d
+            fq[t], fl[t], d[t], pmax[t], gmax[t], A, B, F; 
+            τ=τ, ch=ch[t], dis=dis[t], S=S, η_c=η_c, η_d=η_d
         ) for t in 1:T]
     )
 
@@ -211,7 +212,10 @@ function kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, F, S, P, C, η_c, η_d, ρ; τ=
         # compute the KKTs for the static subproblem
         λrampl_next, λrampu_next = (t == T) ? (zeros(l), zeros(l)) : (λrampl[t+1], λrampu[t+1])
         KKT = (
-            kkt(x, fq[t], fl[t], d[t], pmax[t], gmax[t], A, B, F, S; τ=TAU, ch=ch[t], dis=dis[t])
+            kkt(
+                x, fq[t], fl[t], d[t], pmax[t], gmax[t], A, B, F; 
+                τ=TAU, ch=ch[t], dis=dis[t], S=S
+            )
             + kkt_ramp(n, m, l, λrampl_next, λrampu_next, λrampl[t], λrampu[t])
         )
 
@@ -242,7 +246,8 @@ end
     kkt_dyn(x, net, d)
 """
 kkt_dyn(x, net::DynamicPowerNetwork, d) = kkt_dyn(
-    x, net.fq, net.fl, d, net.pmax, net.gmax, net.A, net.B, net.F, net.S, net.P, net.C, net.η_c, net.η_d, net.ρ; τ=net.τ
+    x, net.fq, net.fl, d, net.pmax, net.gmax, net.A, net.B, net.F, net.S, 
+    net.P, net.C, net.η_c, net.η_d, net.ρ; τ=net.τ
 )
 
 """
@@ -258,11 +263,6 @@ function kkt_storage(
     λsu, λsl, λchu, λchl, λdisu, λdisl, λrampl, λrampu, ν, νE, νs_t, νs_next, 
     F, S, P, C, η_c, η_d, ρ, gt, gt_prev
 )
-    # todo: show size of all variables
-    @show length(s), length(s_prev), length(ch), length(dis)
-    @show length(λsu), length(λsl), length(λchu), length(λchl), length(λdisu), length(λdisl)
-    @show length(λrampl), length(λrampu), length(ν), length(νE), length(νs_t), length(νs_next)
-    @show size(F), size(P), size(C), size(ρ), size(gt), size(gt_prev)
     return [
         (λsu - λsl) + (νs_next - νs_t);  # ∇_s L, dim = ns
         (λchu - λchl) - (F*S)'*ν .+ νE + νs_t * η_c ;  # ∇_ch L, dim = ns
