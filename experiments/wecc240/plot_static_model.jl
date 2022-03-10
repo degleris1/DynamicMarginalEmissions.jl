@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.17.7
+# v0.18.1
 
 using Markdown
 using InteractiveUtils
@@ -7,16 +7,13 @@ using InteractiveUtils
 # ╔═╡ 0ae79723-a5cf-4508-b41d-9622948185a9
 using Pkg; Pkg.activate("")
 
-# ╔═╡ 79ba1c40-99ab-11ec-161e-836401b0041f
-using BSON
-
 # ╔═╡ 5303b439-2bbb-4a04-b17e-7df6f2983493
 using CSV, DataFrames
 
 # ╔═╡ 668445dc-2437-421f-9251-b4044e5849f6
 # We need all of these (including the weird ones like PooledArrays) 
 # to make the BSON file load
-using SparseArrays, InlineStrings, PooledArrays, MathOptInterface
+using BSON, SparseArrays, InlineStrings, PooledArrays, MathOptInterface
 
 # ╔═╡ 32e5f26a-9b2f-4fc0-a0cd-1a5f101f0db9
 using StatsBase: mean
@@ -147,6 +144,10 @@ let
 
 
 	# ===========
+	fig = Figure(resolution = (1250,700), fontsize = 22)
+    ax = Axis(fig[1,1], aspect = DataAspect())
+
+	
 	states_url = "https://raw.githubusercontent.com/PublicaMundi/MappingAPI/master/data/geojson/us-states.json"
     states = Downloads.download(states_url)
     states_geo = GeoJSON.read(read(states, String))
@@ -154,14 +155,10 @@ let
 
     trans = Proj4.Transformation("+proj=longlat +datum=WGS84", "+proj=latlong", 
         always_xy=true) 
+	
     # see https://proj.org/operations/projections/index.html for more options 
-    ptrans = Makie.PointTrans{2}(trans)
-
-    fig = Figure(resolution = (1250,700), fontsize = 22)
-    ax = Axis(fig[1,1], aspect = DataAspect(), 
-        title = "Projection: Winkel Tripel, US States")
     # all input data coordinates are projected using this function
-    ax.scene.transformation.transform_func[] = ptrans
+    ax.scene.transformation.transform_func[] = Makie.PointTrans{2}(trans)
 	
     xlims!(ax, -125, -100)
 	ylims!(ax, 32, 51)
@@ -213,7 +210,6 @@ end
 
 # ╔═╡ Cell order:
 # ╠═0ae79723-a5cf-4508-b41d-9622948185a9
-# ╠═79ba1c40-99ab-11ec-161e-836401b0041f
 # ╠═5303b439-2bbb-4a04-b17e-7df6f2983493
 # ╠═668445dc-2437-421f-9251-b4044e5849f6
 # ╠═32e5f26a-9b2f-4fc0-a0cd-1a5f101f0db9
@@ -245,4 +241,4 @@ end
 # ╠═5cb1709a-eda0-41b3-8bff-f58c19608be5
 # ╠═59316c15-a94c-4c56-a30a-0e6c23629de7
 # ╟─7ffbe1bc-8cc6-4033-a70b-880209164199
-# ╟─b53cc8dd-c36e-4cf8-9f1d-473a0e985234
+# ╠═b53cc8dd-c36e-4cf8-9f1d-473a0e985234

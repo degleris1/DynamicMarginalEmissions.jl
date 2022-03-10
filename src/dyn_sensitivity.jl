@@ -88,11 +88,11 @@ the DynamicPowerNetwork `net`. `d` is the demand and `c` are the carbon costs.
 """
 function _make_∇C(net::DynamicPowerNetwork, c, cq=0, g=0)
     # Extract dimensions
-    n, m, l, T = get_problem_dims(net)
+    n, m, l, ns, T = get_problem_dims(net)
     static_dim = kkt_dims(n, m, l)
  
     # Construct ∇_x C(x)
-    ∇C_dyn = zeros(kkt_dims_dyn(n, m, l, T), T)
+    ∇C_dyn = zeros(kkt_dims_dyn(n, m, l, ns, T), T)
     idx = 0
     for t in 1:T
         if g == 0
@@ -112,19 +112,24 @@ end
 
 Constructs the Jacobian for a dynamic network `net`, with input variables `x` and
 demand `d_dyn`.
+
+Notes
+-----
+The Jacobian in this system is computed as... 
+# TODO: add
 """
 function compute_jacobian_kkt_dyn(x, net, d_dyn)
-    n, m, l, T = get_problem_dims(net)
+
+    n, m, l, ns, T = get_problem_dims(net)
 
     dim_t = kkt_dims(n, m, l)
-    dim_s = storage_kkt_dims(n, l)
+    dim_s = storage_kkt_dims(ns, l)
 
     # decompose `x` in arrays of T variables
     g, p, s, ch, dis, λpl, λpu, λgl, λgu, ν, νE, λsl, λsu, λchl, λchu, λdisl, λdisu, λrampl, λrampu, νs = 
-        unflatten_variables_dyn(x, n, m, l, T)
+        unflatten_variables_dyn(x, n, m, l, ns, T)
 
     # Compute individual Jacobians for the static system
-
     Kτ1 = [
         compute_jacobian_kkt(
             net.fq[t], net.fl[t], d_dyn[t], net.pmax[t], net.gmax[t], net.A, net.B, net.F,
@@ -132,12 +137,12 @@ function compute_jacobian_kkt_dyn(x, net, d_dyn)
         for t in 1:T
     ]
     Kτ2 = [
-        compute_jacobian_kkt_charge_discharge_ramp(dim_t, n, m, l, net.F)
-        for t in 1:T
+        compute_jacobian_kkt_charge_discharge_ramp(dim_t, ns, m, l, net.F, net.S)
+        for _ in 1:T
     ]
     Kτ3 = [
-        compute_jacobian_kkt_future_ramp(dim_t, n, l)
-        for t in 1:(T-1)
+        compute_jacobian_kkt_future_ramp(dim_t, ns, l)
+        for _ in 1:(T-1)
     ]
 
     # Stack matrices
@@ -182,17 +187,19 @@ end
 """
     compute_jacobian_kkt_charge_discharge(dims, n)
 
-Compute the part of the Jacobian associated with charge and discharge, 
-with `dims` being the dimension of the static system, `n` the number of nodes, and `l` 
+Compute the part of the Jacobian of the static problem associated with charge and discharge, 
+with `dims` being the dimension of the static system, `ns` the number of storage nodes, and `l` 
 the number of generators.
 """
-function compute_jacobian_kkt_charge_discharge_ramp(dims, n, m, l, F)
-    dKdch = [spzeros(dims-m-1, n); F; -ones(1, n)]
-    dKddis = [spzeros(dims-m-1, n); -F; ones(1, n)]
+function compute_jacobian_kkt_charge_discharge_ramp(dims, ns, m, l, F, S)
+    dKdch = [spzeros(dims-m-1, ns); F*S; -ones(1, ns)]
+    dKddis = [spzeros(dims-m-1, ns); -F*S; ones(1, ns)]
     dKdλl = [-I(l); spzeros(dims-l, l)]
     dKdλu = [I(l); spzeros(dims-l, l)]
 
-    return [spzeros(dims, n) dKdch dKddis spzeros(dims, 6n) dKdλl dKdλu spzeros(dims, n)]
+    # TODO: check that the szeros vectors added here are good in terms of dims
+    # Basically, some of those (dims, XXn) should probably be (dims, XXns)
+    return [spzeros(dims, ns) dKdch dKddis spzeros(dims, 6ns) dKdλl dKdλu spzeros(dims, ns)]
 end
 
 
@@ -202,17 +209,144 @@ end
 Compute the part of the Jacobian (dStatic / dRamp), where `dims` is the 
 dimension of the static system, `n` is the number of nodes, and `l` is
 the number of generators.
+
+Note: this function computes it only for the future timestep. 
+The ramping constraints associated with the current timestep are accounted for 
+in `compute_jacobian_kkt_charge_discharge_ramp`.
+
 """
-function compute_jacobian_kkt_future_ramp(dims, n, l)
+function compute_jacobian_kkt_future_ramp(dims, ns, l)
     dKdλl = [I(l); spzeros(dims-l, l)]
     dKdλu = [-I(l); spzeros(dims-l, l)]
 
-    return [spzeros(dims, 9n) dKdλl dKdλu spzeros(dims, n)]
+    return [spzeros(dims, 9ns) dKdλl dKdλu spzeros(dims, ns)]
+end
+
+"""
+    compute_jacobian_kkt_dyn_t(s, ch, dis, λsl, λsu, λchl, λchu, λdisl, λdisu, net, t)
+
+Compute the Jacobian for a given timestep of the storage part of the problem. 
+Input variables are the primal and dual variables, `net` is the dynamic network and 
+`t` is the timestep at which the Jacobian is to be computed.
+"""
+function compute_jacobian_kkt_dyn_t(
+    s, ch, dis, 
+    λsl, λsu, λchl, λchu, λdisl, λdisu, λrampl, λrampu, 
+    gt, gt_prev, ρ,
+    net, t
+)
+
+    # extract some variables
+    F = net.F
+    η_c = net.η_c
+    η_d = net.η_d
+    C = net.C
+    P = net.P
+    S = net.S
+    n, m, l, ns, T = get_problem_dims(net)
+
+    # Relevant sizes for the problem
+    kdims = kkt_dims(n, m, l)
+    sdims = storage_kkt_dims(ns, l)
+
+    ##########################
+    #
+    # 1. Constructing the dynamic part of the KKTs
+    #
+    ##########################
+
+    # D_x ∇_x L 
+    # dim = 3n, 3n
+    K11 = spzeros(3ns, 3ns) # dim = ns for s, ch, and dis 
+    # D_x F^T
+    # dim = 3ns, (6ns+2l)
+    K12 = [
+            -I(ns) I(ns) spzeros(ns, 4ns+2l);
+            spzeros(ns, 2ns) -I(ns) I(ns) spzeros(ns, 2ns+2l);
+            spzeros(ns, 4ns) -I(ns) I(ns) spzeros(ns, 2l)
+        ]
+    # D_x H^T
+    # dim = 3ns, ns
+    K13 = [
+        -I(ns);
+        η_c*I(ns);
+        -(1/η_d)*I(ns)
+    ]
+    # Diag(λ) * D_xF
+    # dim = 8ns, 8ns
+    D_xF = K12'
+    D = Diagonal([λsl; λsu; λchl; λchu; λdisl; λdisu; λrampl; λrampu])
+    K21 = D * D_xF
+    
+    # diag(F)
+    # dim = 8ns, 8ns
+    K22 = Diagonal([-s; s-C; -ch; ch-P; -dis; dis-P; (gt_prev - ρ - gt); (gt - gt_prev - ρ)])
+    
+    # diagonal part of the Jacobian
+    K_storage_t = [
+        K11 K12 K13;
+        K21 K22 spzeros(6ns+2l, ns);
+        K13' spzeros(ns, 7ns+2l) 
+    ]
+
+    ##########################
+    #
+    # 2. Constructing the non-diagonal parts of the Jacobian
+    #    i.e. includes cross-terms with the static variables
+    #       - with the ν dual variable
+    #       - with λgl, λgu variables
+    #
+    ##########################
+
+    Dλramp = (
+        (t == 1) ? 
+        [
+            spzeros(l, (t-1)*kdims) -Diagonal(λrampl) spzeros(l, kdims-l+(T-t)*kdims);
+            spzeros(l, (t-1)*kdims) Diagonal(λrampu) spzeros(l, kdims-l+(T-t)*kdims)
+        ] : 
+        [
+            spzeros(l, (t-2)*kdims) Diagonal(λrampl) spzeros(l, kdims-l) -Diagonal(λrampl) spzeros(l, kdims-l+(T-t)*kdims);
+            spzeros(l, (t-2)*kdims) -Diagonal(λrampu) spzeros(l, kdims-l) Diagonal(λrampu) spzeros(l, kdims-l+(T-t)*kdims)
+        ]
+    )
+
+    # The KKT of the static problem associated with the dynamic variables, 
+    # namely: s, ch, dis, ramp
+    K_static = [
+        spzeros(ns, T*kdims); # s
+        spzeros(ns, t*kdims - m - 1) -(F*S)' ones(ns) spzeros(ns, (T-t)*kdims); # ch
+        spzeros(ns, t*kdims - m - 1) (F*S)' -ones(ns) spzeros(ns, (T-t)*kdims); # dis
+        spzeros(6ns, T*kdims); # dual variables : in dynamic problem
+        Dλramp;
+        spzeros(ns, T*kdims); # coupling between s and ch/dis : in dynamic problem
+    ]
+    
+    if t > 1
+        K_storage_left = [
+            spzeros(sdims-ns, (t-1)*sdims);
+            spzeros(ns, (t-2)*sdims) I(ns) spzeros(ns, sdims-ns);
+        ]
+    else
+        K_storage_left = spzeros(sdims, 0);
+    end
+    if t < T
+        K_storage_right = [
+            spzeros(ns, sdims-ns) I(ns) spzeros(ns, (T-(t+1))*sdims);
+            spzeros(sdims-ns, (T-t)*sdims);
+        ]
+    else
+        K_storage_right = spzeros(sdims, 0);
+    end
+
+    K_storage = [K_storage_left K_storage_t K_storage_right];
+
+    return [K_static K_storage]
+   
 end
 
 ###################################################################################
 #
-# Below contains functions for automated testing of the sensitivity
+# Below contains older functions for automated testing of the sensitivity
 #
 # TODO: update, and make sure they work
 #
@@ -351,108 +485,3 @@ end
 
 
 
-"""
-    compute_jacobian_kkt_dyn_t(s, ch, dis, λsl, λsu, λchl, λchu, λdisl, λdisu, net, t)
-
-Compute the Jacobian for a given timestep of the storage part of the problem. Input variables are the primal and dual variables, 
-`net` is the dynamic network and `t` is the timestep at which the Jacobian is to be computed.
-"""
-function compute_jacobian_kkt_dyn_t(
-    s, ch, dis, 
-    λsl, λsu, λchl, λchu, λdisl, λdisu, λrampl, λrampu, 
-    gt, gt_prev, ρ,
-    net, t
-)
-
-    # extract some variables
-    F = net.F
-    η_c = net.η_c
-    η_d = net.η_d
-    C = net.C
-    P = net.P
-    n, m, l, T = get_problem_dims(net)
-
-    # Relevant sizes for the problem
-    kdims = kkt_dims(n, m, l)
-    sdims = storage_kkt_dims(n, l)
-
-    # D_x ∇_x L 
-    # dim = 3n, 3n
-    K11 = spzeros(3n, 3n) # dim = n for s, ch, and dis 
-    # D_x F^T
-    # dim = 3n, (6n+2l)
-    K12 = [
-            -I(n) I(n) spzeros(n, 4n+2l);
-            spzeros(n, 2n) -I(n) I(n) spzeros(n, 2n+2l);
-            spzeros(n, 4n) -I(n) I(n) spzeros(n, 2l)
-        ]
-    # D_x H^T
-    # dim = 3n, n
-    K13 = [
-        -I(n);
-        η_c*I(n);
-        -(1/η_d)*I(n)
-    ]
-    # Diag(λ) * D_xF
-    # dim = 6n, 6n
-    D_xF = K12'
-    D = Diagonal([λsl; λsu; λchl; λchu; λdisl; λdisu; λrampl; λrampu])
-    K21 = D * D_xF
-    
-    # diag(F)
-    # dim = 6n, 6n
-    K22 = Diagonal([-s; s-C; -ch; ch-P; -dis; dis-P; (gt_prev - ρ - gt); (gt - gt_prev - ρ)])
-    
-    # diagonal part of the Jacobian
-    K_storage_t = [
-        K11 K12 K13;
-        K21 K22 spzeros(6n+2l, n);
-        K13' spzeros(n, 7n+2l) 
-    ]
-
-    # static part
-    # includes "cross terms" 
-    # - with the ν dual variable
-    # - with λgl, λgu variables
-    Dλramp = (
-        (t == 1) ? 
-        [
-            spzeros(l, (t-1)*kdims) -Diagonal(λrampl) spzeros(l, kdims-l+(T-t)*kdims);
-            spzeros(l, (t-1)*kdims) Diagonal(λrampu) spzeros(l, kdims-l+(T-t)*kdims)
-        ] : 
-        [
-            spzeros(l, (t-2)*kdims) Diagonal(λrampl) spzeros(l, kdims-l) -Diagonal(λrampl) spzeros(l, kdims-l+(T-t)*kdims);
-            spzeros(l, (t-2)*kdims) -Diagonal(λrampu) spzeros(l, kdims-l) Diagonal(λrampu) spzeros(l, kdims-l+(T-t)*kdims)
-        ]
-    )
-    K_static = [
-        spzeros(n, T*kdims);
-        spzeros(n, t*kdims - m - 1) -F' ones(n) spzeros(n, (T-t)*kdims);
-        spzeros(n, t*kdims - m - 1) F' -ones(n) spzeros(n, (T-t)*kdims);
-        spzeros(6n, T*kdims);
-        Dλramp;
-        spzeros(n, T*kdims);
-    ]
-    
-    if t > 1
-        K_storage_left = [
-            spzeros(sdims-n, (t-1)*sdims);
-            spzeros(n, (t-2)*sdims) I(n) spzeros(n, sdims-n);
-        ]
-    else
-        K_storage_left = spzeros(sdims, 0);
-    end
-    if t < T
-        K_storage_right = [
-            spzeros(n, sdims-n) I(n) spzeros(n, (T-(t+1))*sdims);
-            spzeros(sdims-n, (T-t)*sdims);
-        ]
-    else
-        K_storage_right = spzeros(sdims, 0);
-    end
-
-    K_storage = [K_storage_left K_storage_t K_storage_right];
-
-    return [K_static K_storage]
-   
-end

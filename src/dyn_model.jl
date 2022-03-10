@@ -36,6 +36,7 @@ mutable struct DynamicPowerNetwork
     A
     B
     F
+    S
     P
     C
     T
@@ -46,14 +47,14 @@ mutable struct DynamicPowerNetwork
 end
 
 function DynamicPowerNetwork(
-    fq, fl, pmax, gmax, A, B, F, P, C, T; 
+    fq, fl, pmax, gmax, A, B, F, S, P, C, T; 
     τ=TAU, η_c=1.0, η_d=1.0, ρ=nothing
 )
     # The generator will never change by more than `gmax` MW per timestep
     # Therefore, if no ramping constraint is specified, we can set the
     # ramping limit to ρ > gmax, and the constraint will never be binding
     ρ = something(ρ, 2*[maximum(x -> x[i], gmax) for i in 1:length(gmax[1])])
-    return DynamicPowerNetwork(fq, fl, pmax, gmax, A, B, F, P, C, T, τ, η_c, η_d, ρ)
+    return DynamicPowerNetwork(fq, fl, pmax, gmax, A, B, F, S, P, C, T, τ, η_c, η_d, ρ)
 end
 
 
@@ -68,7 +69,7 @@ via the presence of nodal storage. Arguments are arrays of dimension `T`. `fq` a
 are the quadratic and linear components of the generator costs, respectively. `d` is the 
 nodal demand. `pmax`, `gmax` are the maximum transmission and generation power. 
 `A` is the incidence matrix, `B` is a generator-to-node mapping. `P` and `C` are the maximum
-charge/discharge power for batteries and the maximum SOC, respectively. 
+charge/discharge power for batteries and the maximum SOC, respectively. `S` maps storage to associated nodes.
 
 Note:
 -----
@@ -76,23 +77,25 @@ Note:
 - There is currently no final condition on the storage. 
 """
 function DynamicPowerManagementProblem(
-    fq, fl, d, pmax, gmax, A, B, F, P, C; 
+    fq, fl, d, pmax, gmax, A, B, F, S, P, C; 
     τ=TAU, η_c=1.0, η_d=1.0, ρ=nothing
 )
     ρ = something(ρ, 2*[maximum(x -> x[i], gmax) for i in 1:length(gmax[1])])
 
     T = length(fq)
     n, _ = size(A)
+    _, ns = size(S) #ns indicates the number of storage nodes
 
     # Define a storage variable for n nodes over T timesteps
-    s = [Variable(n) for _ in 1:T]
+    s = [Variable(ns) for _ in 1:T]
     # Define a charge and discharge variable for n nodes over T timesteps
-    ch = [Variable(n) for _ in 1:T]
-    dis = [Variable(n) for _ in 1:T]
+    ch = [Variable(ns) for _ in 1:T]
+    dis = [Variable(ns) for _ in 1:T]
 
     subproblems = vcat(
         [PowerManagementProblem(
-            fq[t], fl[t], d[t], pmax[t], gmax[t], A, B, F; τ=τ, ch=ch[t], dis=dis[t], η_c=η_c, η_d=η_d
+            fq[t], fl[t], d[t], pmax[t], gmax[t], A, B, F; 
+            τ=τ, ch=ch[t], dis=dis[t], S=S, η_c=η_c, η_d=η_d
         ) for t in 1:T]
     )
 
@@ -137,7 +140,7 @@ function DynamicPowerManagementProblem(
 
     params = (
         fq = fq, fl = fl, d = d, pmax = pmax, gmax = gmax, 
-        A = A, B = B, F = F, P = P, C = C, τ = τ
+        A = A, B = B, F = F, S = S, P = P, C = C, τ = τ
     )
 
     return PowerManagementProblem(dynProblem, p_T, g_T, s, ch, dis, params)
@@ -145,7 +148,7 @@ end
 
 DynamicPowerManagementProblem(net::DynamicPowerNetwork, d) =
     DynamicPowerManagementProblem(
-        net.fq, net.fl, d, net.pmax, net.gmax, net.A, net.B, net.F, net.P, net.C; 
+        net.fq, net.fl, d, net.pmax, net.gmax, net.A, net.B, net.F, net.S, net.P, net.C; 
         τ=net.τ, η_c=net.η_c, η_d=net.η_d, ρ=net.ρ
     )
 
@@ -154,25 +157,26 @@ DynamicPowerManagementProblem(net::DynamicPowerNetwork, d) =
 # ===
 
 """
-    kkt_dims_dyn(n, m, l, T)
+    kkt_dims_dyn(n, m, l, ns, T)
 
 Compute the dimensions of the input / output of the KKT operator for
 a network with `n` nodes, `m` edges, `l` generators for `T` timesteps.
+`ns` is the number of storage nodes.
 
 Details: 
 --------
-- size of variables: T*(l + m + n)
+- size of variables in static problem: T*(l + m + n)
 - static subproblem constraints: (n + 2l + 2m)*T
-- storage constraints: T*(4n)
+- storage constraints: T*(4ns)
 """
-kkt_dims_dyn(n, m, l, T) = T * (kkt_dims(n, m, l) + storage_kkt_dims(n, l))
+kkt_dims_dyn(n, m, l, ns, T) = T * (kkt_dims(n, m, l) + storage_kkt_dims(ns, l))
 
 """
     storage_kkt_dims(n, l)
 
 Compute the dimensions of the KKT operator associated with storage constraints.
 """
-storage_kkt_dims(n, l) = 10n + 2l # 3n for stationarity, 7n+2l for complementary slackness
+storage_kkt_dims(ns, l) = 3ns + 7ns + 2l # 3ns for stationarity, 7ns+2l for complementary slackness
 
 """
     kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, P, C, η_c, η_d, ρ; τ=TAU)
@@ -180,15 +184,16 @@ storage_kkt_dims(n, l) = 10n + 2l # 3n for stationarity, 7n+2l for complementary
 Compute the KKT operator applied to `x`, with parameters given by `fq`,
 `fl`, `d`, `pmax`, `gmax`, `A`, `B`, `P`, `C`, and `τ`.
 """
-function kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, F, P, C, η_c, η_d, ρ; τ=TAU)
+function kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, F, S, P, C, η_c, η_d, ρ; τ=TAU)
 
     n, m = size(A)
     _, l = size(B)
+    _, ns = size(S)
     T = length(fq)
 
     # decompose `x` in arrays of T variables
     g, p, s, ch, dis, λpl, λpu, λgl, λgu, ν, νE, λsl, λsu, λchl, λchu, λdisl, λdisu, λrampl, λrampu, νs = 
-        unflatten_variables_dyn(x, n, m, l, T)
+        unflatten_variables_dyn(x, n, m, l, ns, T)
 
     # compute the KKTs for individual problems
     KKT_static_tot = Float64[]
@@ -202,12 +207,15 @@ function kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, F, P, C, η_c, η_d, ρ; τ=TAU
         # ?? TODO: figure out if there is an edge case for ch and dis? 
         # are they actually variables in n x T or n x (T-1)
         t == 1 ? s_prev = INIT_COND : s_prev = s[t-1]
-        t < T ? νs_next = νs[t + 1] : νs_next = zeros(n)
+        t < T ? νs_next = νs[t + 1] : νs_next = zeros(ns)
 
         # compute the KKTs for the static subproblem
         λrampl_next, λrampu_next = (t == T) ? (zeros(l), zeros(l)) : (λrampl[t+1], λrampu[t+1])
         KKT = (
-            kkt(x, fq[t], fl[t], d[t], pmax[t], gmax[t], A, B, F; τ=TAU, ch=ch[t], dis=dis[t])
+            kkt(
+                x, fq[t], fl[t], d[t], pmax[t], gmax[t], A, B, F; 
+                τ=TAU, ch=ch[t], dis=dis[t], S=S
+            )
             + kkt_ramp(n, m, l, λrampl_next, λrampu_next, λrampl[t], λrampu[t])
         )
 
@@ -215,13 +223,13 @@ function kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, F, P, C, η_c, η_d, ρ; τ=TAU
         gt_prev = (t == 1) ? zeros(l) : g[t-1]
         KKT_s = kkt_storage(
             s[t], s_prev, ch[t], dis[t], λsu[t], λsl[t], λchu[t], λchl[t],
-            λdisu[t], λdisl[t], λrampl[t], λrampu[t], ν[t], νE[t], νs[t], νs_next, F, P, C, η_c, η_d, 
-            ρ, g[t], gt_prev,
+            λdisu[t], λdisl[t], λrampl[t], λrampu[t], ν[t], νE[t], νs[t], νs_next, F, S, P, C, 
+            η_c, η_d, ρ, g[t], gt_prev,
         )
 
         # check the sizes of both matrices computed above
         @assert length(KKT) == kkt_dims(n, m, l)
-        @assert length(KKT_s) == storage_kkt_dims(n, l)
+        @assert length(KKT_s) == storage_kkt_dims(ns, l)
 
         # append both matrices to the general KKT operator
         KKT_static_tot = vcat(KKT_static_tot, KKT) 
@@ -229,7 +237,7 @@ function kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, F, P, C, η_c, η_d, ρ; τ=TAU
     end
 
     KKT_tot = vcat(KKT_static_tot, KKT_storage_tot)
-    @assert length(KKT_tot) == kkt_dims_dyn(n, m, l, T)
+    @assert length(KKT_tot) == kkt_dims_dyn(n, m, l, ns,T)
 
     return KKT_tot
 end
@@ -238,7 +246,8 @@ end
     kkt_dyn(x, net, d)
 """
 kkt_dyn(x, net::DynamicPowerNetwork, d) = kkt_dyn(
-    x, net.fq, net.fl, d, net.pmax, net.gmax, net.A, net.B, net.F, net.P, net.C, net.η_c, net.η_d, net.ρ; τ=net.τ
+    x, net.fq, net.fl, d, net.pmax, net.gmax, net.A, net.B, net.F, net.S, 
+    net.P, net.C, net.η_c, net.η_d, net.ρ; τ=net.τ
 )
 
 """
@@ -250,23 +259,23 @@ Notes:
 - The variables that are not in the diagonal block for the Jacobian are νs_next and ν
 """
 function kkt_storage(
-    s, s_prev, ch, dis, λsu, λsl, λchu, λchl, λdisu, λdisl, λrampl, λrampu, ν, νE, νs_t, νs_next, F, P, C, η_c, η_d,
-    ρ, gt, gt_prev
+    s, s_prev, ch, dis, 
+    λsu, λsl, λchu, λchl, λdisu, λdisl, λrampl, λrampu, ν, νE, νs_t, νs_next, 
+    F, S, P, C, η_c, η_d, ρ, gt, gt_prev
 )
-    n = length(ch)
     return [
-        (λsu - λsl) + (νs_next - νs_t);  # ∇_s L
-        (λchu - λchl) - F'*ν .+ νE + νs_t * η_c ;  # ∇_ch L
-        (λdisu - λdisl) + F'*ν .- νE - νs_t/η_d;  # ∇_dis L
-        λsl .* (-s);
-        λsu .* (s - C);
-        λchl .* (-ch);
-        λchu .* (ch-P);
-        λdisl .* (-dis);
-        λdisu .* (dis-P);
-        λrampl .* (gt_prev - ρ - gt);
-        λrampu .* (gt - gt_prev - ρ);
-        - s .+ s_prev + ch * η_c - dis/η_d;
+        (λsu - λsl) + (νs_next - νs_t);  # ∇_s L, dim = ns
+        (λchu - λchl) - (F*S)'*ν .+ νE + νs_t * η_c ;  # ∇_ch L, dim = ns
+        (λdisu - λdisl) + (F*S)'*ν .- νE - νs_t/η_d;  # ∇_dis L, dim = ns
+        λsl .* (-s); # dim = ns
+        λsu .* (s - C); # dim = ns
+        λchl .* (-ch); # dim = ns
+        λchu .* (ch-P); # dim = ns
+        λdisl .* (-dis); # dim = ns
+        λdisu .* (dis-P); # dim = ns
+        λrampl .* (gt_prev - ρ - gt); # dim = l 
+        λrampu .* (gt - gt_prev - ρ); # dim = l
+        - s .+ s_prev + ch * η_c - dis/η_d; # dim = ns
     ]
 end
 
@@ -285,6 +294,7 @@ function extract_vars_t(P::PowerManagementProblem, t)
 
     n, m = size(P.params.A)
     _, l = size(P.params.B)
+    _, ns = size(P.params.S)
     T = length(P.g)
     
     n_constraints_static = 6
@@ -331,15 +341,15 @@ function extract_vars_t(P::PowerManagementProblem, t)
     νs = P.problem.constraints[storage_index + 9].dual
 
     # checking size consistency of dual variables
-    @assert length(λsl) == n
-    @assert length(λsu) == n
-    @assert length(λchl) == n
-    @assert length(λchu) == n
-    @assert length(λdisl) == n
-    @assert length(λdisu) == n
+    @assert length(λsl) == ns
+    @assert length(λsu) == ns
+    @assert length(λchl) == ns
+    @assert length(λchu) == ns
+    @assert length(λdisl) == ns
+    @assert length(λdisu) == ns
     @assert length(λrampl) == l
     @assert length(λrampu) == l
-    @assert length(νs) == n
+    @assert length(νs) == ns
 
     return g, p, s, ch, dis, λpl, λpu, λgl, λgu, ν, νE, λsl, λsu, λchl, λchu, λdisl, λdisu, λrampl, λrampu, νs
 end
@@ -364,6 +374,7 @@ function flatten_variables_dyn(P::PowerManagementProblem)
 
     T = length(P.g)
     n, m = size(P.params.A)
+    _, ns = size(P.params.S)
     _, l = size(P.params.B)
 
     x_static = Float64[]
@@ -377,11 +388,11 @@ function flatten_variables_dyn(P::PowerManagementProblem)
     end
     vars = vcat(x_static, x_storage)
 
-    @assert length(x_static) == T * (3l + 3m + m + 1) 
-    @assert length(x_storage) == T * (10n + 2l)
+    @assert length(x_static) == T*kkt_dims(n, m, l)
+    @assert length(x_storage) == T*storage_kkt_dims(ns, l)
 
     # checking that the size is consistent with expectations
-    @assert length(vars) == kkt_dims_dyn(n, m, l, T)
+    @assert length(vars) == kkt_dims_dyn(n, m, l, ns, T)
 
     return vars
 end
@@ -392,10 +403,10 @@ end
 Extract the primal and dual variables from `x`, an array containing them all. 
 `n`, `m`, `l`, `T` are the dimensions of the problem. 
 """
-function unflatten_variables_dyn(x, n, m, l, T)
+function unflatten_variables_dyn(x, n, m, l, ns, T)
 
     static_length = kkt_dims(n, m, l)
-    storage_length = storage_kkt_dims(n, l)
+    storage_length = storage_kkt_dims(ns, l)
 
     # variables
     g, p, s, ch, dis = [], [], [], [], []
@@ -406,6 +417,7 @@ function unflatten_variables_dyn(x, n, m, l, T)
 
     # loop through timesteps, and retrieve variables in the order that 
     # x is constructed in flatten_variables_dyn()
+
     # Step 1: going through the static variables
     crt_idx, i = 0, 0
     for t in 1:T
@@ -430,34 +442,35 @@ function unflatten_variables_dyn(x, n, m, l, T)
     end
     # check that we have gone through all the static subproblems
     @assert crt_idx + i == T * static_length
+
     # Step 2: going throught the storage variables
     for t in 1:T
         crt_idx = T * static_length + (t - 1) * storage_length
         i = 0
-        s = vcat(s, [x[crt_idx + i + 1:crt_idx + i + n]])
-        i += n
-        ch = vcat(ch, [x[crt_idx + i + 1:crt_idx + i + n]])
-        i += n
-        dis = vcat(dis, [x[crt_idx + i + 1:crt_idx + i + n]])
-        i += n
-        λsl = vcat(λsl, [x[crt_idx + i + 1:crt_idx + i + n]])
-        i += n
-        λsu = vcat(λsu, [x[crt_idx + i + 1:crt_idx + i + n]])
-        i += n
-        λchl = vcat(λchl, [x[crt_idx + i + 1:crt_idx + i + n]])
-        i += n
-        λchu = vcat(λchu, [x[crt_idx + i + 1:crt_idx + i + n]])
-        i += n
-        λdisl = vcat(λdisl, [x[crt_idx + i + 1:crt_idx + i + n]])
-        i += n
-        λdisu = vcat(λdisu, [x[crt_idx + i + 1:crt_idx + i + n]])
-        i += n
+        s = vcat(s, [x[crt_idx + i + 1:crt_idx + i + ns]])
+        i += ns
+        ch = vcat(ch, [x[crt_idx + i + 1:crt_idx + i + ns]])
+        i += ns
+        dis = vcat(dis, [x[crt_idx + i + 1:crt_idx + i + ns]])
+        i += ns
+        λsl = vcat(λsl, [x[crt_idx + i + 1:crt_idx + i + ns]])
+        i += ns
+        λsu = vcat(λsu, [x[crt_idx + i + 1:crt_idx + i + ns]])
+        i += ns
+        λchl = vcat(λchl, [x[crt_idx + i + 1:crt_idx + i + ns]])
+        i += ns
+        λchu = vcat(λchu, [x[crt_idx + i + 1:crt_idx + i + ns]])
+        i += ns
+        λdisl = vcat(λdisl, [x[crt_idx + i + 1:crt_idx + i + ns]])
+        i += ns
+        λdisu = vcat(λdisu, [x[crt_idx + i + 1:crt_idx + i + ns]])
+        i += ns
         λrampl = vcat(λrampl, [x[crt_idx + i + 1:crt_idx + i + l]])
         i += l
         λrampu = vcat(λrampu, [x[crt_idx + i + 1:crt_idx + i + l]])
         i += l
-        νs = vcat(νs, [x[crt_idx + i + 1:crt_idx + i + n]])
-        i += n
+        νs = vcat(νs, [x[crt_idx + i + 1:crt_idx + i + ns]])
+        i += ns
     end
     @assert crt_idx + i == T * (static_length + storage_length)
 
@@ -465,24 +478,24 @@ function unflatten_variables_dyn(x, n, m, l, T)
     for t in 1:T
         @assert length(g[t]) == l
         @assert length(p[t]) == m
-        @assert length(s[t]) == n
-        @assert length(ch[t]) == n
-        @assert length(dis[t]) == n
+        @assert length(s[t]) == ns
+        @assert length(ch[t]) == ns
+        @assert length(dis[t]) == ns
         @assert length(λpl[t]) == m
         @assert length(λpu[t]) == m
         @assert length(λgl[t]) == l
         @assert length(λgu[t]) == l
         @assert length(ν[t]) == m
         @assert length(νE[t]) == 1
-        @assert length(λsl[t]) == n
-        @assert length(λsu[t]) == n
-        @assert length(λchl[t]) == n
-        @assert length(λchu[t]) == n
-        @assert length(λdisl[t]) == n
-        @assert length(λdisu[t]) == n
+        @assert length(λsl[t]) == ns
+        @assert length(λsu[t]) == ns
+        @assert length(λchl[t]) == ns
+        @assert length(λchu[t]) == ns
+        @assert length(λdisl[t]) == ns
+        @assert length(λdisu[t]) == ns
         @assert length(λrampl[t]) == l
         @assert length(λrampu[t]) == l
-        @assert length(νs[t]) == n
+        @assert length(νs[t]) == ns
     end
 
     return g, p, s, ch, dis, λpl, λpu, λgl, λgu, ν, νE, λsl, λsu, λchl, λchu, λdisl, λdisu, λrampl, λrampu, νs
