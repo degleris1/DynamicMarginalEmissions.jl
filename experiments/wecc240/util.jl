@@ -107,12 +107,10 @@ function make_dynamic_case(hour, day, month, T, year=2004, δ=1e-4)
     S = get_storage_map(df.storage, node_ids)
 
     meta = (node_names=node_names, node_ids=node_ids, df=df)
-    # storage parameters are multiplied by S to make them vector valued
-    # TODO: δ has been added to C - is that good enough?
     case = (
         A=A, β=β, fmax=fmax, cf=cf, d=d_dyn, 
         B=B, gmin=gmin_dyn, gmax=gmax_dyn, ramp=ramp_dyn, heat=heat, fuel=fuel, 
-        η=sqrt(mean(efficiency)), C=S*s_capacity.+δ, P=S*s_rate
+        η=sqrt(mean(efficiency)), C=s_capacity, P=s_rate, S=S
     )
     return case, meta
 end
