@@ -3,10 +3,6 @@ include("util.jl")
 using Dates
 using BSON
 using CarbonNetworks
-using TOML
-
-config = TOML.parsefile("../../config.toml")
-SAVE_DIR = config["data"]["SAVE_DIR"]
 
 DATES = Date(2004, 01, 01) .+ Day.(0:364)
 HOURS = 1:24

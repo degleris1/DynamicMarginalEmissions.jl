@@ -1,11 +1,14 @@
+using Pkg; Pkg.activate(joinpath(@__DIR__, "../../dev"))
+
 using CSV
 using DataFrames
 using SparseArrays: spzeros
 using StatsBase: mean
 using TOML
 
-config = TOML.parsefile("../../config.toml")
+config = TOML.parsefile(joinpath(@__DIR__, "../../config.toml"))
 DATA_DIR = joinpath(config["data"]["DATA_DIR"], "wecc240")
+SAVE_DIR = config["data"]["SAVE_DIR"]
 
 BRANCH_PATH = joinpath(DATA_DIR, "Branches-Table 1.csv")
 DEMAND_PATH = joinpath(DATA_DIR, "Load & Gen Profiles-Table 1.csv")
