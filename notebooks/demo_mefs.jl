@@ -65,6 +65,10 @@ end;
 # ╔═╡ 113e61a9-3b21-48d0-9854-a2fcce904e8a
 xticks_hr = [0, 6, 12, 18, 24]
 
+# ╔═╡ 935dabe1-467f-4c36-bdff-4cb6807b672f
+theme(:default, label=nothing, 
+		tickfont=(:Times, 8), guidefont=(:Times, 8), titlefont=(:Times,8), framestyle=:box)
+
 # ╔═╡ 9bd515d4-c7aa-4a3d-a4fb-28686290a134
 md"""
 ## Generate data
@@ -104,7 +108,7 @@ begin
 n = 6 # number of nodes
 l = 6 # number of generators
 T = 5 # number of timesteps
-ns = 1 # number of storage nodes
+ns = 3 # number of storage nodes
 
 net_dyn, _ = generate_network(n, l, T, ns)
 end;
@@ -188,7 +192,7 @@ end
 md"""Influence of charging efficiency η on the total emissions of the system"""
 
 # ╔═╡ 0740dc70-a532-4818-b09d-b3b8d60fa6ba
-total_mefs = reshape(sum(results, dims=2), (n, length(mef_times))) # how to reshape?
+total_mefs = reshape(sum(results, dims=2), (n, length(mef_times))) 
 
 # ╔═╡ 6870576e-4a46-44c4-978e-223fb4be96bc
 @bind plot_id Slider(1:n)
@@ -258,16 +262,10 @@ md"""
 """
 
 # ╔═╡ 3c5edbc5-8fc7-4d09-98a9-85f2efb699a8
-node_sens = 3 # 21
+node_sens = 2
 
 # ╔═╡ 67ad2564-fb20-4a71-a084-0145e8ed24bc
-cons_time = 17;
-
-# ╔═╡ bd116217-0e1c-45a0-9239-e239dc2d639b
-s_idx_ = 1 #index of storage penetration
-
-# ╔═╡ e5806501-044e-4667-a9b2-5d3417a7a49d
-storage_penetrations[s_idx_]
+cons_time = 4
 
 # ╔═╡ 5365b74f-595f-4ade-a7af-e8dba53b84f7
 md"""
@@ -275,7 +273,7 @@ Reference (as in computed) values
 """
 
 # ╔═╡ a9b770e0-b137-40f7-b59a-35ad355b98bd
-ref_mefs = results[idx_η][node_sens, :, :, s_idx_]';
+ref_mefs = results[node_sens, :, :]';
 
 # ╔═╡ 956e963a-97af-495e-9475-181322ac2e0c
 ref_mefs[:, cons_time]
@@ -291,24 +289,11 @@ md"""
 The cell below perturbs demand at a given time and then we will plot the different variales as a function of the demand, trying to understand the emergence of those patterns
 """
 
-# ╔═╡ 110f3329-c847-47f1-8427-ee959adc8745
-RUN_CELL_SENSITIVITY = true
-
 # ╔═╡ 91f7d63c-9e30-4fd4-ab39-9fbf58d101dc
 begin
-	if RUN_CELL_SENSITIVITY
-	println("---------------------------")
 	println("Running sensitivity analysis")
 
-		
-	# size of the matrices are
-	# 2npoints+1: number of different values of demand for which we solve the problem
-	# n: number of nodes in the graph
-	# l: number of generators (= length(emissions_rates))
-	# T: the time horizon
-
-	# println("initial value of the demand:")
-	# println(d_dyn[cons_time][node])
+	
 	ref_val = deepcopy(d_dyn[cons_time][node_sens])
 	if ref_val > 0 
 			perturb_vals = [ref_val * (1+i*ε) for i in -npoints:npoints]
@@ -318,33 +303,36 @@ begin
 			idx_95 = findall(x_axis_vals.==.95)[1]
 			idx_110 = findall(x_axis_vals .== 1.1)[1]
 			idx_90 = findall(x_axis_vals .== .9)[1]
-	else
-			println("""Demand is zero!""")
+			plot_sens_flag = true
+	else # Demand is zero
 			perturb_vals = [i*ε for i in 0:npoints]
 			x_axis_vals = perturb_vals
 			idx_ref = 1
+			plot_sens_flag = false
 	end
 	L = length(perturb_vals)
 	E_sensitivity = zeros(L, length(emissions_rates), T);
-	s_sensitivity = zeros(L, n, T)
+	s_sensitivity = zeros(L, ns, T)
 	g_sensitivity = zeros(L, l, T);
-	mefs_sensitivity = zeros(L, T) #first index is perturbation, second is emissions time
-		
-	net_crt = meta[idx_η][s_idx_].net
+	mefs_sensitivity = zeros(L, T)
 		
 	for k in 1:L
 		d_crt = deepcopy(d_dyn)
 		d_crt[cons_time][node_sens] = perturb_vals[k]
-		opf_ = DynamicPowerManagementProblem(net_crt, d_crt)
+		opf_ = DynamicPowerManagementProblem(net_dyn, d_crt)
 		solve!(opf_, OPT, verbose=false)
 		if opf_.problem.status != Convex.MOI.OPTIMAL
 			@show opf_.problem.status
 		end
 
-		mefs_ = compute_mefs(opf_, net_crt, d_crt, emissions_rates)
-
+		println("Computing MEFs")
+		mefs_ = compute_mefs(opf_, net_dyn, d_crt, emissions_rates)
+		
 		for t in 1:T
-			s_sensitivity[k, :, t] = evaluate(opf_.s[t])
+			@show evaluate(opf_.s[t])
+			@show ns
+			@show size(s_sensitivity)
+			s_sensitivity[k, :, t] .= evaluate(opf_.s[t])
 			g_sensitivity[k, :, t] = evaluate(opf_.g[t])
 			# emissions sensitivity at 100% of the demand
 			E_sensitivity[k, :, t] = evaluate(opf_.g[t]).*emissions_rates
@@ -354,7 +342,6 @@ begin
 		# println(d_crt[cons_time][node])
 		# println(ref_val)
 	end
-	end
 end
 
 # ╔═╡ 77943ac8-36fe-4a13-a36d-db957780d869
@@ -362,7 +349,7 @@ begin #E_ref is the total emissions at a given time
 	E_ref = zeros(T)
 	
 	for t in 1:T
-		E_ref[t] = evaluate(meta[idx_η][s_idx_].opf.g[t])' * emissions_rates
+		E_ref[t] = evaluate(opf_dyn.g[t])' * emissions_rates
 	end
 
 end
@@ -372,9 +359,6 @@ md"""
 What is the value of emissions when there is no perturbation? 
 """
 
-# ╔═╡ e0f5c93c-e1dd-4a9e-baf1-cbb8daf540dc
-md""" *these values should be equal?* """
-
 # ╔═╡ 6fcd6e19-58c3-462d-964f-8cd3127b47a4
 sum(E_sensitivity[npoints+1, :, :], dims=1)
 
@@ -382,12 +366,7 @@ sum(E_sensitivity[npoints+1, :, :], dims=1)
 E_ref[:]
 
 # ╔═╡ b85b85d0-e1bc-4fc9-81cf-3792b55e3684
-t_display=17
-
-# ╔═╡ 506e9360-2c25-4ea7-830b-68b4a6bf9026
-md"""
-Emissions time: $t_display|
-"""
+e_time = 1
 
 # ╔═╡ 30511293-8ba5-486e-956b-e9f2a1ed0505
 begin
@@ -396,32 +375,32 @@ begin
 	ylims = (1-Δ, 1+Δ)
 	plt_s = plot(
 		x_axis_vals, 
-		[s_sensitivity[:, k, t_display]/(s_sensitivity[idx_ref, k, t_display]+γ) for k in 1:n], ylim=ylims
+		[s_sensitivity[:, k, e_time]/(s_sensitivity[idx_ref, k, e_time]+γ) for k in 1:ns], ylim=ylims
 	)
-	title!("Storage at time $t_display")
+	title!("Storage at time $e_time")
 	xlabel!("Change in demand at node $node_sens at time $cons_time")
-	ylabel!("Change in storage at all nodes at time $t_display")
+	ylabel!("Change in storage at all nodes at time $e_time")
 	
 	plt_E = plot(
 		x_axis_vals, 
-		[E_sensitivity[:, k, t_display]./(E_sensitivity[idx_ref, k, t_display]+γ) for k in 1:length(emissions_rates)], ylim=ylims
+		[E_sensitivity[:, k, e_time]./(E_sensitivity[idx_ref, k, e_time]+γ) for k in 1:length(emissions_rates)], ylim=ylims
 		)
-	title!("Emissions at time $t_display")
+	title!("Emissions at time $e_time")
 	xlabel!("Change in demand at node $node_sens at time $cons_time")
-	ylabel!("Change in emissions at all generators at time $t_display")
+	ylabel!("Change in emissions at all generators at time $e_time")
 	
 	plt_g = plot(
 		x_axis_vals, 
-		[g_sensitivity[:, k, t_display]./(g_sensitivity[idx_ref, k, t_display]+γ) for k in 1:length(emissions_rates)], ylim=ylims
+		[g_sensitivity[:, k, e_time]./(g_sensitivity[idx_ref, k, e_time]+γ) for k in 1:length(emissions_rates)], ylim=ylims
 		)
-	title!("Generators at time $t_display")
+	title!("Generators at time $e_time")
 	xlabel!("Change in demand at node $node_sens at time $cons_time")
-	ylabel!("Change in generation at all generators at time $t_display")
+	ylabel!("Change in generation at all generators at time $e_time")
 
-	norm_E = sum(E_sensitivity[:, :, t_display], dims=2)./sum(E_sensitivity[idx_ref, :, t_display])
+	norm_E = sum(E_sensitivity[:, :, e_time], dims=2)./sum(E_sensitivity[idx_ref, :, e_time])
 	plt_E_tot = plot(
 		x_axis_vals, norm_E
-		, ylim=(0.98, 1.08)
+		, ylim=(0.90, 1.1)
 		)
 	# xlabel!("Change in demand at node $node_sens at time $cons_time")
 	# ylabel!("Change in total emissions")
@@ -430,120 +409,49 @@ begin
 	
 	#adding the theoretical curve for the sensitivity
 	E_th = (
-		sum(E_sensitivity[idx_ref, :, t_display]) .+ (perturb_vals.-ref_val) .* mefs_sensitivity[idx_ref, t_display]
-		)./sum(E_sensitivity[idx_ref, :, t_display])
+		sum(E_sensitivity[idx_ref, :, e_time]) .+ (perturb_vals.-ref_val) .* mefs_sensitivity[idx_ref, e_time]
+	)./sum(E_sensitivity[idx_ref, :, e_time])
 
+	if plot_sens_flag
 	E_th_105 = (
-		sum(E_sensitivity[idx_105, :, t_display]) .+ (perturb_vals.-ref_val * x_axis_vals[idx_105]) .* mefs_sensitivity[idx_105, t_display]
-		)./sum(E_sensitivity[idx_ref, :, t_display])
+		sum(E_sensitivity[idx_105, :, e_time]) .+ (perturb_vals.-ref_val * x_axis_vals[idx_105]) .* mefs_sensitivity[idx_105, e_time]
+	)./sum(E_sensitivity[idx_ref, :, e_time])
 
 E_th_95 = (
-		sum(E_sensitivity[idx_95, :, t_display]) .+ (perturb_vals.-ref_val * x_axis_vals[idx_95]) .* mefs_sensitivity[idx_95, t_display]
-		)./sum(E_sensitivity[idx_ref, :, t_display])
+		sum(E_sensitivity[idx_95, :, e_time]) .+ (perturb_vals.-ref_val * x_axis_vals[idx_95]) .* mefs_sensitivity[idx_95, e_time]
+)./sum(E_sensitivity[idx_ref, :, e_time])
 	E_th_110 = (
-		sum(E_sensitivity[idx_110, :, t_display]) .+ (perturb_vals.-ref_val * x_axis_vals[idx_110]) .* mefs_sensitivity[idx_110, t_display]
-		)./sum(E_sensitivity[idx_ref, :, t_display])
+		sum(E_sensitivity[idx_110, :, e_time]) .+ (perturb_vals.-ref_val * x_axis_vals[idx_110]) .* mefs_sensitivity[idx_110, e_time]
+	)./sum(E_sensitivity[idx_ref, :, e_time])
 
 	E_th_90 = (
-		sum(E_sensitivity[idx_90, :, t_display]) .+ (perturb_vals.-ref_val * x_axis_vals[idx_90]) .* mefs_sensitivity[idx_90, t_display]
-		)./sum(E_sensitivity[idx_ref, :, t_display])
+		sum(E_sensitivity[idx_90, :, e_time]) .+ (perturb_vals.-ref_val * x_axis_vals[idx_90]) .* mefs_sensitivity[idx_90, e_time]
+	)./sum(E_sensitivity[idx_ref, :, e_time])
+	end
 	
 	plot!(x_axis_vals, E_th, ls=:dash, c=:orange)
+	
+	if plot_sens_flag
 	plot!(x_axis_vals, E_th_105, ls=:dash, c=:green)
 	plot!(x_axis_vals, E_th_95, ls=:dash, c=:firebrick)
 	plot!(x_axis_vals, E_th_110, ls=:dash, c=:violetred)
+	end
 
 	scatter!([x_axis_vals[idx_ref]], [norm_E[idx_ref]], c=:orange)
+
+	if plot_sens_flag
 	scatter!([x_axis_vals[idx_105]], [norm_E[idx_105]], c=:green)
 	scatter!([x_axis_vals[idx_95]], [norm_E[idx_95]], c=:firebrick)
 	scatter!([x_axis_vals[idx_110]], [norm_E[idx_110]], c=:violetred)
-	title!("Total emissions at time $t_display")
+	end
+	title!("Total emissions at time $e_time")
 	
-	@show ref_mefs[t_display, cons_time]
-	@show t_display
+	@show ref_mefs[e_time, cons_time]
+	@show e_time
 	@show cons_time
 	@show ref_val
 	
 	plot([plt_s, plt_E, plt_g, plt_E_tot]..., size = (650, 650), lw = 3)
-	
-end
-
-# ╔═╡ 49dc5403-f19b-458d-b9d5-f2baf2e68d17
-# data to save
-begin
-x_sens = x_axis_vals
-y_sens_exp = vec(sum(E_sensitivity[:, :, t_display], dims=2)./sum(E_sensitivity[idx_ref, :, t_display]))
-y_sens_100 = E_th
-y_sens_105 = E_th_105
-y_sens_110 = E_th_110
-y_sens_90 = E_th_90
-y_sens_95 = E_th_95
-
-data_sensitivity = (
-	x_sens, y_sens_exp, y_sens_90, y_sens_95, y_sens_100, y_sens_105, y_sens_110
-)
-end;
-
-# ╔═╡ a1d7b77f-14e4-4a8a-806f-ebf70d4f1e3c
-# change in generators, renewable vs non renewable
-begin
-rel_g_not_renew = sum(g_sensitivity[:, 1:l_no_renew, t_display], dims=2)./sum(g_sensitivity[idx_ref, 1:l_no_renew, t_display].*(1+γ));
-rel_g_renew = sum(g_sensitivity[:, l_no_renew+1:end, t_display], dims=2)./sum(g_sensitivity[idx_ref, l_no_renew+1:end, t_display].*(1+γ));
-	
-plt_curt = plot(
-	x_axis_vals, 
-	rel_g_not_renew, 
-	label="Non renewable"
-		)
-	plot!(
-		x_axis_vals, 
-		rel_g_renew,
-		label="Renewable"
-	)
-	title!("Generators at time $t_display")
-	xlabel!("Change in demand at node $node_sens at time $cons_time")
-	ylabel!("Change in generation at all generators at time $t_display")
-
-end
-
-# ╔═╡ c291accc-8774-4319-a7b5-a5129e699ec0
-begin
-plot_gt = plot()
-for gt in unique(tags)
-	g_idx = findall(tags.==gt)
-	rel_g_crt = sum(g_sensitivity[:, g_idx, t_display], dims=2)./sum(g_sensitivity[idx_ref, g_idx, t_display].*(1+γ));
-	plot!(
-		x_axis_vals, 
-		rel_g_crt,
-		label=gt
-	)
-end
-
-
-	title!("Generators at time $t_display")
-	xlabel!("Change in demand at node $node_sens at time $cons_time")
-	ylabel!("Change in generation at all generators at time $t_display")
-	plot_gt
-end
-
-# ╔═╡ e9e1f2b7-bbbc-4f7c-9997-1b3ee1796c14
-#plot of total emissions in theory (predicted by total mefs) vs practice
-begin
-	# plot of total Emissions over T
-	plt_E_tot_T = plot(
-		x_axis_vals, vec(sum(E_sensitivity[:, :, :],
-		dims=(2,3)))./vec(sum(E_sensitivity[idx_ref, :, :], dims = (1, 2))), 
-		ylim = (.99, 1.01)
-		)
-	xlabel!(L"\Delta d/d")
-	ylabel!(L"\Delta E/E")
-		
-		#adding the theoretical curve for the sensitivity
-		E_th_T = (
-			sum(E_sensitivity[idx_ref, :, :], dims = (1, 2)) .+
-			(perturb_vals.-ref_val) .* ref_mefs[t_display, cons_time]
-		)./sum(E_sensitivity[idx_ref, :, :], dims = (1, 2))
-		plot!(x_axis_vals, vec(E_th_T), ls=:dash)
 	
 end
 
@@ -556,6 +464,7 @@ end
 # ╠═0aac9a3f-a477-4095-9be1-f4babe1e2803
 # ╠═a32d6a56-8da8-44b0-b659-21030692630a
 # ╠═113e61a9-3b21-48d0-9854-a2fcce904e8a
+# ╠═935dabe1-467f-4c36-bdff-4cb6807b672f
 # ╟─9bd515d4-c7aa-4a3d-a4fb-28686290a134
 # ╟─1bd72281-4a7f-44f4-974d-632e9d0aaf28
 # ╠═0c786da1-7f44-40af-b6d6-e0d6db2242b2
@@ -581,24 +490,15 @@ end
 # ╟─edabacdd-8d25-4d64-9d4a-ecf1263ac02e
 # ╠═3c5edbc5-8fc7-4d09-98a9-85f2efb699a8
 # ╠═67ad2564-fb20-4a71-a084-0145e8ed24bc
-# ╠═bd116217-0e1c-45a0-9239-e239dc2d639b
-# ╠═e5806501-044e-4667-a9b2-5d3417a7a49d
 # ╟─5365b74f-595f-4ade-a7af-e8dba53b84f7
 # ╠═a9b770e0-b137-40f7-b59a-35ad355b98bd
 # ╠═956e963a-97af-495e-9475-181322ac2e0c
 # ╠═4aed3df5-441b-445b-9277-a38690eb8603
 # ╟─c9b41436-e0a0-4e57-908f-b45e42122e63
-# ╠═110f3329-c847-47f1-8427-ee959adc8745
-# ╠═91f7d63c-9e30-4fd4-ab39-9fbf58d101dc
+# ╟─91f7d63c-9e30-4fd4-ab39-9fbf58d101dc
 # ╠═77943ac8-36fe-4a13-a36d-db957780d869
 # ╟─4fd2833c-6c23-4009-8734-980d3dd08c91
-# ╟─e0f5c93c-e1dd-4a9e-baf1-cbb8daf540dc
 # ╠═6fcd6e19-58c3-462d-964f-8cd3127b47a4
 # ╠═2973af52-0bd0-4ba8-855d-297427627e22
-# ╟─506e9360-2c25-4ea7-830b-68b4a6bf9026
 # ╠═b85b85d0-e1bc-4fc9-81cf-3792b55e3684
 # ╠═30511293-8ba5-486e-956b-e9f2a1ed0505
-# ╠═49dc5403-f19b-458d-b9d5-f2baf2e68d17
-# ╠═a1d7b77f-14e4-4a8a-806f-ebf70d4f1e3c
-# ╠═c291accc-8774-4319-a7b5-a5129e699ec0
-# ╠═e9e1f2b7-bbbc-4f7c-9997-1b3ee1796c14
