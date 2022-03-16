@@ -4,8 +4,9 @@
 # POWER MANAGEMENT PROBLEM
 # ===
 
-
-INIT_COND = 0
+# TODO: incorporate as kwarg? 
+INIT_COND = .5
+FINAL_COND = .5
 
 """
 A dynamic power network
@@ -87,7 +88,7 @@ function DynamicPowerManagementProblem(
     _, ns = size(S) #ns indicates the number of storage nodes
 
     # Define a storage variable for n nodes over T timesteps
-    s = [Variable(ns) for _ in 1:T]
+    s = [Variable(ns) for _ in 1:T-1]
     # Define a charge and discharge variable for n nodes over T timesteps
     ch = [Variable(ns) for _ in 1:T]
     dis = [Variable(ns) for _ in 1:T]
@@ -112,19 +113,19 @@ function DynamicPowerManagementProblem(
 
     # storage constraints
     # initial conditions
-    add_constraints!(dynProblem, [
-        0 <= s[1], # λsl
-        s[1] <= C, # λsu
-        ch[1] >= 0, #λchl
-        ch[1] <= P, # λchu
-        dis[1] >= 0, #λdisl
-        dis[1] <= P, # λdisu
-        g_T[1] >= -ρ,  # λrampl
-        g_T[1] <= ρ,  # λrampu
-        0 == - s[1] + INIT_COND + ch[1] * η_c - dis[1]/η_d, #νs (ν for storage)
-    ])
+    # add_constraints!(dynProblem, [
+    #     0 <= s[1], # λsl
+    #     s[1] <= C, # λsu
+    #     ch[1] >= 0, #λchl
+    #     ch[1] <= P, # λchu
+    #     dis[1] >= 0, #λdisl
+    #     dis[1] <= P, # λdisu
+    #     g_T[1] >= -ρ,  # λrampl
+    #     g_T[1] <= ρ,  # λrampu
+    #     0 == - s[1] + INIT_COND.*C + ch[1] * η_c - dis[1]/η_d, #νs (ν for storage)
+    # ])
     # running condition
-    for t in 2:T
+    for t in 1:T
         add_constraints!(dynProblem,[
             0 <= s[t], # λsl
             s[t] <= C, # λsu
@@ -134,8 +135,20 @@ function DynamicPowerManagementProblem(
             dis[t] <= P, # λdisu
             g_T[t] >= g_T[t-1] - ρ,  # λrampl
             g_T[t] <= g_T[t-1] + ρ,  # λrampu
-            0 == - s[t] + s[t-1] + ch[t] * η_c - dis[t]/η_d, #νs (ν for storage)
         ])
+        if t==1
+            add_constraint!(dynProblem, 
+            0 == - s[1] + INIT_COND.*C + ch[1] * η_c - dis[1]/η_d, #νs (ν for storage)
+            )
+        elseif t==T
+            add_constraint!(dynProblem, 
+            0 == - s[t] + s[t-1] + ch[t] * η_c - dis[t]/η_d, #νs (ν for storage)
+            )
+        else
+            add_constraint!(dynProblem, 
+            0 == - FINAL_COND.*C + s[t-1] + ch[t] * η_c - dis[t]/η_d, #νs (ν for storage)
+            )
+        end
     end
 
     params = (
@@ -206,7 +219,8 @@ function kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, F, S, P, C, η_c, η_d, ρ; τ=
         # handle edge cases
         # ?? TODO: figure out if there is an edge case for ch and dis? 
         # are they actually variables in n x T or n x (T-1)
-        t == 1 ? s_prev = INIT_COND : s_prev = s[t-1]
+        t == 1 ? s_prev = INIT_COND.*C : s_prev = s[t-1]
+        t ==T ? s_crt = FINAL_COND.*C : s_crt = s[t]
         t < T ? νs_next = νs[t + 1] : νs_next = zeros(ns)
 
         # compute the KKTs for the static subproblem
@@ -222,7 +236,7 @@ function kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, F, S, P, C, η_c, η_d, ρ; τ=
         # add the KKts for the storage
         gt_prev = (t == 1) ? zeros(l) : g[t-1]
         KKT_s = kkt_storage(
-            s[t], s_prev, ch[t], dis[t], λsu[t], λsl[t], λchu[t], λchl[t],
+            s_crt, s_prev, ch[t], dis[t], λsu[t], λsl[t], λchu[t], λchl[t],
             λdisu[t], λdisl[t], λrampl[t], λrampu[t], ν[t], νE[t], νs[t], νs_next, F, S, P, C, 
             η_c, η_d, ρ, g[t], gt_prev,
         )
@@ -302,7 +316,13 @@ function extract_vars_t(P::PowerManagementProblem, t)
 
     g = P.g[t].value[:]
     p = evaluate(P.p[t]) 
-    s = evaluate(P.s[t]) 
+
+    if t==T
+        s = FINAL_COND.*P.params.C
+    else
+        s = evaluate(P.s[t]) 
+    end
+    k
     ch = evaluate(P.ch[t]) 
     dis = evaluate(P.dis[t])
 

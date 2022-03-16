@@ -19,13 +19,11 @@ begin
 	import Pkg
 	Pkg.activate();
 	using Random, Distributions
-	using Convex, ECOS, Gurobi
+	using Convex, ECOS
 	using Plots
 	using PlutoUI
-	using JLD
 	using LinearAlgebra
-	using LightGraphs, SimpleWeightedGraphs, GraphPlot
-	using PlutoUI
+	using LightGraphs, SimpleWeightedGraphs
 end;
 
 # ╔═╡ 0aac9a3f-a477-4095-9be1-f4babe1e2803
@@ -34,9 +32,6 @@ begin
 	using CarbonNetworks
 end
 
-# ╔═╡ 571d1cff-7311-4db8-8ac3-9e10afefaf18
-using LaTeXStrings
-
 # ╔═╡ c39005df-61e0-4c08-8321-49cc5fe71ef3
 md"""
 ## Description
@@ -44,8 +39,6 @@ md"""
 
 # ╔═╡ 0f9bfc53-8a1a-4e25-a82e-9bc4dc0a11fc
 md"""This notebook aims at illustrating the method developed for computing marginal emissions, as well as the codebase built around it. 
-
-Should we a minimal product
 
 Note this is work in progress. 
 """
@@ -460,7 +453,6 @@ end
 # ╟─0f9bfc53-8a1a-4e25-a82e-9bc4dc0a11fc
 # ╟─44275f74-7e7c-48d5-80a0-0f24609ef327
 # ╠═db59921e-e998-11eb-0307-e396d43191b5
-# ╠═571d1cff-7311-4db8-8ac3-9e10afefaf18
 # ╠═0aac9a3f-a477-4095-9be1-f4babe1e2803
 # ╠═a32d6a56-8da8-44b0-b659-21030692630a
 # ╠═113e61a9-3b21-48d0-9854-a2fcce904e8a
