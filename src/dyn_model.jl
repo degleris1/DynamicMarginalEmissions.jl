@@ -113,19 +113,19 @@ function DynamicPowerManagementProblem(
 
     # storage constraints
     # initial conditions
-    # add_constraints!(dynProblem, [
-    #     0 <= s[1], # λsl
-    #     s[1] <= C, # λsu
-    #     ch[1] >= 0, #λchl
-    #     ch[1] <= P, # λchu
-    #     dis[1] >= 0, #λdisl
-    #     dis[1] <= P, # λdisu
-    #     g_T[1] >= -ρ,  # λrampl
-    #     g_T[1] <= ρ,  # λrampu
-    #     0 == - s[1] + INIT_COND.*C + ch[1] * η_c - dis[1]/η_d, #νs (ν for storage)
-    # ])
+    add_constraints!(dynProblem, [
+        0 <= s[1], # λsl
+        s[1] <= C, # λsu
+        ch[1] >= 0, #λchl
+        ch[1] <= P, # λchu
+        dis[1] >= 0, #λdisl
+        dis[1] <= P, # λdisu
+        g_T[1] >= -ρ,  # λrampl
+        g_T[1] <= ρ,  # λrampu
+        0 == - s[1] + INIT_COND.*C + ch[1] * η_c - dis[1]/η_d, #νs (ν for storage)
+    ])
     # running condition
-    for t in 1:T
+    for t in 2:T-1
         add_constraints!(dynProblem,[
             0 <= s[t], # λsl
             s[t] <= C, # λsu
@@ -135,21 +135,22 @@ function DynamicPowerManagementProblem(
             dis[t] <= P, # λdisu
             g_T[t] >= g_T[t-1] - ρ,  # λrampl
             g_T[t] <= g_T[t-1] + ρ,  # λrampu
-        ])
-        if t==1
-            add_constraint!(dynProblem, 
-            0 == - s[1] + INIT_COND.*C + ch[1] * η_c - dis[1]/η_d, #νs (ν for storage)
-            )
-        elseif t==T
-            add_constraint!(dynProblem, 
             0 == - s[t] + s[t-1] + ch[t] * η_c - dis[t]/η_d, #νs (ν for storage)
-            )
-        else
-            add_constraint!(dynProblem, 
-            0 == - FINAL_COND.*C + s[t-1] + ch[t] * η_c - dis[t]/η_d, #νs (ν for storage)
-            )
-        end
+        ])
     end
+    # final condition
+    add_constraints!(dynProblem,[
+            # the first two constraints have to be eliminated
+            # 0 <= s[t], # λsl
+            # s[t] <= C, # λsu
+            ch[T] >= 0, #λchl
+            ch[T] <= P, # λchu
+            dis[T] >= 0, #λdisl
+            dis[T] <= P, # λdisu
+            g_T[T] >= g_T[T-1] - ρ,  # λrampl
+            g_T[T] <= g_T[T-1] + ρ,  # λrampu
+            0 == - FINAL_COND.*C + s[T-1] + ch[T] * η_c - dis[T]/η_d, #νs (ν for storage)
+        ])
 
     params = (
         fq = fq, fl = fl, d = d, pmax = pmax, gmax = gmax, 
@@ -220,7 +221,7 @@ function kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, F, S, P, C, η_c, η_d, ρ; τ=
         # ?? TODO: figure out if there is an edge case for ch and dis? 
         # are they actually variables in n x T or n x (T-1)
         t == 1 ? s_prev = INIT_COND.*C : s_prev = s[t-1]
-        t ==T ? s_crt = FINAL_COND.*C : s_crt = s[t]
+        t == T ? s_crt = FINAL_COND.*C : s_crt = s[t]
         t < T ? νs_next = νs[t + 1] : νs_next = zeros(ns)
 
         # compute the KKTs for the static subproblem
@@ -350,8 +351,8 @@ function extract_vars_t(P::PowerManagementProblem, t)
     @assert length(νE) == 1
 
     storage_index = n_constraints_static * T + (t - 1) * n_constraints_storage
-    λsl = P.problem.constraints[storage_index + 1].dual 
-    λsu = P.problem.constraints[storage_index + 2].dual 
+    λsl = (t==T) ? zeros(ns) : P.problem.constraints[storage_index + 1].dual 
+    λsu = (t==T) ? zeros(ns) : P.problem.constraints[storage_index + 2].dual 
     λchl = P.problem.constraints[storage_index + 3].dual
     λchu = P.problem.constraints[storage_index + 4].dual
     λdisl = P.problem.constraints[storage_index + 5].dual

@@ -17,8 +17,8 @@ end
 # ╔═╡ db59921e-e998-11eb-0307-e396d43191b5
 begin
 	import Pkg
-	Pkg.activate();
-	using Random, Distributions
+	Pkg.activate(joinpath(@__DIR__, "/Users/lucasfuentes/sensitivity/dev"));
+	using Random
 	using Convex, ECOS
 	using Plots
 	using PlutoUI
@@ -31,6 +31,9 @@ begin
 	using Revise
 	using CarbonNetworks
 end
+
+# ╔═╡ 0f7ed93f-72bf-41de-ba6d-f46926d9fc46
+using Distributions
 
 # ╔═╡ c39005df-61e0-4c08-8321-49cc5fe71ef3
 md"""
@@ -454,6 +457,7 @@ end
 # ╟─44275f74-7e7c-48d5-80a0-0f24609ef327
 # ╠═db59921e-e998-11eb-0307-e396d43191b5
 # ╠═0aac9a3f-a477-4095-9be1-f4babe1e2803
+# ╠═0f7ed93f-72bf-41de-ba6d-f46926d9fc46
 # ╠═a32d6a56-8da8-44b0-b659-21030692630a
 # ╠═113e61a9-3b21-48d0-9854-a2fcce904e8a
 # ╠═935dabe1-467f-4c36-bdff-4cb6807b672f
