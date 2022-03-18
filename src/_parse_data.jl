@@ -275,26 +275,3 @@ function _make_B(gen, n, l)
 	
 	return B
 end
-
-"""
-    make_pfdf_matrix(A, β)
-
-Convert incidence matrix `A` and edge susceptances `β` to the PFDF matrix `F`.
-
-Note: the reference node is always set to 1.
-"""
-function make_pfdf_matrix(A, β)
-    n, m = size(A)
-
-    # Make susceptance matrices
-    S_l = diagm(β) * A'
-    S_b = A * S_l
-
-    # Construct reactance matrix (psuedo-inverse)
-    X_b = [
-        zeros(n)'; 
-        zeros(n-1) inv(S_b[2:n, 2:n])
-    ]
-
-    return S_l * X_b
-end

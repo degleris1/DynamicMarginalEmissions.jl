@@ -1,56 +1,69 @@
 module CarbonNetworks
 
 # Module Imports
-using CSV
 using Convex
-using DataFrames
 using ECOS
-using LightGraphs
-using LinearAlgebra
-using SimpleWeightedGraphs
-using SparseArrays
-using Zygote
 
-using Base.Iterators: product
-using PowerModels: parse_file, make_basic_network, make_per_unit!,
-    calc_basic_incidence_matrix
+using SparseArrays: sparse, spzeros, blockdiag
+
+import Convex: solve!
 
 
-# Exports
-export open_datasets, parse_network_data, load_case, create_generation_map
-export load_synthetic_network, load_demand_data, load_renewable_data
+# using CSV
+# using DataFrames
+# using LightGraphs
+# using LinearAlgebra
+# using SimpleWeightedGraphs
+# using SparseArrays
+# using Zygote
 
-export PowerNetwork, PowerManagementProblem, solve!
-export get_lmps, kkt_dims, flatten_variables, unflatten_variables, kkt
+# using Base.Iterators: product
+# using PowerModels: parse_file, make_basic_network, make_per_unit!,
+#     calc_basic_incidence_matrix
 
-export DynamicPowerNetwork, DynamicPowerManagementProblem
-export flatten_variables_dyn, unflatten_variables_dyn
-export kkt_dyn, sensitivity_demand_dyn, kkt_dims_dyn, storage_kkt_dims
 
-export sensitivity_price, sensitivity_demand
-export loss_and_grad, stochastic_loss_and_grad
-export compute_mefs
-export plot_sensitivity_check
-export make_dynamic, generate_random_data
+# Exports - Devices
+export get_cost, get_constraints
+export Generator, StaticGenerator, Demand
 
-export compute_jacobian_kkt_dyn, get_problem_dims
-export make_pfdf_matrix
+# Exports - Power Management Problem
+export DynamicPowerManagementProblem
+export solve!, kkt
+export flatten_pmp_result, unflatten_pmp_result
+export get_num_lines, get_num_devices, get_time_horizon, get_dims
 
-export generate_network
+# Exports - Utilities
+export make_pfdf_matrix, make_device_pfdf_matrix
+
+# export open_datasets, parse_network_data, load_case, create_generation_map
+# export load_synthetic_network, load_demand_data, load_renewable_data
+
+# export get_lmps
+
+# export DynamicPowerNetwork, DynamicPowerManagementProblem
+# export flatten_variables_dyn, unflatten_variables_dyn
+# export kkt_dyn, sensitivity_demand_dyn, kkt_dims_dyn, storage_kkt_dims
+
+# export sensitivity_price, sensitivity_demand
+# export compute_mefs
+# export generate_random_data
+
+# export compute_jacobian_kkt_dyn, get_problem_dims
+# export make_pfdf_matrix
+
+# export generate_network
 
 
 # Files
-include("model.jl")
-include("dyn_model.jl")
+include("devices/template.jl")
+include("devices/generator.jl")
 
-include("parse_data.jl")
-include("sensitivity.jl")
-include("dyn_sensitivity.jl")
-include("descent.jl")
+include("pmp.jl")
+include("jacobian.jl")
 
-include("utils.jl")
+include("network_utils.jl")
 
-ECOS_OPT = () -> ECOS.Optimizer()
-OPT = ECOS_OPT
 
+#include("parse_data.jl")
+#include("utils.jl")
 end
