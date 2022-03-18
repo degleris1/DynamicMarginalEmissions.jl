@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.17.7
+# v0.18.1
 
 using Markdown
 using InteractiveUtils
@@ -12,22 +12,28 @@ begin
 	using CairoMakie
 	using ColorSchemes
 	using Colors
+	using TOML
 end
 
 # ╔═╡ 00c874fc-f087-4c6a-b653-feb5080ff89d
 using ColorSchemeTools
 
+# ╔═╡ 5aab77a4-ef85-4676-aeb6-eb2ce0aaeb22
+using LinearAlgebra
+
+# ╔═╡ a643ae79-d173-423a-9b00-0e8bdaded832
+config = TOML.parsefile(joinpath(@__DIR__, "../../config.toml"))
+
+# ╔═╡ ff86eb8b-7619-40cf-b414-240ba3e44c7f
+config["data"]
+
 # ╔═╡ 177d72ea-5a88-416e-99ee-4ed694b0384e
 begin
 	#Anthony
-	DATA_DIR = "/Users/degleris/Data/carbon_networks/"
-	SAVE_PATH = "/Users/degleris/Documents/Research/CarbonNetworks/img/"
+	DATA_DIR = config["data"]["DATA_DIR"]
+	SAVE_PATH = config["data"]["SAVE_DIR"]
 	
-	#Lucas
-	# DATA_DIR = "/Users/lucasfuentes/sensitivity/results/"
-	# SAVE_PATH = "/Users/lucasfuentes/sensitivity/img/"
-	
-	fnm1 = "network_mefs.pdf"
+	fnm1 = "mef_illustration.pdf"
 	fnm2 = "mef_heatmaps.pdf"
 end;
 
@@ -77,54 +83,81 @@ md"""
 # ╔═╡ 672984c0-eff8-4156-9ce8-0d2f919a4d4c
 figure_nodal_mefs = let
 	nodal_mefs = f["MEFs"] / 1000
-
+	
 	# Setup
-	size_inches = (6.5, 4)
+	size_inches = (3, 3)
 	size_pt = 72 .* size_inches
 	fig = Figure(resolution=size_pt ./ 0.75, fontsize=10)
 
 	# Top panels
-	axes_top = [Axis(fig[1, k], xgridvisible=false, ygridvisible=false) for k in 1:3]
-	for (ind_node, node) in enumerate(curve_nodes)
-		ax = axes_top[ind_node]
-		data = curve_datasets[node]
-		x = data["x"]
+	ax = Axis(fig[1, 1], xgridvisible=false, ygridvisible=false)
+	node = 21
+	
+	data = curve_datasets[node]
+	x = data["x"]
 		
-		lines!(ax, x, data["y_exp"], label="True", linewidth=3)
-		for d in diff_pts
-			lines!(ax, x, data["y_$d"], label="Estimates", 
-				linestyle=:dash, linewidth=2, color=:red)
-			scatter!(ax, [d/100], [data["y_$d"][findfirst(==(d/100), x)]],
-				color=(:red, 0.75), markersize=8)
-		end
+	lines!(ax, x, data["y_exp"], label="True", linewidth=3)
+	for d in diff_pts
+		lines!(ax, x, data["y_$d"], label="Estimates", 
+			linestyle=:dash, linewidth=2, color=:red)
+		scatter!(ax, [d/100], [data["y_$d"][findfirst(==(d/100), x)]],
+			color=(:red, 0.75), markersize=8)
+	end
+	
+	xlims!(ax, 0.9, 1.1)
+	ylims!(ax, 0.98, 1.09)
+	ax.ylabel = "ΔE [%]"
+	ax.xlabel = "ΔD [%]"
+	ax.title = "Node $node"
+	axislegend(ax, position=:lt, padding=(4.0, 4.0, 2.0, 2.0), rowgap=0, unique=true)
+
+	# # Setup
+	# size_inches = (6.5, 4)
+	# size_pt = 72 .* size_inches
+	# fig = Figure(resolution=size_pt ./ 0.75, fontsize=10)
+
+	# # Top panels
+	# axes_top = [Axis(fig[1, k], xgridvisible=false, ygridvisible=false) for k in 1:3]
+	# for (ind_node, node) in enumerate(curve_nodes)
+	# 	ax = axes_top[ind_node]
+	# 	data = curve_datasets[node]
+	# 	x = data["x"]
 		
-		xlims!(ax, 0.9, 1.1)
-		ylims!(ax, 0.98, 1.09)
-		ax.ylabel = "ΔE [%]"
-		ax.xlabel = "ΔD [%]"
-		ax.title = "Node $node"
-		axislegend(ax, position=:lt, padding=(4.0, 4.0, 2.0, 2.0), rowgap=0, unique=true)
-	end
+	# 	lines!(ax, x, data["y_exp"], label="True", linewidth=3)
+	# 	for d in diff_pts
+	# 		lines!(ax, x, data["y_$d"], label="Estimates", 
+	# 			linestyle=:dash, linewidth=2, color=:red)
+	# 		scatter!(ax, [d/100], [data["y_$d"][findfirst(==(d/100), x)]],
+	# 			color=(:red, 0.75), markersize=8)
+	# 	end
+		
+	# 	xlims!(ax, 0.9, 1.1)
+	# 	ylims!(ax, 0.98, 1.09)
+	# 	ax.ylabel = "ΔE [%]"
+	# 	ax.xlabel = "ΔD [%]"
+	# 	ax.title = "Node $node"
+	# 	axislegend(ax, position=:lt, padding=(4.0, 4.0, 2.0, 2.0), rowgap=0, unique=true)
+	# end
 
 
-	# Bottom panel
-	ax_bot = Axis(fig[2, 1:3], xgridvisible=false, ygridvisible=false)
-	barplot!(ax_bot, nodal_mefs, strokewidth=0.5)
-	xlims!(ax_bot, 0, 31)
-	ax_bot.ylabel = "MEF [mTCO2 / MWh]"
-	ax_bot.xlabel = "Node"
+	# # Bottom panel
+	# ax_bot = Axis(fig[2, 1:3], xgridvisible=false, ygridvisible=false)
+	# barplot!(ax_bot, nodal_mefs, strokewidth=0.5)
+	# xlims!(ax_bot, 0, 31)
+	# ax_bot.ylabel = "MEF [mTCO2 / MWh]"
+	# ax_bot.xlabel = "Node"
 
-	# Add panel labels
-	for (label, layout) in zip(["A", "B"], [fig[1, 1], fig[2, 1]])
-	    Label(
-			layout[1, 1, TopLeft()], 
-			label,
-	        textsize=18,
-			font="Noto Sans Bold",
-	        padding=(0, 5, 5, 0),
-	        halign=:right
-		)
-	end
+	# # Add panel labels
+	# for (label, layout) in zip(["A", "B"], [fig[1, 1], fig[2, 1]])
+	#     Label(
+	# 		layout[1, 1, TopLeft()], 
+	# 		label,
+	#         textsize=18,
+	# 		font="Noto Sans Bold",
+	#         padding=(0, 5, 5, 0),
+	#         halign=:right
+	# 	)
+	# end
 
 	fname = joinpath(SAVE_PATH, fnm1)
 	save(fname, fig, pt_per_unit=0.75)
@@ -142,6 +175,41 @@ storage_pcs = ["0% Storage", "5% Storage", "10% Storage"]
 # ╔═╡ 2c443306-d607-42ff-b36a-4822b61e0846
 # http://juliagraphics.github.io/Colors.jl/stable/namedcolors/
 # useful link to choose appropriate colors
+
+# ╔═╡ b92163fd-7118-4a9b-b0b0-27bbca819b7f
+let
+	hours = f["MEF_vs_t_x"]
+	mef_grids = [f["hm_23_$(k)"] for k in 1:3] * 1.5
+
+	mef_zero_obs = diag(mef_grids[1])
+	mef_zero_true = sum(mef_grids[1], dims=2)[:, 1]
+
+	mef_stor_obs = diag(mef_grids[2])
+	mef_stor_true = sum(mef_grids[2], dims=2)[:, 1]
+
+	fig = Figure(resolution=(600, 300), fontsize=12)
+	ax = Axis(fig[1, 1])
+	hidedecorations!(ax, ticks=false, ticklabels=false, label=false)
+
+	lines!(ax, mef_zero_obs, linewidth=4, color=(:black, 0.5), label="0% Storage (Observed)")
+	lines!(ax, mef_stor_obs, linewidth=4, color=(:green, 0.5), label="5% Storage (Observed)")
+	
+	lines!(ax, mef_stor_true, linewidth=4, color=:green, linestyle=:dash, label="5% Storage - True")
+
+	ax.xticks = [0, 6, 12, 18, 24]
+	xlims!(ax, 1, 24)
+	ax.xlabel = "Hour"
+	
+	ax.ylabel = "MEF [kg CO2 / MWh]"
+	ylims!(ax, 0, 5000)
+
+
+
+	Legend(fig[2, 1], ax)
+	save("/Users/degleris/Downloads/mef_storage_C.pdf", fig, pt_per_unit=0.75)
+
+	fig
+end
 
 # ╔═╡ 4e579820-e404-4a44-900f-cbd588dd931e
 figure_temporal = let
@@ -251,6 +319,8 @@ maximum(maximum.([f["hm_$(Dict(1=>21, 2=>23)[j])_$(k)"] for j in 1:2, k in 1:3])
 
 # ╔═╡ Cell order:
 # ╠═85394d0a-6f17-11ec-04e7-89c834098e0c
+# ╠═a643ae79-d173-423a-9b00-0e8bdaded832
+# ╠═ff86eb8b-7619-40cf-b414-240ba3e44c7f
 # ╠═177d72ea-5a88-416e-99ee-4ed694b0384e
 # ╟─c041f8ff-df9a-4b6a-a73b-b125c3de4495
 # ╟─6986e19a-c052-4e0f-b765-46496e2c8a36
@@ -264,5 +334,7 @@ maximum(maximum.([f["hm_$(Dict(1=>21, 2=>23)[j])_$(k)"] for j in 1:2, k in 1:3])
 # ╠═00c874fc-f087-4c6a-b653-feb5080ff89d
 # ╠═274013ad-c939-467f-8dfd-cc199340bd2c
 # ╠═2c443306-d607-42ff-b36a-4822b61e0846
+# ╠═5aab77a4-ef85-4676-aeb6-eb2ce0aaeb22
+# ╠═b92163fd-7118-4a9b-b0b0-27bbca819b7f
 # ╠═4e579820-e404-4a44-900f-cbd588dd931e
 # ╠═0b004661-a463-4f00-bad9-3532245000da
