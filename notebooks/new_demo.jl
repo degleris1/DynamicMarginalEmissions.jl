@@ -11,7 +11,7 @@ using Pkg; Pkg.activate(joinpath(@__DIR__, "../dev"))
 using Revise; using CarbonNetworks
 
 # ╔═╡ 69df35dd-be27-484c-9101-635ee37590fb
-T = 5
+T = 3
 
 # ╔═╡ f9abd878-26bd-404c-9dc7-8c624487d615
 md"""
@@ -30,7 +30,7 @@ A = [
 
 # ╔═╡ 30ceea15-e8c5-4e8e-9186-5a5d0ef8def3
 fmax = let
-	fmax = [10, 4, 10] * ones(1, T)
+	fmax = [10, 2, 10] * ones(1, T)
 	[fmax; fmax]
 end;
 
@@ -47,11 +47,15 @@ devices = [
 	Demand(10 .+ 3rand(T), α),
 	Demand(2 .+ rand(T), α),
 	Generator(zeros(T), 10 * rand(T), 0.1*ones(T)),
-	StaticGenerator(0, 12, 20, T)
+	with_ramping(StaticGenerator(0, 12, 20, T), 2),
+	Battery(T, 10, 2.5, 5, 5, 0.99),
 ]
 
+# ╔═╡ ebb97ac2-1879-40d7-8f0c-2810d40b8a96
+n = length(devices)
+
 # ╔═╡ b40a72ae-371d-4aa1-bced-508fe592420c
-nodes = [1, 2, 2, 3]
+nodes = [1, 2, 2, 3, 2]
 
 # ╔═╡ f7efa9a7-a171-47f7-b4f9-477fff221562
 F = make_device_pfdf_matrix(A, β, nodes);
@@ -67,8 +71,15 @@ pmp = DynamicPowerManagementProblem(devices, F, fmax, T);
 # ╔═╡ df2d83fc-54fc-4c72-acc3-0c2aa8ac6a07
 pmp_result = solve!(pmp);
 
+# ╔═╡ 4123a90f-635f-420a-a5d9-9219f7ceb642
+p = pmp_result.p
+
+# ╔═╡ bb08f7a5-10c4-4b33-a0e5-7aaadab14a5d
+# Dual of congestion constraints --- notice the congestion!
+pmp_result.netc[2].dual
+
 # ╔═╡ 8bbada9c-19b4-4627-829f-fdd21f5e49a9
-maximum(abs, kkt(pmp, pmp_result))
+sum(abs, kkt(pmp, pmp_result))
 
 # ╔═╡ 1a2d2f09-b84a-4ab3-b953-69c75e818302
 md"""
@@ -82,10 +93,13 @@ demand_devices = [1, 2]
 generator_devices = [3, 4]
 
 # ╔═╡ c998b46e-5c9c-43c5-a360-b74fbc132cbc
-emissions_rates = [zeros(T), 1.1*ones(T)]
+emissions_rates = [0.05*ones(T), 1.1*ones(T)]
+
+# ╔═╡ 36057eab-757d-4652-98d4-6c99f906e9c9
+get_total_emissions(p, generator_devices, emissions_rates)
 
 # ╔═╡ ba3dfa35-8bcb-4fbf-8cdf-d0255b3b6e26
-λ = get_lme(demand_devices, generator_devices, emissions_rates)
+λ = get_lmes(pmp, pmp_result, demand_devices, generator_devices, emissions_rates)
 
 # ╔═╡ Cell order:
 # ╠═ab12ce06-a668-11ec-2f53-abde75339997
@@ -98,14 +112,18 @@ emissions_rates = [zeros(T), 1.1*ones(T)]
 # ╟─866f9d9e-d572-4eb8-9b5a-21088da5cebe
 # ╠═c0abc95f-6d3f-47fb-b420-f968ea6510d3
 # ╠═4c5ad529-7252-4948-b474-9634d38d2f43
+# ╠═ebb97ac2-1879-40d7-8f0c-2810d40b8a96
 # ╠═b40a72ae-371d-4aa1-bced-508fe592420c
 # ╠═f7efa9a7-a171-47f7-b4f9-477fff221562
 # ╟─432a5854-0885-4e74-bb59-27f482ab033e
 # ╠═174edb6e-85a8-48c9-9d69-61ee0348f162
 # ╠═df2d83fc-54fc-4c72-acc3-0c2aa8ac6a07
+# ╠═4123a90f-635f-420a-a5d9-9219f7ceb642
+# ╠═bb08f7a5-10c4-4b33-a0e5-7aaadab14a5d
 # ╠═8bbada9c-19b4-4627-829f-fdd21f5e49a9
 # ╟─1a2d2f09-b84a-4ab3-b953-69c75e818302
 # ╠═c98e2c65-7361-43e9-9f19-af4f45e9429c
 # ╠═d35e7d68-aa3a-46e1-9061-ab4433e8df37
 # ╠═c998b46e-5c9c-43c5-a360-b74fbc132cbc
+# ╠═36057eab-757d-4652-98d4-6c99f906e9c9
 # ╠═ba3dfa35-8bcb-4fbf-8cdf-d0255b3b6e26

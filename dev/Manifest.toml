@@ -1512,9 +1512,9 @@ version = "1.5.2+0"
 
 [[deps.Zygote]]
 deps = ["AbstractFFTs", "ChainRules", "ChainRulesCore", "DiffRules", "Distributed", "FillArrays", "ForwardDiff", "IRTools", "InteractiveUtils", "LinearAlgebra", "MacroTools", "NaNMath", "Random", "Requires", "SparseArrays", "SpecialFunctions", "Statistics", "ZygoteRules"]
-git-tree-sha1 = "93285d2877f1f1b09b2a2b029f90e9db10127022"
+git-tree-sha1 = "52adc0a505b6421a8668f13dcdb0c4cb498bd72c"
 uuid = "e88e6eb3-aa80-5325-afca-941959d7151f"
-version = "0.6.35"
+version = "0.6.37"
 
 [[deps.ZygoteRules]]
 deps = ["MacroTools"]

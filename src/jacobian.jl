@@ -1,5 +1,27 @@
 
 # =====
+# IMPLICIT DIFFERENTIATION
+# =====
+
+function pullback_pmin(pmp, pmp_result, demand_devices, dz)
+    (; devices) = pmp
+
+    Jz = jacobian_kkt_z(pmp, pmp_result)
+
+    K(θ, k) = kkt_local_params(pmp, pmp_result, k, θ, devices[k].pmax, devices[k].cost)
+
+    # Note: Zygote actually computes the Jacobian transposed
+    # How misleading!
+    _jacs = [forward_jacobian(θ -> K(θ, k), devices[k].pmin)[2] for k in demand_devices]
+    JθT = reduce(vcat, _jacs)
+
+    dK = Jz' \ dz
+
+    return -JθT * (Jz' \ dz)
+end
+
+
+# =====
 # SYSTEM JACOBIAN
 # =====
 
@@ -12,11 +34,10 @@ end
 
 function jacobian_kkt_z!(J, pmp::DynamicPowerManagementProblem, pmp_result)
     (; devices, F, T) = pmp
-    (; p, devc) = pmp_result
+    (; p, devc, devv) = pmp_result
     
     n = length(devices)
     m = size(F, 1)
-    p = evaluate(p)
 
     dim = get_dims(pmp)
     J = spzeros(dim, dim)
@@ -25,18 +46,18 @@ function jacobian_kkt_z!(J, pmp::DynamicPowerManagementProblem, pmp_result)
     _jacobian_kkt_z_network!(J, pmp, pmp_result)
 
     # Local parts
-    J_devs = [_get_jac_kkt_z_device(pmp, p, devc, i) for i in 1:n]
+    J_devs = sparse.([_get_jac_kkt_z_device(pmp, p, devc, devv, i) for i in 1:n])
     J[(T+T*m+1):end, (T+T*m+1):end] = blockdiag(J_devs...)
 
     return J
 end
 
-function _get_jac_kkt_z_device(pmp, p, devc, i)
+function _get_jac_kkt_z_device(pmp, p, devc, devv, i)
     inds = get_device_inds(pmp, i)
-    pi = p[i, :]
-    μi = [c.dual for c in devc[i]]
+    p = p[i, :]
+    μ = [c.dual for c in devc[i]]
 
-    return jacobian_kkt_z_device(devices[i], pi, μi)
+    return jacobian_kkt_z_device(pmp.devices[i], p, μ, devv[i])
 end
 
 function _jacobian_kkt_z_network!(J, pmp, pmp_result)
@@ -46,7 +67,6 @@ function _jacobian_kkt_z_network!(J, pmp, pmp_result)
     n = length(devices)
     m = size(F, 1)
     
-    p = evaluate(p)
     ν, λ = reshape(netc[1].dual, :), netc[2].dual
     λt = [λ[:, t] for t in 1:T]
     
@@ -98,7 +118,7 @@ end
 
 function kkt_local_params(pmp::DynamicPowerManagementProblem, pmp_result, i, params...)
     d = typeof(pmp.devices[i])(params...)
-    p = evaluate(pmp_result.p)[i, :]
+    p = pmp_result.p[i, :]
     μ = [c.dual for c in pmp_result.devc[i]]
 
     dims = get_dims(pmp)

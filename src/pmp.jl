@@ -28,8 +28,11 @@ function solve!(pmp::DynamicPowerManagementProblem, solver=ECOS.Optimizer)
     network_constraints = [0 == ones(n)' * p, F*p <= fmax]
     add_constraints!(problem, network_constraints)
 
+    # Add local variables
+    device_vars = make_aux_vars.(devices)
+
     # Add local constraints
-    device_constraints = [get_constraints(devices[i], p[i, :]') for i in 1:n]
+    device_constraints = [make_constraints(devices[i], p[i, :]', device_vars[i]) for i in 1:n]
     for c in device_constraints
         add_constraints!(problem, c)
     end
@@ -37,7 +40,10 @@ function solve!(pmp::DynamicPowerManagementProblem, solver=ECOS.Optimizer)
     # Solve
     solve!(problem, solver)
 
-    return (p=p, netc=network_constraints, devc=device_constraints, problem=problem)
+    p = evaluate(p)
+    device_vars = map(evaluate, device_vars)
+
+    return (p=p, netc=network_constraints, devc=device_constraints, devv=device_vars, problem=problem)
 end
 
 
@@ -49,10 +55,10 @@ end
 
 function kkt(pmp, pmp_result)
     (; devices, F, fmax, T) = pmp
-    (; p, netc, devc, problem) = pmp_result
+    (; p, netc, devc, devv, problem) = pmp_result
 
     n = length(devices)
-    p = make_vec(evaluate(p))
+    p = make_vec(p)
     ν, λ = reshape(netc[1].dual, :), netc[2].dual
 
     # Energy balance constraint
@@ -70,11 +76,14 @@ function kkt(pmp, pmp_result)
         pi = p[i, :]
         fi = F[:, i]
 
-        K_pi = get_device_dL_dx(devices[i], pi, μi)
+        K_pi = get_device_dL_dx(devices[i], pi, μi, devv[i])
         K_pi += ν + λ'*fi
         append!(resid, K_pi)
 
-        K_μi = get_device_comp_slack(devices[i], pi, μi)
+        K_ui = get_device_dL_daux(devices[i], pi, μi, devv[i])
+        append!(resid, K_ui)
+
+        K_μi = get_device_comp_slack(devices[i], pi, μi, devv[i])
         append!(resid, K_μi)
     end
 
@@ -111,8 +120,16 @@ end
 
 function get_device_primary_var_inds(pmp, i)
     T, m = get_time_horizon(pmp), get_num_lines(pmp)
-    offset = T + m*T + sum([get_dims(d) for d in pmp.devices[1:i-1]])
+    offset = T + m*T + sum(Int[get_dims(d) for d in pmp.devices[1:i-1]])
     return (offset+1):(offset+T)
+end
+
+function get_device_aux_var_inds(pmp, i)
+    T, m = get_time_horizon(pmp), get_num_lines(pmp)
+    offset = T + m*T + sum([get_dims(d) for d in pmp.devices[1:i-1]])
+
+    num_aux = get_num_aux(pmp.devices[i])
+    return (offset+T+1):(offset+T+num_aux)
 end
 
 function get_device_constraint_inds(pmp, i)
@@ -126,10 +143,9 @@ end
 
 function flatten_pmp_result(pmp, pmp_result)
     (; devices, F, fmax, T) = pmp
-    (; p, netc, devc, problem) = pmp_result
+    (; p, netc, devc, devv, problem) = pmp_result
 
     n = length(devices)
-    p = evaluate(p)
     ν, λ = reshape(netc[1].dual, :), netc[2].dual
 
     # Energy balance constraint
@@ -143,6 +159,9 @@ function flatten_pmp_result(pmp, pmp_result)
     # Device variables and constraints
     for i in 1:n
         append!(z, p[i, :])
+        for v in something(devv[i], [])
+            append!(z, v)
+        end
         for c in devc[i]
             append!(z, c.dual)
         end
@@ -152,7 +171,17 @@ function flatten_pmp_result(pmp, pmp_result)
 end
 
 function unflatten_pmp_result(pmp, z)
-    error("TODO")
+    n, m, T = get_num_devices(pmp), get_num_lines(pmp), get_time_horizon(pmp)
+
+    net_duals = (z[1:T], reshape(z[(T+1):(T+T*m)], m, T))
+
+    p = [z[get_device_primary_var_inds(pmp, i)] for i in 1:n]
+    p = adjoint(reduce(hcat, p))
+
+    dev_vars = [z[get_device_aux_var_inds(pmp, i)] for i in 1:n]
+    dev_duals = [z[get_device_constraint_inds(pmp, i)] for i in 1:n]
+
+    return (p=p, net_duals=net_duals, dev_duals=dev_duals, dev_vars=dev_vars)
 end
 
 
@@ -162,7 +191,10 @@ end
 # HELPERS
 # =====
 make_vec(x::Array) = x
-
 make_vec(x) = [x]
 
 reshape(x::Real, ::Colon) = [x]
+
+evaluate(x::Nothing) = nothing
+evaluate(x::Tuple) = map(evaluate, x)
+evaluate(x::NamedTuple) = map(evaluate, x)
