@@ -141,6 +141,7 @@ function DynamicPowerManagementProblem(
     # final condition
     add_constraints!(dynProblem,[
             # the first two constraints have to be eliminated
+            # because s[T] is not instantiated (dim(s) = T-1)
             # 0 <= s[t], # λsl
             # s[t] <= C, # λsu
             ch[T] >= 0, #λchl
@@ -183,14 +184,22 @@ Details:
 - static subproblem constraints: (n + 2l + 2m)*T
 - storage constraints: T*(4ns)
 """
-kkt_dims_dyn(n, m, l, ns, T) = T * (kkt_dims(n, m, l) + storage_kkt_dims(ns, l))
+kkt_dims_dyn(n, m, l, ns, T) = T * kkt_dims(n, m, l) + (T-1) *  storage_kkt_dims(ns, l) + storage_kkt_dims(ns, l, final=true)
 
 """
     storage_kkt_dims(n, l)
 
 Compute the dimensions of the KKT operator associated with storage constraints.
 """
-storage_kkt_dims(ns, l) = 3ns + 7ns + 2l # 3ns for stationarity, 7ns+2l for complementary slackness
+function storage_kkt_dims(ns, l; final=false)
+
+    if final==false
+        3ns + 7ns + 2l # 3ns for stationarity, 7ns+2l for complementary slackness
+    else
+        3ns + 5ns + 2l # 2 inequality constraints on s[T] have been removed
+    end
+
+end
 
 """
     kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, P, C, η_c, η_d, ρ; τ=TAU)
@@ -213,6 +222,7 @@ function kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, F, S, P, C, η_c, η_d, ρ; τ=
     KKT_static_tot = Float64[]
     KKT_storage_tot = Float64[]
     for t in 1:T
+        t == T ? final = true : final = false
 
         # extract primal/dual variables for the constraints of instance at time t
         x = [g[t]; p[t]; λpl[t]; λpu[t]; λgl[t]; λgu[t]; ν[t]; νE[t]]
@@ -221,7 +231,7 @@ function kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, F, S, P, C, η_c, η_d, ρ; τ=
         # ?? TODO: figure out if there is an edge case for ch and dis? 
         # are they actually variables in n x T or n x (T-1)
         t == 1 ? s_prev = INIT_COND.*C : s_prev = s[t-1]
-        t == T ? s_crt = FINAL_COND.*C : s_crt = s[t]
+        final ? s_crt = FINAL_COND.*C : s_crt = s[t]
         t < T ? νs_next = νs[t + 1] : νs_next = zeros(ns)
 
         # compute the KKTs for the static subproblem
@@ -239,12 +249,12 @@ function kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, F, S, P, C, η_c, η_d, ρ; τ=
         KKT_s = kkt_storage(
             s_crt, s_prev, ch[t], dis[t], λsu[t], λsl[t], λchu[t], λchl[t],
             λdisu[t], λdisl[t], λrampl[t], λrampu[t], ν[t], νE[t], νs[t], νs_next, F, S, P, C, 
-            η_c, η_d, ρ, g[t], gt_prev,
+            η_c, η_d, ρ, g[t], gt_prev; final=final
         )
 
         # check the sizes of both matrices computed above
         @assert length(KKT) == kkt_dims(n, m, l)
-        @assert length(KKT_s) == storage_kkt_dims(ns, l)
+        @assert length(KKT_s) == storage_kkt_dims(ns, l; final=final)
 
         # append both matrices to the general KKT operator
         KKT_static_tot = vcat(KKT_static_tot, KKT) 
@@ -252,7 +262,7 @@ function kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, F, S, P, C, η_c, η_d, ρ; τ=
     end
 
     KKT_tot = vcat(KKT_static_tot, KKT_storage_tot)
-    @assert length(KKT_tot) == kkt_dims_dyn(n, m, l, ns,T)
+    @assert length(KKT_tot) == kkt_dims_dyn(n, m, l, ns, T)
 
     return KKT_tot
 end
@@ -276,22 +286,40 @@ Notes:
 function kkt_storage(
     s, s_prev, ch, dis, 
     λsu, λsl, λchu, λchl, λdisu, λdisl, λrampl, λrampu, ν, νE, νs_t, νs_next, 
-    F, S, P, C, η_c, η_d, ρ, gt, gt_prev
+    F, S, P, C, η_c, η_d, ρ, gt, gt_prev; final=false
 )
-    return [
-        (λsu - λsl) + (νs_next - νs_t);  # ∇_s L, dim = ns
-        (λchu - λchl) - (F*S)'*ν .+ νE + νs_t * η_c ;  # ∇_ch L, dim = ns
-        (λdisu - λdisl) + (F*S)'*ν .- νE - νs_t/η_d;  # ∇_dis L, dim = ns
-        λsl .* (-s); # dim = ns
-        λsu .* (s - C); # dim = ns
-        λchl .* (-ch); # dim = ns
-        λchu .* (ch-P); # dim = ns
-        λdisl .* (-dis); # dim = ns
-        λdisu .* (dis-P); # dim = ns
-        λrampl .* (gt_prev - ρ - gt); # dim = l 
-        λrampu .* (gt - gt_prev - ρ); # dim = l
-        - s .+ s_prev + ch * η_c - dis/η_d; # dim = ns
-    ]
+    if final==false
+        return [
+            (λsu - λsl) + (νs_next - νs_t);  # ∇_s L, dim = ns
+            (λchu - λchl) - (F*S)'*ν .+ νE + νs_t * η_c ;  # ∇_ch L, dim = ns
+            (λdisu - λdisl) + (F*S)'*ν .- νE - νs_t/η_d;  # ∇_dis L, dim = ns
+            λsl .* (-s); # dim = ns
+            λsu .* (s - C); # dim = ns
+            λchl .* (-ch); # dim = ns
+            λchu .* (ch-P); # dim = ns
+            λdisl .* (-dis); # dim = ns
+            λdisu .* (dis-P); # dim = ns
+            λrampl .* (gt_prev - ρ - gt); # dim = l 
+            λrampu .* (gt - gt_prev - ρ); # dim = l
+            - s .+ s_prev + ch * η_c - dis/η_d; # dim = ns
+        ]
+    else # KKTs for the final condition t==T - dimensions are smaller than otherwise
+        return [
+            (λsu - λsl) + (νs_next - νs_t);  # ∇_s L, dim = ns
+            (λchu - λchl) - (F*S)'*ν .+ νE + νs_t * η_c ;  # ∇_ch L, dim = ns
+            (λdisu - λdisl) + (F*S)'*ν .- νE - νs_t/η_d;  # ∇_dis L, dim = ns
+            # the below have to be eliminated because this constraint does not exist
+            # λsl .* (-s); # dim = ns
+            # λsu .* (s - C); # dim = ns
+            λchl .* (-ch); # dim = ns
+            λchu .* (ch-P); # dim = ns
+            λdisl .* (-dis); # dim = ns
+            λdisu .* (dis-P); # dim = ns
+            λrampl .* (gt_prev - ρ - gt); # dim = l 
+            λrampu .* (gt - gt_prev - ρ); # dim = l
+            - s .+ s_prev + ch * η_c - dis/η_d; # dim = ns
+        ]
+    end
 end
 
 function kkt_ramp(n, m, l, λrampl_next, λrampu_next, λrampl, λrampu)
@@ -323,7 +351,6 @@ function extract_vars_t(P::PowerManagementProblem, t)
     else
         s = evaluate(P.s[t]) 
     end
-    k
     ch = evaluate(P.ch[t]) 
     dis = evaluate(P.dis[t])
 
@@ -351,6 +378,11 @@ function extract_vars_t(P::PowerManagementProblem, t)
     @assert length(νE) == 1
 
     storage_index = n_constraints_static * T + (t - 1) * n_constraints_storage
+    # two constraints are eliminated for the final step
+    if t==T
+        storage_index = storage_index - 2
+    end
+
     λsl = (t==T) ? zeros(ns) : P.problem.constraints[storage_index + 1].dual 
     λsu = (t==T) ? zeros(ns) : P.problem.constraints[storage_index + 2].dual 
     λchl = P.problem.constraints[storage_index + 3].dual
@@ -409,11 +441,18 @@ function flatten_variables_dyn(P::PowerManagementProblem)
     end
     vars = vcat(x_static, x_storage)
 
+    # the discrepancy in sizes right now is due to the fact that 
+    # x_storage contains s also for the last step...
+    # maybe one option was to keep it all along and pretend nothing happened...? 
+    # and basically just give dummy values for the dual variables (zeros)
+    # question: what happens if you simply hard code some variables into the kkt (primal/dual)? 
+
     @assert length(x_static) == T*kkt_dims(n, m, l)
     @assert length(x_storage) == T*storage_kkt_dims(ns, l)
 
     # checking that the size is consistent with expectations
-    @assert length(vars) == kkt_dims_dyn(n, m, l, ns, T)
+    # @assert length(vars) == kkt_dims_dyn(n, m, l, ns, T)
+    @show length(x_static), length(x_storage), length(vars)
 
     return vars
 end

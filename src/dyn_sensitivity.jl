@@ -115,8 +115,8 @@ demand `d_dyn`.
 
 Notes
 -----
-The Jacobian in this system is computed as... 
-# TODO: add
+The Jacobian in this system is computed as follows:
+- 
 """
 function compute_jacobian_kkt_dyn(x, net, d_dyn)
 
@@ -124,6 +124,7 @@ function compute_jacobian_kkt_dyn(x, net, d_dyn)
 
     dim_t = kkt_dims(n, m, l)
     dim_s = storage_kkt_dims(ns, l)
+    dim_s_f = storage_kkt_dims(ns, l, final=true) # final storage dims
 
     # decompose `x` in arrays of T variables
     g, p, s, ch, dis, λpl, λpu, λgl, λgu, ν, νE, λsl, λsu, λchl, λchu, λdisl, λdisu, λrampl, λrampu, νs = 
@@ -146,15 +147,17 @@ function compute_jacobian_kkt_dyn(x, net, d_dyn)
     ]
 
     # Stack matrices
+    # Note: here we are computing the jacobian of the static system. 
+    # The final condition for storage should not intervene here. 
     Kτ = [
         (t == T) ?
         hcat(
-            spzeros(dim_t, (t-1)*dim_t),
-            Kτ1[t],
-            spzeros(dim_t, (T-t)*dim_t),
-            spzeros(dim_t, (t-1)*dim_s),
+            spzeros(dim_t, (T-1)*dim_t),
+            Kτ1[T],
+            # spzeros(dim_t, (T-t)*dim_t),
+            spzeros(dim_t, (T-1)*dim_s),
             Kτ2[t],
-            spzeros(dim_t, (T-t)*dim_s)
+            # spzeros(dim_t, (T-t)*dim_s)
         ) :
         hcat(
             spzeros(dim_t, (t-1)*dim_t),
@@ -170,25 +173,27 @@ function compute_jacobian_kkt_dyn(x, net, d_dyn)
 
     # Compute individual Jacobians for the dynamic system
     g_prev = t -> (t == 1) ? zeros(l) : g[t-1]
-    t == T ? s_crt = FINAL_COND.*C : s_crt = s[t]
+    # t == T ? s_crt = FINAL_COND.*C : s_crt = s[t]
+    # s_crt = t -> (t==T) ? FINAL_COND.*C : s[t]
+    final_step = t -> (t==T)
+
+    t = 1
     Ks = [
         compute_jacobian_kkt_dyn_t(
-            s_crt, ch[t], dis[t], 
+            s[t], ch[t], dis[t], 
             λsl[t], λsu[t], λchl[t], λchu[t], λdisl[t], λdisu[t], λrampl[t], λrampu[t], 
             g[t], g_prev(t), net.ρ,
-            net, t
+            net, t, final=final_step(t)
         )
         for t in 1:T
     ]
-
     return [vcat(Kτ...) ; vcat(Ks...)]
 end
 
-
 """
-    compute_jacobian_kkt_charge_discharge(dims, n)
+    compute_jacobian_kkt_charge_discharge(dims, ns, m, l, F, S)
 
-Compute the part of the Jacobian of the static problem associated with charge and discharge, 
+Compute the part of the Jacobian of the static problem associated with dynamic variables (primal and dual) 
 with `dims` being the dimension of the static system, `ns` the number of storage nodes, and `l` 
 the number of generators.
 """
@@ -198,14 +203,13 @@ function compute_jacobian_kkt_charge_discharge_ramp(dims, ns, m, l, F, S)
     dKdλl = [-I(l); spzeros(dims-l, l)]
     dKdλu = [I(l); spzeros(dims-l, l)]
 
-    # TODO: check that the szeros vectors added here are good in terms of dims
-    # Basically, some of those (dims, XXn) should probably be (dims, XXns)
+    # each entry in the return vector corresponds to a primal and then dual variable
     return [spzeros(dims, ns) dKdch dKddis spzeros(dims, 6ns) dKdλl dKdλu spzeros(dims, ns)]
 end
 
 
 """
-    compute_jacobian_kkt_future_ramp(dims, n, l)
+    compute_jacobian_kkt_future_ramp(dims, ns, l)
 
 Compute the part of the Jacobian (dStatic / dRamp), where `dims` is the 
 dimension of the static system, `n` is the number of nodes, and `l` is
@@ -234,7 +238,7 @@ function compute_jacobian_kkt_dyn_t(
     s, ch, dis, 
     λsl, λsu, λchl, λchu, λdisl, λdisu, λrampl, λrampu, 
     gt, gt_prev, ρ,
-    net, t
+    net, t; final=false
 )
 
     # extract some variables
@@ -248,7 +252,7 @@ function compute_jacobian_kkt_dyn_t(
 
     # Relevant sizes for the problem
     kdims = kkt_dims(n, m, l)
-    sdims = storage_kkt_dims(ns, l)
+    sdims = storage_kkt_dims(ns, l; final=final)
 
     ##########################
     #
@@ -256,39 +260,85 @@ function compute_jacobian_kkt_dyn_t(
     #
     ##########################
 
-    # D_x ∇_x L 
-    # dim = 3n, 3n
-    K11 = spzeros(3ns, 3ns) # dim = ns for s, ch, and dis 
-    # D_x F^T
-    # dim = 3ns, (6ns+2l)
-    K12 = [
-            -I(ns) I(ns) spzeros(ns, 4ns+2l);
-            spzeros(ns, 2ns) -I(ns) I(ns) spzeros(ns, 2ns+2l);
-            spzeros(ns, 4ns) -I(ns) I(ns) spzeros(ns, 2l)
+    if final==false
+
+        # D_x ∇_x L 
+        # dim = 3n, 3n
+        K11 = spzeros(3ns, 3ns) # dim = ns for s, ch, and dis 
+        # D_x F^T
+        # dim = 3ns, (6ns+2l)
+        K12 = [
+                -I(ns) I(ns) spzeros(ns, 4ns+2l);
+                spzeros(ns, 2ns) -I(ns) I(ns) spzeros(ns, 2ns+2l);
+                spzeros(ns, 4ns) -I(ns) I(ns) spzeros(ns, 2l)
+            ]
+        # D_x H^T
+        # dim = 3ns, ns
+        K13 = [
+            -I(ns);
+            η_c*I(ns);
+            -(1/η_d)*I(ns)
         ]
-    # D_x H^T
-    # dim = 3ns, ns
-    K13 = [
-        -I(ns);
-        η_c*I(ns);
-        -(1/η_d)*I(ns)
-    ]
-    # Diag(λ) * D_xF
-    # dim = 8ns, 8ns
-    D_xF = K12'
-    D = Diagonal([λsl; λsu; λchl; λchu; λdisl; λdisu; λrampl; λrampu])
-    K21 = D * D_xF
-    
-    # diag(F)
-    # dim = 8ns, 8ns
-    K22 = Diagonal([-s; s-C; -ch; ch-P; -dis; dis-P; (gt_prev - ρ - gt); (gt - gt_prev - ρ)])
-    
-    # diagonal part of the Jacobian
-    K_storage_t = [
-        K11 K12 K13;
-        K21 K22 spzeros(6ns+2l, ns);
-        K13' spzeros(ns, 7ns+2l) 
-    ]
+        # Diag(λ) * D_xF
+        # dim = 8ns, 8ns
+        D_xF = K12'
+        D = Diagonal([λsl; λsu; λchl; λchu; λdisl; λdisu; λrampl; λrampu])
+        K21 = D * D_xF
+        
+        # diag(F)
+        # dim = 8ns, 8ns
+        K22 = Diagonal([-s; s-C; -ch; ch-P; -dis; dis-P; (gt_prev - ρ - gt); (gt - gt_prev - ρ)])
+        
+        # diagonal part of the Jacobian
+        K_storage_t = [
+            K11 K12 K13;
+            K21 K22 spzeros(6ns+2l, ns);
+            K13' spzeros(ns, 7ns+2l) 
+        ]
+
+    else # FINAL timestep
+
+        # EXPLANATION:
+        #
+        #
+
+        # D_x ∇_x L 
+        # dim = 2n, 2n
+        K11 = spzeros(3ns, 3ns) # dim = ns for ch and dis 
+        # NOTE: here I think it is still 3ns because we are still deriving wrt s[t]
+
+        # D_x F^T
+        # dim = 2ns, (4ns+2l)
+        K12 = [
+                -I(ns) I(ns) spzeros(ns, 2ns+2l);
+                spzeros(ns, 2ns) -I(ns) I(ns) spzeros(ns, 2l)
+            ]
+
+        # D_x H^T
+        # dim = 2ns, ns
+        K13 = [
+            η_c*I(ns);
+            -(1/η_d)*I(ns)
+        ]
+
+        # Diag(λ) * D_xF
+        # dim = 4ns + 2l, 4ns+2l
+        D_xF = K12'
+        D = Diagonal([λchl; λchu; λdisl; λdisu; λrampl; λrampu])
+        K21 = D * D_xF
+        
+        # diag(F)
+        # dim = 6ns + 2l, 6ns + 2l
+        K22 = Diagonal([-ch; ch-P; -dis; dis-P; (gt_prev - ρ - gt); (gt - gt_prev - ρ)])
+        
+        # diagonal part of the Jacobian
+        K_storage_t = [
+            K11 K12 K13;
+            K21 K22 spzeros(4ns+2l, ns);
+            K13' spzeros(ns, 5ns+2l) 
+        ]
+
+    end
 
     ##########################
     #
@@ -339,7 +389,11 @@ function compute_jacobian_kkt_dyn_t(
         K_storage_right = spzeros(sdims, 0);
     end
 
+    @show size(K_storage_left), size(K_storage_t), size(K_storage_right)
+
     K_storage = [K_storage_left K_storage_t K_storage_right];
+
+    @show size(K_storage)
 
     return [K_static K_storage]
    
