@@ -17,7 +17,7 @@ end
 # ╔═╡ db59921e-e998-11eb-0307-e396d43191b5
 begin
 	import Pkg
-	Pkg.activate(joinpath(@__DIR__, "/Users/lucasfuentes/sensitivity/dev"));
+	Pkg.activate(joinpath(@__DIR__, "../dev"));
 	using Random
 	using Convex, ECOS
 	using Plots
@@ -174,6 +174,28 @@ begin
 	println("Status of problem 1")
 	@show opf_dyn.problem.status
 end
+
+# ╔═╡ d24aacb3-7a3a-4faf-9168-97d4fa805c8a
+net_dyn.C
+
+# ╔═╡ d97e0c57-3b57-404f-a019-693951dba5a8
+begin
+	s_vals = zeros(ns, T+1)
+	s_vals[:, 1] = INIT_COND.*net_dyn.C
+	s_vals[:, end] = FINAL_COND.*net_dyn.C
+	for t in 1:T-1
+		s_vals[:, t+1] = evaluate(opf_dyn.s[t])
+	end
+
+	plot((s_vals./net_dyn.C)')
+	
+end
+
+# ╔═╡ 81b85725-3e9f-4843-9ac0-9a0bc84260c8
+ns
+
+# ╔═╡ b1eef533-9aca-4deb-bb3d-d647a66c3c7d
+
 
 # ╔═╡ d1d93fe7-79df-4253-86c2-31277ba792fc
 begin
@@ -476,6 +498,10 @@ end
 # ╠═91e525b2-a276-4641-bad0-7dd6be026790
 # ╠═cad822b2-4a01-4cc2-b557-fc1693d7a06e
 # ╠═6f08828b-4c4b-4f50-bd40-35805a37aae0
+# ╠═d24aacb3-7a3a-4faf-9168-97d4fa805c8a
+# ╠═d97e0c57-3b57-404f-a019-693951dba5a8
+# ╠═81b85725-3e9f-4843-9ac0-9a0bc84260c8
+# ╠═b1eef533-9aca-4deb-bb3d-d647a66c3c7d
 # ╠═d1d93fe7-79df-4253-86c2-31277ba792fc
 # ╟─15293269-580f-4251-be36-4be6ba8c5a46
 # ╠═0740dc70-a532-4818-b09d-b3b8d60fa6ba
