@@ -38,6 +38,7 @@ export make_pfdf_matrix
 
 export generate_network
 
+export INIT_COND, FINAL_COND
 
 # Files
 include("model.jl")

@@ -141,6 +141,7 @@ function DynamicPowerManagementProblem(
     # final condition
     add_constraints!(dynProblem,[
             # the first two constraints have to be eliminated
+            # because s[T] is not instantiated (dim(s) = T-1)
             # 0 <= s[t], # λsl
             # s[t] <= C, # λsu
             ch[T] >= 0, #λchl
@@ -323,7 +324,7 @@ function extract_vars_t(P::PowerManagementProblem, t)
     else
         s = evaluate(P.s[t]) 
     end
-    k
+
     ch = evaluate(P.ch[t]) 
     dis = evaluate(P.dis[t])
 
@@ -351,6 +352,10 @@ function extract_vars_t(P::PowerManagementProblem, t)
     @assert length(νE) == 1
 
     storage_index = n_constraints_static * T + (t - 1) * n_constraints_storage
+    # two constraints are eliminated for the final step
+    if t==T
+        storage_index = storage_index - 2
+    end
     λsl = (t==T) ? zeros(ns) : P.problem.constraints[storage_index + 1].dual 
     λsu = (t==T) ? zeros(ns) : P.problem.constraints[storage_index + 2].dual 
     λchl = P.problem.constraints[storage_index + 3].dual
