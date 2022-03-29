@@ -8,21 +8,21 @@ using InteractiveUtils
 using Pkg; Pkg.activate("")
 
 # ╔═╡ 5303b439-2bbb-4a04-b17e-7df6f2983493
-using CSV, DataFrames
+using CSV, DataFrames, TOML
 
 # ╔═╡ 668445dc-2437-421f-9251-b4044e5849f6
 # We need all of these (including the weird ones like PooledArrays) 
 # to make the BSON file load
-using BSON, SparseArrays, InlineStrings, PooledArrays, MathOptInterface
+using SparseArrays, InlineStrings, PooledArrays, MathOptInterface, BSON
 
 # ╔═╡ 32e5f26a-9b2f-4fc0-a0cd-1a5f101f0db9
 using StatsBase: mean
 
-# ╔═╡ 7a42f00e-193c-45ea-951f-dcd4e1c1975f
-using CairoMakie
-
 # ╔═╡ 0f7e3ce7-9cf2-46ea-926b-43b7601246f7
 using StringDistances
+
+# ╔═╡ 7a42f00e-193c-45ea-951f-dcd4e1c1975f
+using CairoMakie
 
 # ╔═╡ 2d3cf797-4cc2-4aad-bc3e-94f5474e99f9
 begin
@@ -35,13 +35,16 @@ end
 # ╔═╡ 5cb1709a-eda0-41b3-8bff-f58c19608be5
 using PlutoUI
 
+# ╔═╡ f12e987e-7e21-460a-9933-63916806a075
+config = TOML.parsefile(joinpath(@__DIR__, "../../config.toml"))["data"]
+
 # ╔═╡ 6db70f24-e8ba-461e-8d86-00e9a37b44d3
 md"""
 ## Load data
 """
 
 # ╔═╡ 6de86962-a420-4885-ae7a-18748549c4c2
-path = "/Users/degleris/Data/carbon_networks/wecc240_static_results.bson"
+path = joinpath(config["DATA_DIR"], "wecc240_static_results.bson")
 
 # ╔═╡ 2757231c-ef30-417a-87dd-7d155049ba47
 data = BSON.load(path, @__MODULE__);
@@ -62,7 +65,7 @@ wecc_states = uppercase.(["ca", "or", "wa", "nv", "mt", "id", "wy", "ut", "co", 
 
 # ╔═╡ b4f18908-f62f-479e-b808-4847c03dfd5d
 substations = let
-	df = DataFrame(CSV.File("/Users/degleris/Downloads/substations.csv"))
+	df = DataFrame(CSV.File(joinpath(config["DATA_DIR"], "substations.csv")))
 	filter!(r -> !ismissing(r.STATE) && r.STATE in wecc_states, df)
 end
 
@@ -105,29 +108,6 @@ demands = [v ? d.d : missing for (d, v) in zip(results, is_valid)];
 md"""
 ## Plot!
 """
-
-# ╔═╡ 5e79de08-58a1-4ddc-ac01-5a8f48a1b02d
-# let
-# 	fig = Figure()
-# 	ax = Axis(fig[1, 1], xgridvisible=false, ygridvisible=false)
-# 	sct = scatter!(ax, x, y, markersize=7, color=λ, colormap=:jet1, colorrange=(0.0, 1000.0))
-
-# 	A = data[:case].A
-# 	for j in 1:size(A, 2)
-# 		fr = findfirst(==(-1), A[:, j])
-# 		to = findfirst(==(1), A[:, j])
-
-# 		lines!(ax, [x[fr]; x[to]], [y[fr]; y[to]], color=(:gray, 0.1))
-# 	end
-# 	Colorbar(fig[1, 2], sct, label="Marginal Emissions Rate [kg CO2 / MWh]")
-
-# 	ax.xticks = [-150]
-# 	ax.yticks = [20]
-# 	ax.title = "WECC 2004: Average Nodal MEFs at Hour $hour"
-
-# 	fig
-# end;
-"Old plot"
 
 # ╔═╡ 59316c15-a94c-4c56-a30a-0e6c23629de7
 hour = 6
@@ -213,7 +193,7 @@ end
 # ╠═5303b439-2bbb-4a04-b17e-7df6f2983493
 # ╠═668445dc-2437-421f-9251-b4044e5849f6
 # ╠═32e5f26a-9b2f-4fc0-a0cd-1a5f101f0db9
-# ╠═7a42f00e-193c-45ea-951f-dcd4e1c1975f
+# ╠═f12e987e-7e21-460a-9933-63916806a075
 # ╟─6db70f24-e8ba-461e-8d86-00e9a37b44d3
 # ╠═6de86962-a420-4885-ae7a-18748549c4c2
 # ╠═2757231c-ef30-417a-87dd-7d155049ba47
@@ -236,8 +216,8 @@ end
 # ╠═161fcf67-b65b-4661-bc9e-ff714268b444
 # ╠═2c0c2056-01a0-48eb-852d-92a172703975
 # ╟─cbc71e2e-0bd1-441c-bf17-c60053a60795
+# ╠═7a42f00e-193c-45ea-951f-dcd4e1c1975f
 # ╠═2d3cf797-4cc2-4aad-bc3e-94f5474e99f9
-# ╟─5e79de08-58a1-4ddc-ac01-5a8f48a1b02d
 # ╠═5cb1709a-eda0-41b3-8bff-f58c19608be5
 # ╠═59316c15-a94c-4c56-a30a-0e6c23629de7
 # ╟─7ffbe1bc-8cc6-4033-a70b-880209164199
