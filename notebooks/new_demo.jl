@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.18.1
+# v0.18.4
 
 using Markdown
 using InteractiveUtils
@@ -39,12 +39,6 @@ md"""
 # ╔═╡ c0abc95f-6d3f-47fb-b420-f968ea6510d3
 α = 100
 
-# ╔═╡ b40a72ae-371d-4aa1-bced-508fe592420c
-nodes = [1, 2, 2, 3, 2]
-
-# ╔═╡ f7efa9a7-a171-47f7-b4f9-477fff221562
-F = make_device_pfdf_matrix(A, β, nodes);
-
 # ╔═╡ 432a5854-0885-4e74-bb59-27f482ab033e
 md"""
 ### Instantiate and solve problem
@@ -76,6 +70,9 @@ fmax = let
 	[fmax; fmax]
 end;
 
+# ╔═╡ dfb96104-542f-4baf-bef1-c5608d1f487a
+fmax
+
 # ╔═╡ 6dab7fc1-d54f-4e34-8be7-db0f2088a8f4
 ramp_rate = 3.0
 
@@ -89,13 +86,19 @@ devices = let
 		Demand(10 .+ 3rand(T), α),
 		Demand(2 .+ rand(T), α),
 		Generator(zeros(T), 10 * rand(T), 0.1*ones(T)),
-		with_ramping(StaticGenerator(0, 12, 20, T), ramp_rate),
+		with_ramping(StaticGenerator(0, 12, 20, T), ramp_rate), #StaticGenerator(0, 12, 20, T),
 		Battery(T, 10, battery_charge_rate, 5, 5, 0.99),
 	]
 end
 
 # ╔═╡ ebb97ac2-1879-40d7-8f0c-2810d40b8a96
 n = length(devices)
+
+# ╔═╡ b40a72ae-371d-4aa1-bced-508fe592420c
+nodes = [1, 2, 2, 3, 2][1:length(devices)]
+
+# ╔═╡ f7efa9a7-a171-47f7-b4f9-477fff221562
+F = make_device_pfdf_matrix(A, β, nodes);
 
 # ╔═╡ 174edb6e-85a8-48c9-9d69-61ee0348f162
 pmp = DynamicPowerManagementProblem(devices, F, fmax, T);
@@ -131,6 +134,7 @@ E = get_total_emissions(p, generator_devices, emissions_rates)
 # ╠═e889f18d-7280-4903-ab2c-b802ea9fa0c4
 # ╠═492abd5d-4a99-4849-8767-9affcec16a0c
 # ╠═30ceea15-e8c5-4e8e-9186-5a5d0ef8def3
+# ╠═dfb96104-542f-4baf-bef1-c5608d1f487a
 # ╟─866f9d9e-d572-4eb8-9b5a-21088da5cebe
 # ╠═c0abc95f-6d3f-47fb-b420-f968ea6510d3
 # ╠═4c5ad529-7252-4948-b474-9634d38d2f43

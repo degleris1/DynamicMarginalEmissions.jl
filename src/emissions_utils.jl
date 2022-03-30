@@ -16,7 +16,7 @@ function get_lmes(pmp, pmp_result, demand_devices, gen_devices, emissions_rates)
     # Compute the gradient `dE/dp` of total emissions with respect to `p`
     dz = zeros(get_dims(pmp))
     for (g, e) in zip(gen_devices, emissions_rates)
-        dz[get_device_primary_var_inds(pmp, g)] = e
+        dz[get_device_primary_var_inds(pmp, g)] .= e
     end
 
     # Multiply by `dz/dD`, the Jacobian of optimal variables as a function of demand

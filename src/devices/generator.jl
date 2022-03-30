@@ -54,7 +54,7 @@ function jacobian_kkt_z_device(d::AbstractGenerator, p, duals)
     (; pmin, pmax) = d
     μ_lower, μ_upper = duals
     T  = get_time_horizon(d)
-    
+
     return [
         zeros(T, T) -I(T) I(T);
         -diagm(μ_lower[:, 1]) diagm(pmin - p) zeros(T, T);

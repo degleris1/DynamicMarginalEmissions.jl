@@ -13,7 +13,7 @@ end
 
 get_cost(d::Battery, p) = 0
 
-function make_aux_vars(d::AbstractDevice)
+function make_aux_vars(d::Battery)
     (; T, C, R, s0, sT, η) = d
 
     # Charge and discharge

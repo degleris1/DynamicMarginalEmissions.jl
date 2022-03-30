@@ -12,6 +12,7 @@ using Zygote: forward_jacobian, gradient
 import Convex: solve!, evaluate
 import Base: reshape
 
+OPT = ECOS.Optimizer
 
 # using CSV
 # using DataFrames
@@ -43,22 +44,14 @@ export make_pfdf_matrix, make_device_pfdf_matrix
 # Exports - Emissions Utilities
 export get_total_emissions, get_lmes
 
-# export open_datasets, parse_network_data, load_case, create_generation_map
+# Exports - Backwards Compatibility
+export PowerNetwork, PowerManagementProblem, compute_mefs
+
+
 # export load_synthetic_network, load_demand_data, load_renewable_data
-
-# export get_lmps
-
 # export DynamicPowerNetwork, DynamicPowerManagementProblem
-# export flatten_variables_dyn, unflatten_variables_dyn
-# export kkt_dyn, sensitivity_demand_dyn, kkt_dims_dyn, storage_kkt_dims
-
-# export sensitivity_price, sensitivity_demand
-# export compute_mefs
 # export generate_random_data
-
 # export compute_jacobian_kkt_dyn, get_problem_dims
-# export make_pfdf_matrix
-
 # export generate_network
 
 
@@ -73,7 +66,7 @@ include("jacobian.jl")
 
 include("network_utils.jl")
 include("emissions_utils.jl")
-
+include("backwards_compat.jl")
 
 #include("parse_data.jl")
 #include("utils.jl")

@@ -55,7 +55,7 @@ end
 function _get_jac_kkt_z_device(pmp, p, devc, devv, i)
     inds = get_device_inds(pmp, i)
     p = p[i, :]
-    μ = [c.dual for c in devc[i]]
+    μ = [make_vec(c.dual) for c in devc[i]]
 
     return jacobian_kkt_z_device(pmp.devices[i], p, μ, devv[i])
 end
@@ -119,7 +119,7 @@ end
 function kkt_local_params(pmp::DynamicPowerManagementProblem, pmp_result, i, params...)
     d = typeof(pmp.devices[i])(params...)
     p = pmp_result.p[i, :]
-    μ = [c.dual for c in pmp_result.devc[i]]
+    μ = [make_vec(c.dual) for c in pmp_result.devc[i]]
 
     dims = get_dims(pmp)
     inds = get_device_inds(pmp, i)

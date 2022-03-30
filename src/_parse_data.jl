@@ -1,131 +1,3 @@
-get_data_path(datapath, f) = joinpath(datapath, f)
-
-SKIP_RESOURCES = ["WND", "SUN", "BIO", "GEO", "OTH", "WAT"]
-BASE_RESOURCES = ["COL", "NG", "NUC", "OIL"]
-
-
-function parse_network_data(datapath; num_generators=1)
-    # Open dataframes
-    df_node, df_branch, df_resource = open_datasets(datapath)
-    
-    DEMAND = "DEMAND"
-    num_resource = nrow(df_resource)
-    num_location = nrow(df_node)
-    
-    # Preprocess
-    df_node = coalesce.(df_node, 0.0)  # Fill missing values with 0.0
-
-    # Initialize outputs
-    nodes = []
-    branches = []
-    gmax = Float64[]
-    pmax = Float64[]
-    f = Float64[]
-    
-    # Parse nodes
-    for iso in eachrow(df_node)
-        k = length(nodes)+1
-        push!(nodes, (k, iso.id, DEMAND))
-        push!(gmax, 0.0)
-        push!(f, 0.0)
-
-        for r in eachrow(df_resource)
-            for _ in 1:num_generators
-                (r.id in SKIP_RESOURCES) && continue  # Skip some resources
-        
-                i = length(nodes)+1
-                capacity = iso[r.id * "_max"] / num_generators
-                push!(nodes, (i, iso.id, r.id))
-                push!(gmax, capacity)
-                push!(f, r.emission_factor)
-
-                push!(branches, (i, k))
-                push!(pmax, Inf)
-            end
-        end
-    end
-    
-    # Parse cross-ISO branches
-    for row in eachrow(df_branch)
-        if row.sink_node == "ALL"
-            continue
-        end
-        i = findfirst(x -> x[2:3] == (row.source_node, DEMAND), nodes)
-        j = findfirst(x -> x[2:3] == (row.sink_node, DEMAND), nodes)
-        push!(branches, (i, j))
-        push!(pmax, row.max_exchanges)
-    end
-    
-    # Construct graph
-    G = SimpleWeightedGraph(length(nodes))
-    for ((i, j), w) in zip(branches, pmax)
-        add_edge!(G, i, j, w)
-    end
-    A = incidence_matrix(G, oriented=true)
-    pmax = [e.weight for e in edges(G)]
-    
-    return A, gmax, pmax, f, G, nodes
-end
-
-function open_datasets(datapath)
-    df_node = DataFrame(CSV.File(get_data_path(datapath, "node_data.csv")))
-    df_branch = DataFrame(CSV.File(get_data_path(datapath, "branch_data.csv"), 
-        drop=(i, name)->(i==1)))
-    df_resource = DataFrame(CSV.File(get_data_path(datapath, "resource_data.csv"), 
-        header=[:id, :name, :emission_factor], datarow=2))
-    return df_node, df_branch, df_resource
-end
-
-function create_generation_map(nodes, resources=BASE_RESOURCES)
-    n = length(nodes)
-    bas = unique([node[2] for node in nodes])
-    
-    agg_nodes = []
-    for (i, (ba, res)) in enumerate(product(bas, resources))
-        push!(agg_nodes, (i, ba, res))
-    end
-    
-    agg_map = spzeros(length(agg_nodes), length(nodes))
-    for (i, ba, res) in nodes
-        !(res in resources) && continue
-        k = findfirst(x -> x[2:3] == (ba, res), agg_nodes)
-        agg_map[k, i] = 1
-    end
-
-    return agg_nodes, agg_map
-end
-
-function load_case(name, agg_nodes, B, nodes; resources=BASE_RESOURCES)
-    ng, n = size(B)
-    
-    case = DataFrame(CSV.File(name))
-    case = rename!(case, "Column1" => "ba")
-    case = coalesce.(case, 0.0)
-
-    bas = case[:, "ba"]
-    demands = case[:, "demand"]
-    for res in SKIP_RESOURCES
-        demands -= case[:, res]
-    end
-
-    # Load demands
-    d = zeros(n)
-    for (dem, ba) in zip(demands, bas)
-        ind_d = findfirst(x -> x[2:3] == (ba, "DEMAND"), nodes)
-        d[ind_d] = dem
-    end  
-    
-    # Load generation profile
-    g = zeros(ng)
-    for res in resources
-        for ba in bas
-            ind_g = findfirst(x -> x[2:3] == (ba, res), agg_nodes)
-            g[ind_g] = case[case.ba .== ba, res][1]
-        end
-    end
-    
-    return d, g, case
-end
 
 """
     load_synthetic_network(case_name)
@@ -274,4 +146,91 @@ function _make_B(gen, n, l)
 	end
 	
 	return B
+end
+
+
+
+
+
+
+
+
+
+
+
+using Distributions, Random
+
+function make_dynamic(net::PowerNetwork, T, P, C, dyn_gmax, η_c, η_d)
+    fqs = [net.fq for t in 1:T]
+    fls = [net.fl for t in 1:T]
+    pmaxs = [net.pmax for t in 1:T]
+    return DynamicPowerNetwork(fqs, fls, pmaxs, dyn_gmax, net.A, net.B, net.F, P, C, T; η_c=η_c, η_d=η_d)
+end
+
+make_dynamic(net::PowerNetwork, T, P, C, η) = make_dynamic(net, T, P, C, [net.gmax for _ in 1:T], η, η);
+
+function generate_random_data(n, l, ns, T)
+    Random.seed!(2)
+
+    # Make graph
+    if n > 3
+    G = watts_strogatz(n, 3, 0.3)
+    else
+        G = Graph(3)
+        add_edge!(G, 1, 2)
+        add_edge!(G, 1, 3)
+        add_edge!(G, 2, 3)
+    end
+
+
+    # Convert to incidence matrix
+    A = incidence_matrix(G, oriented=true)
+    m = size(A, 2)
+
+    # Create generator-node mapping
+    node_map = vcat(collect(1:n), rand(1:n, l-n))
+    B = spzeros(n, l)
+    for (gen, node) in enumerate(node_map)
+        B[node, gen] = 1
+    end
+
+    # Generate carbon costs
+    cq = rand(Exponential(2), l)
+    cl = rand(Exponential(2), l)
+
+    # Generate demands
+    d = rand(Bernoulli(0.8), n) .* rand(Gamma(3.0, 3.0), n)
+
+    # Generate generation and flow capacities
+    gmax = rand(Gamma(4.0, 3.0), l) + (B'd)  # This is just to make the problem easier
+    pmax = rand(Gamma(1.0, 0.1), m);
+    cq_dyn = [cq for _ in 1:T]
+    cl_dyn = [cl for _ in 1:T]
+    pmax_dyn = [pmax for _ in 1:T]
+    gmax_dyn = [gmax for _ in 1:T]
+    d_dyn = [d for _ in 1:T]
+
+    
+    C = rand(Exponential(10), ns)
+    P = 0.25 * C
+
+    S = zeros(n, ns)
+    nodes_storage = sample(1:n,  ns)
+    for i in 1:ns
+        S[nodes_storage[i], i] = 1
+    end
+    
+    return A, B, cq_dyn, cl_dyn, d_dyn, gmax_dyn, pmax_dyn, P, C, S
+end
+
+function generate_network(n, l, T, ns)
+
+    A, B, cq_dyn, cl_dyn, d_dyn, gmax_dyn, pmax_dyn, P, C, S = generate_random_data(n, l, ns, T)
+    β = rand(Exponential(10), n)
+    F = make_pfdf_matrix(A, β)
+
+    net_dyn = DynamicPowerNetwork(
+        cq_dyn, cl_dyn, pmax_dyn, gmax_dyn, A, B, F, S, P, C, T
+    )
+    return net_dyn, d_dyn
 end
