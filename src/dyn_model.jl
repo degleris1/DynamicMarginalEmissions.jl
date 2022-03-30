@@ -113,6 +113,7 @@ function DynamicPowerManagementProblem(
 
     # storage constraints
     # initial conditions
+    ρ_1 = deepcopy(gmax[1]) # defined to avoid nothing dual variable due to repeated constraints
     add_constraints!(dynProblem, [
         0 <= s[1], # λsl
         s[1] <= C, # λsu
@@ -120,8 +121,8 @@ function DynamicPowerManagementProblem(
         ch[1] <= P, # λchu
         dis[1] >= 0, #λdisl
         dis[1] <= P, # λdisu
-        g_T[1] >= -ρ,  # λrampl
-        g_T[1] <= ρ,  # λrampu
+        g_T[1] >= -ρ_1,  # λrampl
+        g_T[1] <= ρ_1,  # λrampu
         0 == - s[1] + INIT_COND.*C + ch[1] * η_c - dis[1]/η_d, #νs (ν for storage)
     ])
     # running condition
@@ -237,10 +238,11 @@ function kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, F, S, P, C, η_c, η_d, ρ; τ=
 
         # add the KKts for the storage
         gt_prev = (t == 1) ? zeros(l) : g[t-1]
+        ρ_ = t -> (t==1) ? gmax[1] : ρ
         KKT_s = kkt_storage(
             s_crt, s_prev, ch[t], dis[t], λsu[t], λsl[t], λchu[t], λchl[t],
             λdisu[t], λdisl[t], λrampl[t], λrampu[t], ν[t], νE[t], νs[t], νs_next, F, S, P, C, 
-            η_c, η_d, ρ, g[t], gt_prev,
+            η_c, η_d, ρ_(t), g[t], gt_prev,
         )
 
         # check the sizes of both matrices computed above

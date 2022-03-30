@@ -175,6 +175,7 @@ function compute_jacobian_kkt_dyn(x, net, d_dyn)
 
     # Compute individual Jacobians for the dynamic system
     g_prev = t -> (t == 1) ? zeros(l) : g[t-1]
+    ρ_ = t -> (t==1) ? net.gmax[1] : net.ρ
 
     # we do not need the below I think because of unflatten....()
     # s_crt = t -> (t==T) ? FINAL_COND.*C : s[t]
@@ -182,7 +183,7 @@ function compute_jacobian_kkt_dyn(x, net, d_dyn)
         compute_jacobian_kkt_dyn_t(
             s[t], ch[t], dis[t], 
             λsl[t], λsu[t], λchl[t], λchu[t], λdisl[t], λdisu[t], λrampl[t], λrampu[t], 
-            g[t], g_prev(t), net.ρ,
+            g[t], g_prev(t), ρ_(t),
             net, t
         )
         for t in 1:T

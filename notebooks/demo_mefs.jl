@@ -112,6 +112,9 @@ ns = 3 # number of storage nodes
 net_dyn, _ = generate_network(n, l, T, ns; η=η)
 end;
 
+# ╔═╡ 9717e3c8-2c5f-4d20-b537-328d54f6872b
+m = size(net_dyn.B)[2]
+
 # ╔═╡ 176064fe-023b-49ca-ac06-f1a4e4be046c
 begin
 	n_demand = 2 # number of nodes with demand
@@ -191,6 +194,26 @@ begin
 	# ylims!(0, 1)
 	
 end
+
+# ╔═╡ 6b89319c-8eb9-4001-afc5-5aab8c6aa5f7
+kkt_dims(n, m, l)
+
+# ╔═╡ 98821f05-b7ac-4ff2-8262-7e2731843d2b
+storage_kkt_dims(ns, l)
+
+# ╔═╡ 5ea4cbd9-6799-433c-9a64-acea934a9cfc
+begin
+	n_constraint_static = 6
+	n_constraint_storage = 9
+
+	n_constraints = T*n_constraint_static + T*n_constraint_storage - 2
+end
+
+# ╔═╡ ffaed979-c2a3-4496-83c3-9c680d6e9171
+T*n_constraint_static
+
+# ╔═╡ 2450f5c2-a401-4463-be7f-7ab82b1441ad
+opf_dyn.problem.constraints[38].dual
 
 # ╔═╡ d1d93fe7-79df-4253-86c2-31277ba792fc
 begin
@@ -488,6 +511,7 @@ end
 # ╟─e87dbd09-8696-43bd-84e0-af17517584dd
 # ╠═b63b9168-4213-4b95-bc2a-8888c032e9c5
 # ╠═6888f84d-daa9-4cfd-afc8-5aac00aeecab
+# ╟─9717e3c8-2c5f-4d20-b537-328d54f6872b
 # ╠═8cb283f4-c3b0-496a-82af-2909b8972a35
 # ╠═176064fe-023b-49ca-ac06-f1a4e4be046c
 # ╟─a8ccbc8e-24e6-4214-a179-4edf3cf26dad
@@ -496,7 +520,12 @@ end
 # ╠═91e525b2-a276-4641-bad0-7dd6be026790
 # ╠═cad822b2-4a01-4cc2-b557-fc1693d7a06e
 # ╠═6f08828b-4c4b-4f50-bd40-35805a37aae0
-# ╠═d97e0c57-3b57-404f-a019-693951dba5a8
+# ╟─d97e0c57-3b57-404f-a019-693951dba5a8
+# ╠═6b89319c-8eb9-4001-afc5-5aab8c6aa5f7
+# ╠═98821f05-b7ac-4ff2-8262-7e2731843d2b
+# ╠═5ea4cbd9-6799-433c-9a64-acea934a9cfc
+# ╠═ffaed979-c2a3-4496-83c3-9c680d6e9171
+# ╠═2450f5c2-a401-4463-be7f-7ab82b1441ad
 # ╠═d1d93fe7-79df-4253-86c2-31277ba792fc
 # ╟─15293269-580f-4251-be36-4be6ba8c5a46
 # ╠═0740dc70-a532-4818-b09d-b3b8d60fa6ba
