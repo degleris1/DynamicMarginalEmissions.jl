@@ -13,7 +13,10 @@ using CSV, DataFrames, TOML
 # ╔═╡ 668445dc-2437-421f-9251-b4044e5849f6
 # We need all of these (including the weird ones like PooledArrays) 
 # to make the BSON file load
-using Convex, SparseArrays, InlineStrings, PooledArrays, MathOptInterface, BSON
+using Convex, InlineStrings, PooledArrays, MathOptInterface, BSON
+
+# ╔═╡ 64f8e88a-dfbf-4d25-b40e-af688e9e9f00
+using SparseArrays
 
 # ╔═╡ 32e5f26a-9b2f-4fc0-a0cd-1a5f101f0db9
 using StatsBase: mean
@@ -29,7 +32,7 @@ using PlutoUI
 
 # ╔═╡ 2d3cf797-4cc2-4aad-bc3e-94f5474e99f9
 begin
-	using GeoMakie, Proj4
+	using GeoMakie
 	using GeoMakie.GeoInterface
 	using GeoMakie.GeoJSON
 	using Downloads
@@ -44,13 +47,19 @@ md"""
 config = TOML.parsefile(joinpath(@__DIR__, "../../config.toml"))
 
 # ╔═╡ d7598abb-2be7-4e3b-af9e-14827ef5a3b0
-DATA_DIR = config["data"]["DATA_DIR"]
+DATA_DIR = config["data"]["GOOGLE_DRIVE"]
 
 # ╔═╡ 45c73bb3-eecf-4b92-8e91-6a4c83addfdc
 RESULTS_DIR = config["data"]["SAVE_DIR"]
 
+# ╔═╡ ae02b617-f2d0-4fa6-86f9-3a6e4088a803
+begin
+	fnm_static = "wecc240_static_results_initialCode.bson"
+	fnm_dynamic = "wecc240_dynamic_results_COND50_initialCode.bson"
+end
+
 # ╔═╡ 6de86962-a420-4885-ae7a-18748549c4c2
-path = joinpath(DATA_DIR, "wecc240_static_results.bson")
+path = joinpath(DATA_DIR, fnm_static)
 
 # ╔═╡ 2757231c-ef30-417a-87dd-7d155049ba47
 data = BSON.load(path, @__MODULE__);
@@ -59,7 +68,7 @@ data = BSON.load(path, @__MODULE__);
 results = data[:results];
 
 # ╔═╡ 8cab03dd-f034-443f-9a60-32aa87d1fde5
-path_dyn = joinpath(DATA_DIR, "wecc240_dynamic_results.bson")
+path_dyn = joinpath(DATA_DIR, fnm_dynamic)
 
 # ╔═╡ 83e2c12a-fe36-4123-baf3-0e8c1bdecead
 data_dyn = BSON.load(path_dyn, @__MODULE__);
@@ -139,7 +148,7 @@ md"""
 """
 
 # ╔═╡ 59316c15-a94c-4c56-a30a-0e6c23629de7
-hour = 12
+hour = 6
 
 # ╔═╡ 161fcf67-b65b-4661-bc9e-ff714268b444
 λ = mean(skipmissing(mefs[hour, :]))[:, 1]
@@ -314,15 +323,22 @@ save(joinpath(RESULTS_DIR, "wecc240_full_figure.pdf"), full_figure)
 # 	fig
 # end
 
+# ╔═╡ 305bdb8a-e186-4c5a-b927-b7a406ac260a
+md"""
+### Compare regression-based MEF vs exact differentiation-based MEFs
+"""
+
 # ╔═╡ Cell order:
 # ╠═0ae79723-a5cf-4508-b41d-9622948185a9
 # ╠═5303b439-2bbb-4a04-b17e-7df6f2983493
 # ╠═668445dc-2437-421f-9251-b4044e5849f6
+# ╠═64f8e88a-dfbf-4d25-b40e-af688e9e9f00
 # ╠═32e5f26a-9b2f-4fc0-a0cd-1a5f101f0db9
 # ╟─6db70f24-e8ba-461e-8d86-00e9a37b44d3
 # ╠═f9fab4fe-baec-4bfd-9d84-ef9caac85f5f
 # ╠═d7598abb-2be7-4e3b-af9e-14827ef5a3b0
 # ╠═45c73bb3-eecf-4b92-8e91-6a4c83addfdc
+# ╠═ae02b617-f2d0-4fa6-86f9-3a6e4088a803
 # ╠═6de86962-a420-4885-ae7a-18748549c4c2
 # ╠═2757231c-ef30-417a-87dd-7d155049ba47
 # ╠═37b3f4ba-9fb0-4285-aa33-f9905414c764
@@ -361,9 +377,10 @@ save(joinpath(RESULTS_DIR, "wecc240_full_figure.pdf"), full_figure)
 # ╟─b53cc8dd-c36e-4cf8-9f1d-473a0e985234
 # ╟─c6f2eb39-a0e6-44bf-8649-f25ef72961a4
 # ╠═5154fdd8-a58d-4faa-aced-7212ed0dc705
-# ╠═e5e10f07-1001-4438-b32d-c1f25cce04b1
+# ╟─e5e10f07-1001-4438-b32d-c1f25cce04b1
 # ╠═b90eb7df-a78c-4bc5-ae3b-41f62e38da54
 # ╠═d4d509bd-8f96-4da3-917f-a65acb569953
 # ╠═d1f26911-bd79-4ce6-b0d8-218f8a772840
 # ╠═dfc765e0-39d3-4ae4-93f0-4f0406f9f358
 # ╠═e0a6073a-55fb-44f1-9598-e20106a4bf43
+# ╟─305bdb8a-e186-4c5a-b927-b7a406ac260a
