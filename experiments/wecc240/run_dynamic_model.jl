@@ -57,7 +57,7 @@ function formulate_and_solve_dynamic(
 
     @show (hour, day, month, pmp.problem.status)
 
-    return (d=d, gmax=gmax, g=g, λ=mefs, status=pmp.problem.status)
+    return (d=d, gmax=gmax, g=g, λ=mefs, co2_rates=co2_rates, status=pmp.problem.status)
 end
 
 

@@ -38,6 +38,29 @@ begin
 	using Downloads
 end
 
+# ╔═╡ cab761be-ee1b-4002-a187-df72c29d9771
+# equivalent to include that will replace it
+
+function ingredients(path::String)
+	# this is from the Julia source code (evalfile in base/loading.jl)
+	# but with the modification that it returns the module instead of the last object
+	name = Symbol(basename(path))
+	m = Module(name)
+	Core.eval(m,
+        Expr(:toplevel,
+             :(eval(x) = $(Expr(:core, :eval))($name, x)),
+             :(include(x) = $(Expr(:top, :include))($name, x)),
+             :(include(mapexpr::Function, x) = $(Expr(:top, :include))(mapexpr, $name, x)),
+             :(include($path))))
+	m
+end;
+
+# ╔═╡ 113b99d8-0708-4da8-a8d6-7c60734e4a31
+util = ingredients("util.jl")
+
+# ╔═╡ f13e5dea-33b9-45c0-876e-42654fe6a8c7
+util.FUEL_EMISSIONS
+
 # ╔═╡ 6db70f24-e8ba-461e-8d86-00e9a37b44d3
 md"""
 ## Load data
@@ -84,33 +107,19 @@ md"""
 ## Load substation data
 """
 
-# ╔═╡ 34b6c866-0fc6-4f7d-91b5-15e27277ce9d
+# ╔═╡ 0f0b8da3-30b6-4166-aab8-322ee320e971
+"""
+Assign a geographical coordinate to nodes in the network. 
+"""
+
+# ╔═╡ bfb33d19-ceca-4a3a-87d0-d75960cd4544
+begin
 wecc_states = uppercase.(["ca", "or", "wa", "nv", "mt", "id", "wy", "ut", "co", "az", "nm"])
-
-# ╔═╡ b4f18908-f62f-479e-b808-4847c03dfd5d
 substations = let
-    df = DataFrame(CSV.File(joinpath(DATA_DIR, "substations.csv")))
-	filter!(r -> !ismissing(r.STATE) && r.STATE in wecc_states, df)
+df = DataFrame(CSV.File(joinpath(DATA_DIR, "substations.csv")))
+filter!(r -> !ismissing(r.STATE) && r.STATE in wecc_states, df)
 end;
-
-# ╔═╡ de6cfbf2-afc6-4156-9c98-62287c8cd990
-node1 = 195
-
-# ╔═╡ 7756219f-f7c3-4a48-8a24-c65c8c0521c5
-node2 = 50
-
-# ╔═╡ ec338b2e-4106-454d-8687-237602636cf1
-k = 50
-
-# ╔═╡ d987edd6-421d-43f9-b54d-d63429db2a21
-nodes[k], rstrip(nodes[k][1:end-10])
-
-# ╔═╡ e4b7ffa3-9ee9-4e1b-8ec7-cf9965659c0c
-findnearest(
-	rstrip(nodes[k][1:end-10]), 
-	coalesce.(substations.NAME, ""), 
-	DamerauLevenshtein()
-)
+end;
 
 # ╔═╡ a0591816-88a4-4144-9d43-09f1205614af
 function get_coords(node)
@@ -120,13 +129,13 @@ function get_coords(node)
 		 DamerauLevenshtein()
 	 )
 	 return substations.LATITUDE[i], substations.LONGITUDE[i]
-end
+end;
 
-# ╔═╡ 1190a679-bd6c-434f-962c-7e8a26b06213
+# ╔═╡ 5392f525-ecb3-47c7-a32f-73a6b02967df
+begin
 x = [c[2] for c in get_coords.(nodes)]
-
-# ╔═╡ e6e6a795-13f2-4cc0-97ba-83de95011696
 y = [c[1] for c in get_coords.(nodes)]
+end;
 
 # ╔═╡ d2bacf4a-af37-4ff9-bebb-3dc3d06edd8a
 md"""
@@ -141,6 +150,12 @@ mefs = [v ? d.λ : missing for (d, v) in zip(results, is_valid)];
 
 # ╔═╡ cfcc5416-2038-48c4-a2b0-bcd92b574441
 demands = [v ? d.d : missing for (d, v) in zip(results, is_valid)];
+
+# ╔═╡ ad687e9a-9d7b-4990-9772-d9cfafe26421
+begin
+	node1 = 195
+	node2 = 50
+end
 
 # ╔═╡ cbc71e2e-0bd1-441c-bf17-c60053a60795
 md"""
@@ -328,12 +343,26 @@ md"""
 ### Compare regression-based MEF vs exact differentiation-based MEFs
 """
 
+# ╔═╡ 701285fc-887d-425c-98a3-1ee09235066f
+md"""
+Todo: 
+- Compute total emissions
+- Enable regression-based MEF estimation
+- Compare with analytic/exact MEF computation
+"""
+
+# ╔═╡ 1d5d1c1c-050a-434e-a977-b8d2aea69b26
+co2_costs = util.get_costs(data[:case].heat, data[:case].fuel, util.FUEL_EMISSIONS)
+
 # ╔═╡ Cell order:
 # ╠═0ae79723-a5cf-4508-b41d-9622948185a9
 # ╠═5303b439-2bbb-4a04-b17e-7df6f2983493
 # ╠═668445dc-2437-421f-9251-b4044e5849f6
 # ╠═64f8e88a-dfbf-4d25-b40e-af688e9e9f00
 # ╠═32e5f26a-9b2f-4fc0-a0cd-1a5f101f0db9
+# ╟─cab761be-ee1b-4002-a187-df72c29d9771
+# ╟─113b99d8-0708-4da8-a8d6-7c60734e4a31
+# ╟─f13e5dea-33b9-45c0-876e-42654fe6a8c7
 # ╟─6db70f24-e8ba-461e-8d86-00e9a37b44d3
 # ╠═f9fab4fe-baec-4bfd-9d84-ef9caac85f5f
 # ╠═d7598abb-2be7-4e3b-af9e-14827ef5a3b0
@@ -347,23 +376,18 @@ md"""
 # ╠═704175e9-921e-42ea-877f-35ce07610b8a
 # ╠═e3288d1f-4b66-49d5-9270-57827151a361
 # ╟─b4f91614-ada2-4961-8913-96855f7ca81b
+# ╟─0f0b8da3-30b6-4166-aab8-322ee320e971
 # ╠═0f7e3ce7-9cf2-46ea-926b-43b7601246f7
-# ╠═34b6c866-0fc6-4f7d-91b5-15e27277ce9d
-# ╠═b4f18908-f62f-479e-b808-4847c03dfd5d
-# ╠═de6cfbf2-afc6-4156-9c98-62287c8cd990
-# ╠═7756219f-f7c3-4a48-8a24-c65c8c0521c5
-# ╠═ec338b2e-4106-454d-8687-237602636cf1
-# ╠═d987edd6-421d-43f9-b54d-d63429db2a21
-# ╠═e4b7ffa3-9ee9-4e1b-8ec7-cf9965659c0c
 # ╠═a0591816-88a4-4144-9d43-09f1205614af
-# ╠═1190a679-bd6c-434f-962c-7e8a26b06213
-# ╠═e6e6a795-13f2-4cc0-97ba-83de95011696
+# ╠═bfb33d19-ceca-4a3a-87d0-d75960cd4544
+# ╠═5392f525-ecb3-47c7-a32f-73a6b02967df
 # ╟─d2bacf4a-af37-4ff9-bebb-3dc3d06edd8a
 # ╠═3c9f279c-ca03-4a8d-b9bc-3ad3668b76f7
 # ╠═29d3d70d-03d2-4883-9efd-ff382afef4af
 # ╠═cfcc5416-2038-48c4-a2b0-bcd92b574441
 # ╠═161fcf67-b65b-4661-bc9e-ff714268b444
 # ╠═2c0c2056-01a0-48eb-852d-92a172703975
+# ╠═ad687e9a-9d7b-4990-9772-d9cfafe26421
 # ╠═a9362a09-277b-4e97-9e66-d6df99f18a70
 # ╠═fe91b3ba-3159-48b0-a3d5-7af7bfe6fc34
 # ╟─cbc71e2e-0bd1-441c-bf17-c60053a60795
@@ -384,3 +408,5 @@ md"""
 # ╠═dfc765e0-39d3-4ae4-93f0-4f0406f9f358
 # ╠═e0a6073a-55fb-44f1-9598-e20106a4bf43
 # ╟─305bdb8a-e186-4c5a-b927-b7a406ac260a
+# ╠═701285fc-887d-425c-98a3-1ee09235066f
+# ╠═1d5d1c1c-050a-434e-a977-b8d2aea69b26
