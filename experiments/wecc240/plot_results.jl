@@ -21,6 +21,9 @@ using SparseArrays
 # ╔═╡ 32e5f26a-9b2f-4fc0-a0cd-1a5f101f0db9
 using StatsBase: mean
 
+# ╔═╡ e19f3dbe-b54a-45c3-b496-cf762f821ed5
+using Statistics
+
 # ╔═╡ 0f7e3ce7-9cf2-46ea-926b-43b7601246f7
 using StringDistances
 
@@ -37,6 +40,9 @@ begin
 	using GeoMakie.GeoJSON
 	using Downloads
 end
+
+# ╔═╡ d1eef849-92ea-49ed-b05e-c4e055a85c2c
+using LinearRegression
 
 # ╔═╡ cab761be-ee1b-4002-a187-df72c29d9771
 # equivalent to include that will replace it
@@ -327,17 +333,6 @@ save(joinpath(RESULTS_DIR, "wecc240_full_figure.pdf"), full_figure)
 # ╔═╡ dfc765e0-39d3-4ae4-93f0-4f0406f9f358
 λ_dyn = mean(all_λs_dyn, dims=1)[1, :]
 
-# ╔═╡ e0a6073a-55fb-44f1-9598-e20106a4bf43
-# let
-# 	fig = Figure()
-# 	ax = Axis(fig[1, 1])
-# 	hm = heatmap!(ax, results_dyn[].λ[node1, :, :], colormap=:redsblues, colorrange=(-2000, 2000))
-
-# 	Colorbar(fig[1, 2], hm)
-
-# 	fig
-# end
-
 # ╔═╡ 305bdb8a-e186-4c5a-b927-b7a406ac260a
 md"""
 ### Compare regression-based MEF vs exact differentiation-based MEFs
@@ -348,11 +343,165 @@ md"""
 Todo: 
 - Compute total emissions
 - Enable regression-based MEF estimation
+- Compare with diagonal terms in the matrix
+- 
 - Compare with analytic/exact MEF computation
 """
 
 # ╔═╡ 1d5d1c1c-050a-434e-a977-b8d2aea69b26
 co2_costs = util.get_costs(data[:case].heat, data[:case].fuel, util.FUEL_EMISSIONS)
+
+# ╔═╡ a34e32d8-3e18-4c22-87e2-032360661498
+g_opt = [[results_dyn[d].g[k].value for k in 1:24] for d in 1:365];
+
+# ╔═╡ fa51de9f-6f7a-4173-96d4-18f5f225aa1a
+E_tot = [[dot(co2_costs,g_opt[d][k]) for k in 1:24] for d in 1:365];
+
+# ╔═╡ be2f82a2-5c22-41a3-abe4-5a6f9de4e6d7
+md"""
+We want to compute, at a given hour, the changes in emissions and related them to changes in demand at a given node.
+"""
+
+# ╔═╡ 82ad33b1-3719-4aeb-9c82-1f8f1812ed61
+node1, node2
+
+# ╔═╡ 13478bcb-c4fc-4532-a1ef-4513b15e3295
+# changes in emissions
+
+ΔE = [(E_tot[d][hour] - E_tot[d][hour-1]) for d in 1:365];
+
+# ╔═╡ 70723775-1912-48ed-9ae5-d4663d0f81d3
+# gather all the demand changes, at ever node
+
+Δd = hcat([
+	[results_dyn[d].d[hour][n] - results_dyn[d].d[hour-1][n] for d in 1:365] 
+	for n in 1:length(nodes)
+]...);
+
+# ╔═╡ 1fba9a4a-8090-4fc5-a373-670ed04dfb4e
+# get the values for the scatter plot at the two nodes of interest
+
+begin
+xx1 = Δd[:, node1]
+xx2 = Δd[:, node2]
+end;
+
+# ╔═╡ 0df59933-2c53-46ae-88fe-a7fbd1b4b339
+lr_E = linregress(Δd, ΔE)
+
+# ╔═╡ 50acbd4b-1a02-4c55-b605-caf07f12bd74
+MEFs_reg = LinearRegression.slope(lr_E)
+
+# ╔═╡ 749ef6df-5909-4f40-a5ff-0ed7877de9ab
+lines(MEFs_reg)
+
+# ╔═╡ db737f8d-ed35-43c8-84fb-c7329763b3c1
+MEFs_reg[node1]
+
+# ╔═╡ 28591eda-995f-4224-98b8-ca1eab27559e
+# only the diagonal terms in the mefs
+all_λs_obs_dyn = [[diag(results_dyn[d].λ[n, :, :]) for d in 1:365] for n in 1:length(nodes)];
+
+# ╔═╡ 8e1f0bef-459d-4598-a01a-e59e00f53247
+# collect the average observable mef from the dynamic model
+begin
+
+	λ_obs_1 = [all_λs_obs_dyn[node1][d][hour] for d in 1:365]
+	λ_obs_2 = [all_λs_obs_dyn[node2][d][hour] for d in 1:365]
+
+	λ_total_1 = all_λs_dyn[:, node1]
+	λ_total_2 = all_λs_dyn[:, node2]
+end;
+
+# ╔═╡ 6f2896ac-ecf6-4256-82e0-0a4070fa14af
+begin
+	f2 = Figure()
+	hist(f2[1, 1], λ_obs_1, bins = -1000:200:1000)
+	hist!(f2[1, 1], λ_total_1, bins = -1000:200:1000)
+	f2
+end
+
+# ╔═╡ 982d36b3-a7b6-4066-9441-9e02596423dd
+let
+f = Figure()
+
+ax = Axis(f[1, 1], xlabel = "x label", ylabel = "y label",
+    title = "Title")
+for n = 1:length(nodes)
+	lines!(all_λs_dyn[:, n], color=:gray)
+end
+ylims!(ax, -1000, 4000)
+ax.title="All total MEFs over time"
+ax.xlabel="Day"
+ax.ylabel="MEF"
+f
+end
+
+# ╔═╡ e834a7d2-5dd9-4995-b3c9-3c771673edaa
+let
+f = Figure()
+
+ax = Axis(f[1, 1], xlabel = "x label", ylabel = "y label",
+    title = "Title")
+
+lines!(λ_obs_1)
+lines!(λ_total_1, color=:red)
+ylims!(ax, -2000, 2000)
+f
+end
+
+# ╔═╡ bd656131-eb56-467d-8f98-5e8de88266c3
+md"""
+There clearly are two populations. Therefore you want to: 
+- classify the points wrt them being in group 1 or 2
+- run different linear regressions based on the group they're in
+- compare those different regressions.
+
+the very simple answer for now is to do: 
+- smaller than X in group 0
+- larger than X is group 1
+"""
+
+# ╔═╡ e91052d7-1ca0-4ff5-aae4-1b8ace8f93cf
+begin
+	cutoff1 = 500
+	assign_group(cutoff, x) = x > cutoff ? 1 : 0;
+
+	group1 = assign_group.(cutoff1, λ_obs_1)
+end
+
+# ╔═╡ 6377fd8f-7b2b-4720-bf3a-a542075bcedd
+lines(group1)
+
+# ╔═╡ 2dd6a4cb-42ab-4c82-be5e-529c763059c2
+Bool.(group1)
+
+# ╔═╡ 4d032e76-afe0-4b6b-bed2-bf1df1362dc5
+md"""
+Rolling window in julia? 
+"""
+
+# ╔═╡ 28664572-0078-434f-a4cb-d70eaafe8d4d
+begin
+lr1_group1 = linregress(xx1[Bool.(group1)], ΔE[Bool.(group1)])
+lr1_group0 = linregress(xx1[Bool.(1 .-group1)], ΔE[Bool.(1 .-group1)])
+end;
+
+# ╔═╡ 9ca0036b-e68f-40ab-abc7-32fa346c01da
+LinearRegression.slope(lr1_group1)
+
+# ╔═╡ 08c75daa-fe09-4839-9390-cd5034eb8125
+LinearRegression.slope(lr1_group0)
+
+# ╔═╡ f9153c23-f969-4854-8c92-2437efd5b8ce
+begin
+	s1 = scatter(xx1[Bool.(group1)], ΔE[Bool.(group1)])
+	scatter!(xx1[Bool.(1 .-group1)], ΔE[Bool.(1 .-group1)])
+	s1
+end
+
+# ╔═╡ 58af890e-c198-4766-a7e3-3024dafe3190
+p2=scatter(xx2, ΔE)
 
 # ╔═╡ Cell order:
 # ╠═0ae79723-a5cf-4508-b41d-9622948185a9
@@ -360,6 +509,7 @@ co2_costs = util.get_costs(data[:case].heat, data[:case].fuel, util.FUEL_EMISSIO
 # ╠═668445dc-2437-421f-9251-b4044e5849f6
 # ╠═64f8e88a-dfbf-4d25-b40e-af688e9e9f00
 # ╠═32e5f26a-9b2f-4fc0-a0cd-1a5f101f0db9
+# ╠═e19f3dbe-b54a-45c3-b496-cf762f821ed5
 # ╟─cab761be-ee1b-4002-a187-df72c29d9771
 # ╟─113b99d8-0708-4da8-a8d6-7c60734e4a31
 # ╟─f13e5dea-33b9-45c0-876e-42654fe6a8c7
@@ -406,7 +556,33 @@ co2_costs = util.get_costs(data[:case].heat, data[:case].fuel, util.FUEL_EMISSIO
 # ╠═d4d509bd-8f96-4da3-917f-a65acb569953
 # ╠═d1f26911-bd79-4ce6-b0d8-218f8a772840
 # ╠═dfc765e0-39d3-4ae4-93f0-4f0406f9f358
-# ╠═e0a6073a-55fb-44f1-9598-e20106a4bf43
 # ╟─305bdb8a-e186-4c5a-b927-b7a406ac260a
-# ╠═701285fc-887d-425c-98a3-1ee09235066f
+# ╟─701285fc-887d-425c-98a3-1ee09235066f
 # ╠═1d5d1c1c-050a-434e-a977-b8d2aea69b26
+# ╠═a34e32d8-3e18-4c22-87e2-032360661498
+# ╠═fa51de9f-6f7a-4173-96d4-18f5f225aa1a
+# ╟─be2f82a2-5c22-41a3-abe4-5a6f9de4e6d7
+# ╠═82ad33b1-3719-4aeb-9c82-1f8f1812ed61
+# ╠═1fba9a4a-8090-4fc5-a373-670ed04dfb4e
+# ╠═13478bcb-c4fc-4532-a1ef-4513b15e3295
+# ╠═70723775-1912-48ed-9ae5-d4663d0f81d3
+# ╠═0df59933-2c53-46ae-88fe-a7fbd1b4b339
+# ╠═50acbd4b-1a02-4c55-b605-caf07f12bd74
+# ╠═749ef6df-5909-4f40-a5ff-0ed7877de9ab
+# ╠═db737f8d-ed35-43c8-84fb-c7329763b3c1
+# ╠═28591eda-995f-4224-98b8-ca1eab27559e
+# ╠═8e1f0bef-459d-4598-a01a-e59e00f53247
+# ╠═6f2896ac-ecf6-4256-82e0-0a4070fa14af
+# ╠═982d36b3-a7b6-4066-9441-9e02596423dd
+# ╟─e834a7d2-5dd9-4995-b3c9-3c771673edaa
+# ╟─bd656131-eb56-467d-8f98-5e8de88266c3
+# ╠═6377fd8f-7b2b-4720-bf3a-a542075bcedd
+# ╠═e91052d7-1ca0-4ff5-aae4-1b8ace8f93cf
+# ╠═2dd6a4cb-42ab-4c82-be5e-529c763059c2
+# ╠═4d032e76-afe0-4b6b-bed2-bf1df1362dc5
+# ╠═d1eef849-92ea-49ed-b05e-c4e055a85c2c
+# ╠═28664572-0078-434f-a4cb-d70eaafe8d4d
+# ╠═9ca0036b-e68f-40ab-abc7-32fa346c01da
+# ╠═08c75daa-fe09-4839-9390-cd5034eb8125
+# ╠═f9153c23-f969-4854-8c92-2437efd5b8ce
+# ╠═58af890e-c198-4766-a7e3-3024dafe3190
