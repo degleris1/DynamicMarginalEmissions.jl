@@ -1,6 +1,7 @@
 using Pkg; Pkg.activate(joinpath(@__DIR__, "../../dev"))
 
 using CSV
+using Dates
 using DataFrames
 using SparseArrays: spzeros
 using StatsBase: mean
@@ -25,6 +26,8 @@ FUEL_COSTS = Dict('G' => 7.91, 'C' => 1.41)
 # https://www.epa.gov/sites/default/files/2015-07/documents/emission-factors_2014.pdf
 FUEL_EMISSIONS = Dict('G' => 53.0, 'C' => 97.0)
 
+include("nrel.jl")
+
 
 """
     get_costs(heat, fuel)
@@ -44,7 +47,21 @@ end
 
 Return data for specifying a static case (no storage or ramping).
 """
-function make_static_case(hour, day, month, year=2004)
+function make_static_case(year=2004)
+    @assert year(date) in [2004, 2018]
+
+    if year(date) == 2004
+        return _make_static_case2004(date)
+    else  # year == 2018
+        return _make_static_case2018(date)
+    end
+end
+
+function _make_static_case2018(date)
+    
+end
+
+function _make_static_case2004(date)
     df = load_wecc_240_dataset()
 
     # Network structure
@@ -52,7 +69,7 @@ function make_static_case(hour, day, month, year=2004)
     A, β, fmax, cf = get_network_structure(df.branch)
 
     # Demand data
-    demand_map = get_demand_map(hour, day, month, year, df.demand)
+    demand_map = get_demand_map(hour(date), day(date), month(date), year(date), df.demand)
     d = make_demand_vector(demand_map, node_names, df.participation)
 
     # Generator data
