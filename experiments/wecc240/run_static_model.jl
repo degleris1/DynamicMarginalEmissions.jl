@@ -4,7 +4,11 @@ using BSON
 using CarbonNetworks
 
 yr = (length(ARGS) > 0) ? parse(Int, ARGS[1]) : 2018
-DATES = DateTime(yr, 01, 01, 00) .+ Hour.(0:(24*365-1))
+
+NUM_HOURS = 24*365
+DATES = DateTime(yr, 01, 01, 00) .+ Hour.(0:(NUM_HOURS-1))
+
+@show unique(day.(DATES[month.(DATES) .== 2]))
 
 function formulate_and_solve_static(date; Z=1e3, line_max=100.0, line_weight=2.0)
     case, _ = make_static_case(date)
@@ -46,7 +50,7 @@ end
 _, meta = make_static_case(DATES[1])
 results = [formulate_and_solve_static(d) for d in DATES]
 
-# bson(
-#     joinpath(SAVE_DIR, "wecc240_static_results_$(yr).bson"),
-#     meta=meta, results=results
-# )
+bson(
+    joinpath(SAVE_DIR, "wecc240_static_results_$(yr).bson"),
+    meta=meta, results=results
+)

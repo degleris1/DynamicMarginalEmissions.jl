@@ -126,8 +126,10 @@ function get_dynamic_demand(date, id_map)
 
     # Find appropriate row
     df_load = DataFrame(CSV.File(PATH_LOAD))
-    _f = r -> DateTime(2018, r.Month, r.Day, r.Period-1) == date
-    row = findfirst(_f, eachrow(df_load))
+    d = dayofyear(date)
+    row = (d-1)*24 + hour(date) + 1
+    #_f = r -> DateTime(2018, r.Month, r.Day, r.Period-1) == date
+    #row = findfirst(_f, eachrow(df_load))
 
     # Create demand vector
     d = zeros(length(id_map))
@@ -144,8 +146,10 @@ function get_dynamic_gmax(date, gen_params)
 
     # Find appropriate row
     df_gen = DataFrame(CSV.File(PATH_GEN))
-    _f = r -> DateTime(2018, r.Month, r.Day, r.Period-1) == date
-    row = findfirst(_f, eachrow(df_gen))
+    d = dayofyear(date)
+    row = (d-1)*24 + hour(date) + 1
+    #_f = r -> DateTime(2018, r.Month, r.Day, r.Period-1) == date
+    #row = findfirst(_f, eachrow(df_gen))
 
     # Update max capacities
     gens = names(df_gen[row, 5:end])

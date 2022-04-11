@@ -3,25 +3,28 @@ include("util.jl")
 using BSON
 using CarbonNetworks
 
-NUMBER_DAYS = 365
-DATES = Date(2004, 01, 01) .+ Day.(0:(NUMBER_DAYS-1))
-HOUR = 1
+
+yr = (length(ARGS) > 0) ? parse(Int, ARGS[1]) : 2018
+
 DURATION = 24
+NUM_HOURS = 24*365
+DATES = DateTime(yr, 01, 01, 00) .+ Hour.(0:DURATION:(NUM_HOURS-DURATION))
 
 ECOS_OPT = CarbonNetworks.OPT
 
 function formulate_and_solve_dynamic(
-    hour, day, month, T; 
+    date, T; 
     Z=1e3, line_max=100e3, line_weight=2.0, OPT=ECOS_OPT
 )
     println("-------")
-    @time case, _ = make_dynamic_case(hour, day, month, T)
+    @time case, _ = make_dynamic_case(date, T)
     n, _ = size(case.A)
+
     # Construct flow matrix
     F = make_pfdf_matrix(case.A, case.β)
 
     # Get generator costs
-    fl = [get_costs(case.heat, case.fuel, FUEL_COSTS) for _ in 1:T]
+    fl = case.fl
     fq = [zeros(length(fl[k])) for k in 1:length(fl)]
 
     # Get line capacities
@@ -36,7 +39,7 @@ function formulate_and_solve_dynamic(
     # Formulate problem
     net = DynamicPowerNetwork(
         fq, fl, pmax, gmax, case.A, case.B, F, case.S,
-        P, C, T; η_c=case.η, η_d=case.η, ρ=ρ,
+        P, C, T; η_c=case.η_c, η_d=case.η_d, ρ=ρ,
     )
     pmp = DynamicPowerManagementProblem(net, d)
 
@@ -45,7 +48,7 @@ function formulate_and_solve_dynamic(
     g = CarbonNetworks.evaluate(pmp.g)
 
     # Get generator emissions rates
-    co2_rates = get_costs(case.heat, case.fuel, FUEL_EMISSIONS)
+    co2_rates = case.co2_rates
 
     # Compute MEFs
     mefs = zeros(n, T, T)
@@ -54,26 +57,26 @@ function formulate_and_solve_dynamic(
 		mefs[:, :, ind_t] .= λ[ind_t];
 	end
 
-    @show (hour, day, month, pmp.problem.status)
+    @show (date, pmp.problem.status)
 
-    return (d=d, gmax=gmax, g=g, λ=mefs, co2_rates=co2_rates, status=pmp.problem.status)
+    return (g=g, λ=mefs, status=pmp.problem.status, case=case)
 end
 
 
-case, meta = make_dynamic_case(1, 1, 1, DURATION)
+case, meta = make_dynamic_case(DATES[1], DURATION)
 
 results = []
 for d in DATES
-    try
-        r = formulate_and_solve_dynamic(HOUR, day(d), month(d), DURATION)
+    # try
+        r = formulate_and_solve_dynamic(d, DURATION)
         push!(results, r)
-    catch
-        @warn "No mefs on $d"
-        push!(results, missing)
-    end
+    # catch
+    #     @warn "No mefs on $d"
+    #     push!(results, missing)
+    # end
 end
 
 bson(
-    joinpath(SAVE_DIR, "wecc240_dynamic_results.bson"),
-    case=case, meta=meta, results=results
+    joinpath(SAVE_DIR, "wecc240_dynamic_results_$(yr).bson"),
+    meta=meta, results=results
 )
