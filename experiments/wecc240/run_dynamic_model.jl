@@ -26,7 +26,7 @@ function formulate_and_solve_dynamic(
 
     # Get line capacities
     # (Specifically, increase them a little bit)
-    pmax = [min.(line_weight * case.fmax, line_max) / Z for _ in 1:T]
+    pmax = [line_weight * min.(case.fmax / Z, line_max) for _ in 1:T]
     gmax = case.gmax / Z
     d = case.d / Z
     P = case.P / Z
