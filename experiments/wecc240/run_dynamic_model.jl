@@ -44,6 +44,7 @@ function formulate_and_solve_dynamic(
     # Solve
     @time solve!(pmp, OPT)
     g = CarbonNetworks.evaluate(pmp.g)
+    p = CarbonNetworks.evaluate(pmp.p)
 
     # Get generator emissions rates
     co2_rates = get_costs(case.heat, case.fuel, FUEL_EMISSIONS)
@@ -57,7 +58,7 @@ function formulate_and_solve_dynamic(
 
     @show (hour, day, month, pmp.problem.status)
 
-    return (d=d, gmax=gmax, g=g, λ=mefs, co2_rates=co2_rates, status=pmp.problem.status)
+    return (d=d, gmax=gmax, g=g, p=p, λ=mefs, co2_rates=co2_rates, status=pmp.problem.status)
 end
 
 

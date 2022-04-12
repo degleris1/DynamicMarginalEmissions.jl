@@ -31,6 +31,7 @@ function formulate_and_solve_static(hour, day, month; Z=1e3, line_max=100.0, lin
     # Solve
     solve!(pmp, CarbonNetworks.OPT)
     g = CarbonNetworks.evaluate(pmp.g)
+    p = CarbonNetworks.evaluate(pmp.p)
 
     # Get generator emissions rates
     co2_rates = get_costs(case.heat, case.fuel, FUEL_EMISSIONS)
@@ -42,7 +43,7 @@ function formulate_and_solve_static(hour, day, month; Z=1e3, line_max=100.0, lin
     num_constr = sum(f_slack .< 1e-4)
     @show (hour, day, month, pmp.problem.status, num_constr)
 
-    return (d=d, gmax=gmax, g=g, λ=λ, co2_rates=co2_rates, status=pmp.problem.status)
+    return (d=d, gmax=gmax, g=g, p=p, λ=λ, co2_rates=co2_rates, status=pmp.problem.status)
 end
 
 case, meta = make_static_case(1, 1, 1)

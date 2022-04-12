@@ -344,8 +344,9 @@ Todo:
 - Compute total emissions
 - Enable regression-based MEF estimation
 - Compare with diagonal terms in the matrix
-- 
 - Compare with analytic/exact MEF computation
+- demand map: estimate mef bsed on region-level demand and then map to nodal, compare with results from comptuations
+- step behavior . try to explore the cause of that, demand as a regressor. explore congestion level over time. (mef as a function of YY, explore YY)
 """
 
 # ╔═╡ 1d5d1c1c-050a-434e-a977-b8d2aea69b26
@@ -364,6 +365,10 @@ We want to compute, at a given hour, the changes in emissions and related them t
 
 # ╔═╡ 82ad33b1-3719-4aeb-9c82-1f8f1812ed61
 node1, node2
+
+# ╔═╡ df45b862-8d94-4b71-951c-5d84a7d16af2
+# demand at the given hour over the year
+d_h = hcat([results_dyn[d].d[hour] for d in 1:365]...)
 
 # ╔═╡ 13478bcb-c4fc-4532-a1ef-4513b15e3295
 # changes in emissions
@@ -449,6 +454,37 @@ lines!(λ_total_1, color=:red)
 ylims!(ax, -2000, 2000)
 f
 end
+
+# ╔═╡ b886963f-e1a9-4782-918c-f5009e57abc5
+let
+	f = Figure()
+	ax = Axis(f[1,1], xlabel="nodal demand", ylabel=" observed mef")
+
+	scatter!(d_h[node1, :], λ_obs_1)
+	ylims!(ax, -2000, 2000)
+
+	ax = Axis(f[1,2], xlabel="nodal demand", ylabel="true mef")
+
+	scatter!(d_h[node1, :], λ_total_1)
+	ylims!(ax, -2000, 2000)
+
+
+	ax = Axis(f[2,1], xlabel="total demand", ylabel="observed mef")
+
+	scatter!(vec(sum(d_h, dims=1)), λ_obs_1)
+	ylims!(ax, -2000, 2000)
+	
+	ax = Axis(f[2,2], xlabel="total demand", ylabel="true mef")
+
+	scatter!(vec(sum(d_h, dims=1)), λ_total_1)
+	ylims!(ax, -2000, 2000)
+	
+	f
+
+end
+
+# ╔═╡ 14d1cc23-f62f-46ee-bb8d-64f6a9f36c6d
+results[1]
 
 # ╔═╡ bd656131-eb56-467d-8f98-5e8de88266c3
 md"""
@@ -557,12 +593,13 @@ p2=scatter(xx2, ΔE)
 # ╠═d1f26911-bd79-4ce6-b0d8-218f8a772840
 # ╠═dfc765e0-39d3-4ae4-93f0-4f0406f9f358
 # ╟─305bdb8a-e186-4c5a-b927-b7a406ac260a
-# ╟─701285fc-887d-425c-98a3-1ee09235066f
+# ╠═701285fc-887d-425c-98a3-1ee09235066f
 # ╠═1d5d1c1c-050a-434e-a977-b8d2aea69b26
 # ╠═a34e32d8-3e18-4c22-87e2-032360661498
 # ╠═fa51de9f-6f7a-4173-96d4-18f5f225aa1a
 # ╟─be2f82a2-5c22-41a3-abe4-5a6f9de4e6d7
 # ╠═82ad33b1-3719-4aeb-9c82-1f8f1812ed61
+# ╠═df45b862-8d94-4b71-951c-5d84a7d16af2
 # ╠═1fba9a4a-8090-4fc5-a373-670ed04dfb4e
 # ╠═13478bcb-c4fc-4532-a1ef-4513b15e3295
 # ╠═70723775-1912-48ed-9ae5-d4663d0f81d3
@@ -574,7 +611,9 @@ p2=scatter(xx2, ΔE)
 # ╠═8e1f0bef-459d-4598-a01a-e59e00f53247
 # ╠═6f2896ac-ecf6-4256-82e0-0a4070fa14af
 # ╠═982d36b3-a7b6-4066-9441-9e02596423dd
-# ╟─e834a7d2-5dd9-4995-b3c9-3c771673edaa
+# ╠═e834a7d2-5dd9-4995-b3c9-3c771673edaa
+# ╟─b886963f-e1a9-4782-918c-f5009e57abc5
+# ╠═14d1cc23-f62f-46ee-bb8d-64f6a9f36c6d
 # ╟─bd656131-eb56-467d-8f98-5e8de88266c3
 # ╠═6377fd8f-7b2b-4720-bf3a-a542075bcedd
 # ╠═e91052d7-1ca0-4ff5-aae4-1b8ace8f93cf
