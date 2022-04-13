@@ -33,6 +33,7 @@ function formulate_and_solve_static(date; Z=1e3, line_max=100.0, line_weight=1.5
     # Solve
     solve!(pmp, CarbonNetworks.OPT)
     g = CarbonNetworks.evaluate(pmp.g)
+    p = CarbonNetworks.evaluate(pmp.p)
 
     # Get generator emissions rates
     co2_rates = case.co2_rates
