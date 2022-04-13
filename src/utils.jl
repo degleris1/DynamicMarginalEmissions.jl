@@ -63,14 +63,15 @@ function generate_random_data(n, l, ns, T)
     return A, B, cq_dyn, cl_dyn, d_dyn, gmax_dyn, pmax_dyn, P, C, S
 end
 
-function generate_network(n, l, T, ns)
+function generate_network(n, l, T, ns; η=1.)
 
     A, B, cq_dyn, cl_dyn, d_dyn, gmax_dyn, pmax_dyn, P, C, S = generate_random_data(n, l, ns, T)
     β = rand(Exponential(10), n)
     F = make_pfdf_matrix(A, β)
 
     net_dyn = DynamicPowerNetwork(
-        cq_dyn, cl_dyn, pmax_dyn, gmax_dyn, A, B, F, S, P, C, T
+        cq_dyn, cl_dyn, pmax_dyn, gmax_dyn, A, B, F, S, P, C, T;
+        η_c=η, η_d=η
     )
     return net_dyn, d_dyn
 end

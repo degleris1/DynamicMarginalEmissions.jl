@@ -17,15 +17,13 @@ end
 # ╔═╡ db59921e-e998-11eb-0307-e396d43191b5
 begin
 	import Pkg
-	Pkg.activate();
-	using Random, Distributions
-	using Convex, ECOS, Gurobi
+	Pkg.activate(joinpath(@__DIR__, "../dev"));
+	using Random
+	using Convex, ECOS
 	using Plots
 	using PlutoUI
-	using JLD
 	using LinearAlgebra
-	using LightGraphs, SimpleWeightedGraphs, GraphPlot
-	using PlutoUI
+	using LightGraphs, SimpleWeightedGraphs
 end;
 
 # ╔═╡ 0aac9a3f-a477-4095-9be1-f4babe1e2803
@@ -34,8 +32,11 @@ begin
 	using CarbonNetworks
 end
 
-# ╔═╡ 571d1cff-7311-4db8-8ac3-9e10afefaf18
+# ╔═╡ 0107b2ad-5e74-49ce-9231-26caed98c5c3
 using LaTeXStrings
+
+# ╔═╡ 0f7ed93f-72bf-41de-ba6d-f46926d9fc46
+using Distributions
 
 # ╔═╡ c39005df-61e0-4c08-8321-49cc5fe71ef3
 md"""
@@ -44,10 +45,6 @@ md"""
 
 # ╔═╡ 0f9bfc53-8a1a-4e25-a82e-9bc4dc0a11fc
 md"""This notebook aims at illustrating the method developed for computing marginal emissions, as well as the codebase built around it. 
-
-Should we a minimal product
-
-Note this is work in progress. 
 """
 
 # ╔═╡ 44275f74-7e7c-48d5-80a0-0f24609ef327
@@ -103,15 +100,20 @@ Instantiating a random network.
 # ╔═╡ b63b9168-4213-4b95-bc2a-8888c032e9c5
 sample(1:300, 4)
 
+# ╔═╡ 8cb283f4-c3b0-496a-82af-2909b8972a35
+η = 1.
+
 # ╔═╡ 6888f84d-daa9-4cfd-afc8-5aac00aeecab
 begin
 n = 6 # number of nodes
 l = 6 # number of generators
 T = 5 # number of timesteps
 ns = 3 # number of storage nodes
-
-net_dyn, _ = generate_network(n, l, T, ns)
+net_dyn, _ = generate_network(n, l, T, ns; η=η)
 end;
+
+# ╔═╡ 9717e3c8-2c5f-4d20-b537-328d54f6872b
+m = size(net_dyn.B)[2]
 
 # ╔═╡ 176064fe-023b-49ca-ac06-f1a4e4be046c
 begin
@@ -167,9 +169,6 @@ s_rel = .1
 # ╔═╡ 6f08828b-4c4b-4f50-bd40-35805a37aae0
 begin
 	results = zeros(n, T, length(mef_times))
-	
-	# Construct dynamic network
-	η = .95
 
 	# Construct and solve OPF problem
 	opf_dyn = DynamicPowerManagementProblem(net_dyn, d_dyn)
@@ -178,6 +177,43 @@ begin
 	println("Status of problem 1")
 	@show opf_dyn.problem.status
 end
+
+# ╔═╡ d97e0c57-3b57-404f-a019-693951dba5a8
+begin
+	s_vals = zeros(ns, T+1)
+	s_vals[:, 1] = INIT_COND.*net_dyn.C
+	s_vals[:, end] = FINAL_COND.*net_dyn.C
+	for t in 1:T-1
+		s_vals[:, t+1] = evaluate(opf_dyn.s[t])
+	end
+
+	plot((s_vals./net_dyn.C)')
+
+	xlabel!("t")
+	ylabel!("Relative state of charge")
+	# ylims!(0, 1)
+	
+end
+
+# ╔═╡ 6b89319c-8eb9-4001-afc5-5aab8c6aa5f7
+kkt_dims(n, m, l)
+
+# ╔═╡ 98821f05-b7ac-4ff2-8262-7e2731843d2b
+storage_kkt_dims(ns, l)
+
+# ╔═╡ 5ea4cbd9-6799-433c-9a64-acea934a9cfc
+begin
+	n_constraint_static = 6
+	n_constraint_storage = 9
+
+	n_constraints = T*n_constraint_static + T*n_constraint_storage - 2
+end
+
+# ╔═╡ ffaed979-c2a3-4496-83c3-9c680d6e9171
+T*n_constraint_static
+
+# ╔═╡ 2450f5c2-a401-4463-be7f-7ab82b1441ad
+opf_dyn.problem.constraints[38].dual
 
 # ╔═╡ d1d93fe7-79df-4253-86c2-31277ba792fc
 begin
@@ -197,6 +233,9 @@ total_mefs = reshape(sum(results, dims=2), (n, length(mef_times)))
 # ╔═╡ 6870576e-4a46-44c4-978e-223fb4be96bc
 @bind plot_id Slider(1:n)
 
+# ╔═╡ 9869dac0-fbc1-4eb1-a533-5e88fd5a80c6
+md"""The node that we plot is node $(plot_id)"""
+
 # ╔═╡ 6186798f-6711-4222-94bb-f53b2d0fad7d
 begin
 	subplots_mef_storage = Dict()
@@ -209,12 +248,12 @@ begin
 			# ylim=(-1000, 4000), 
 			# yticks = [0, 2000, 4000], 
 			# xticks=xticks_hr,  
-			xlabel=L"t_c", 
+			xlabel="t_c", 
 			ylabel="MEF", 
 			legend=:topright
 		)
 	end
-	plot(subplots_mef_storage[plot_id])
+	# plot(subplots_mef_storage[plot_id])
 
 end
 
@@ -236,8 +275,8 @@ begin
 		c=:balance, #https://docs.juliaplots.org/latest/generated/colorschemes/
 		clim=(-clim_, clim_), 
 		colorbar=false,
-		xlabel=L"t_c",
-		ylabel=L"t_e"
+		xlabel="t_c",
+		ylabel="t_e"
 	)
 	
 	# s_idx == 1 && plot!(ylabel=L"t_e")
@@ -253,8 +292,11 @@ begin
 		
 end
 
-# ╔═╡ 58373196-41ee-4d24-8aea-28b632d1c900
-heatmap_subplts[plot_id]
+# ╔═╡ 469a96f5-fc6f-4a72-a4be-a9e8653e31b3
+begin
+	plot(figsize=(5, 2))
+	plot!(subplots_mef_storage[plot_id], heatmap_subplts[plot_id])
+end
 
 # ╔═╡ edabacdd-8d25-4d64-9d4a-ecf1263ac02e
 md"""
@@ -262,9 +304,11 @@ md"""
 """
 
 # ╔═╡ 3c5edbc5-8fc7-4d09-98a9-85f2efb699a8
-node_sens = 2
+# node on which we run the sensitivity analysis
+node_sens = 1
 
 # ╔═╡ 67ad2564-fb20-4a71-a084-0145e8ed24bc
+# consumption time
 cons_time = 4
 
 # ╔═╡ 5365b74f-595f-4ade-a7af-e8dba53b84f7
@@ -283,11 +327,6 @@ begin
 npoints = 10
 ε = 1e-2
 end;
-
-# ╔═╡ c9b41436-e0a0-4e57-908f-b45e42122e63
-md"""
-The cell below perturbs demand at a given time and then we will plot the different variales as a function of the demand, trying to understand the emergence of those patterns
-"""
 
 # ╔═╡ 91f7d63c-9e30-4fd4-ab39-9fbf58d101dc
 begin
@@ -329,10 +368,13 @@ begin
 		mefs_ = compute_mefs(opf_, net_dyn, d_crt, emissions_rates)
 		
 		for t in 1:T
-			@show evaluate(opf_.s[t])
 			@show ns
 			@show size(s_sensitivity)
-			s_sensitivity[k, :, t] .= evaluate(opf_.s[t])
+			if t < T
+				s_sensitivity[k, :, t] .= evaluate(opf_.s[t])
+			else
+				s_sensitivity[k, :, t] .= FINAL_COND.*opf_.params.C
+			end
 			g_sensitivity[k, :, t] = evaluate(opf_.g[t])
 			# emissions sensitivity at 100% of the demand
 			E_sensitivity[k, :, t] = evaluate(opf_.g[t]).*emissions_rates
@@ -354,11 +396,6 @@ begin #E_ref is the total emissions at a given time
 
 end
 
-# ╔═╡ 4fd2833c-6c23-4009-8734-980d3dd08c91
-md"""
-What is the value of emissions when there is no perturbation? 
-"""
-
 # ╔═╡ 6fcd6e19-58c3-462d-964f-8cd3127b47a4
 sum(E_sensitivity[npoints+1, :, :], dims=1)
 
@@ -366,7 +403,7 @@ sum(E_sensitivity[npoints+1, :, :], dims=1)
 E_ref[:]
 
 # ╔═╡ b85b85d0-e1bc-4fc9-81cf-3792b55e3684
-e_time = 1
+e_time = 4
 
 # ╔═╡ 30511293-8ba5-486e-956b-e9f2a1ed0505
 begin
@@ -460,8 +497,9 @@ end
 # ╟─0f9bfc53-8a1a-4e25-a82e-9bc4dc0a11fc
 # ╟─44275f74-7e7c-48d5-80a0-0f24609ef327
 # ╠═db59921e-e998-11eb-0307-e396d43191b5
-# ╠═571d1cff-7311-4db8-8ac3-9e10afefaf18
 # ╠═0aac9a3f-a477-4095-9be1-f4babe1e2803
+# ╠═0107b2ad-5e74-49ce-9231-26caed98c5c3
+# ╠═0f7ed93f-72bf-41de-ba6d-f46926d9fc46
 # ╠═a32d6a56-8da8-44b0-b659-21030692630a
 # ╠═113e61a9-3b21-48d0-9854-a2fcce904e8a
 # ╠═935dabe1-467f-4c36-bdff-4cb6807b672f
@@ -473,6 +511,8 @@ end
 # ╟─e87dbd09-8696-43bd-84e0-af17517584dd
 # ╠═b63b9168-4213-4b95-bc2a-8888c032e9c5
 # ╠═6888f84d-daa9-4cfd-afc8-5aac00aeecab
+# ╟─9717e3c8-2c5f-4d20-b537-328d54f6872b
+# ╠═8cb283f4-c3b0-496a-82af-2909b8972a35
 # ╠═176064fe-023b-49ca-ac06-f1a4e4be046c
 # ╟─a8ccbc8e-24e6-4214-a179-4edf3cf26dad
 # ╟─496135ec-f720-4d43-8239-d75cc7616f58
@@ -480,25 +520,30 @@ end
 # ╠═91e525b2-a276-4641-bad0-7dd6be026790
 # ╠═cad822b2-4a01-4cc2-b557-fc1693d7a06e
 # ╠═6f08828b-4c4b-4f50-bd40-35805a37aae0
+# ╟─d97e0c57-3b57-404f-a019-693951dba5a8
+# ╠═6b89319c-8eb9-4001-afc5-5aab8c6aa5f7
+# ╠═98821f05-b7ac-4ff2-8262-7e2731843d2b
+# ╠═5ea4cbd9-6799-433c-9a64-acea934a9cfc
+# ╠═ffaed979-c2a3-4496-83c3-9c680d6e9171
+# ╠═2450f5c2-a401-4463-be7f-7ab82b1441ad
 # ╠═d1d93fe7-79df-4253-86c2-31277ba792fc
 # ╟─15293269-580f-4251-be36-4be6ba8c5a46
 # ╠═0740dc70-a532-4818-b09d-b3b8d60fa6ba
-# ╠═6870576e-4a46-44c4-978e-223fb4be96bc
+# ╟─9869dac0-fbc1-4eb1-a533-5e88fd5a80c6
+# ╟─6870576e-4a46-44c4-978e-223fb4be96bc
 # ╟─6186798f-6711-4222-94bb-f53b2d0fad7d
 # ╟─f7e0d09c-40bf-4936-987a-a3bcadae5487
-# ╠═58373196-41ee-4d24-8aea-28b632d1c900
+# ╠═469a96f5-fc6f-4a72-a4be-a9e8653e31b3
 # ╟─edabacdd-8d25-4d64-9d4a-ecf1263ac02e
 # ╠═3c5edbc5-8fc7-4d09-98a9-85f2efb699a8
 # ╠═67ad2564-fb20-4a71-a084-0145e8ed24bc
 # ╟─5365b74f-595f-4ade-a7af-e8dba53b84f7
 # ╠═a9b770e0-b137-40f7-b59a-35ad355b98bd
 # ╠═956e963a-97af-495e-9475-181322ac2e0c
-# ╠═4aed3df5-441b-445b-9277-a38690eb8603
-# ╟─c9b41436-e0a0-4e57-908f-b45e42122e63
+# ╟─4aed3df5-441b-445b-9277-a38690eb8603
 # ╟─91f7d63c-9e30-4fd4-ab39-9fbf58d101dc
-# ╠═77943ac8-36fe-4a13-a36d-db957780d869
-# ╟─4fd2833c-6c23-4009-8734-980d3dd08c91
+# ╟─77943ac8-36fe-4a13-a36d-db957780d869
 # ╠═6fcd6e19-58c3-462d-964f-8cd3127b47a4
 # ╠═2973af52-0bd0-4ba8-855d-297427627e22
 # ╠═b85b85d0-e1bc-4fc9-81cf-3792b55e3684
-# ╠═30511293-8ba5-486e-956b-e9f2a1ed0505
+# ╟─30511293-8ba5-486e-956b-e9f2a1ed0505

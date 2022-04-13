@@ -1,21 +1,23 @@
 include("util.jl")
 
-using Dates
 using BSON
 using CarbonNetworks
 
-DATES = Date(2004, 01, 01) .+ Day.(0:364)
-HOURS = 1:24
+yr = (length(ARGS) > 0) ? parse(Int, ARGS[1]) : 2018
 
+NUM_HOURS = 24 * 3
+DATES = DateTime(yr, 01, 01, 00) .+ Hour.(0:(NUM_HOURS-1))
 
-function formulate_and_solve_static(hour, day, month; Z=1e3, line_max=100.0, line_weight=2.0)
-    case, _ = make_static_case(hour, day, month)
+@show unique(day.(DATES[month.(DATES) .== 2]))
+
+function formulate_and_solve_static(date; Z=1e3, line_max=100.0, line_weight=1.5)
+    case, _ = make_static_case(date)
 
     # Construct flow matrix
     F = make_pfdf_matrix(case.A, case.β)
 
     # Get generator costs
-    fl = get_costs(case.heat, case.fuel, FUEL_COSTS)
+    fl = case.fl
     fq = zeros(length(fl))
 
     # Get line capacities
@@ -31,24 +33,25 @@ function formulate_and_solve_static(hour, day, month; Z=1e3, line_max=100.0, lin
     # Solve
     solve!(pmp, CarbonNetworks.OPT)
     g = CarbonNetworks.evaluate(pmp.g)
+    p = CarbonNetworks.evaluate(pmp.p)
 
     # Get generator emissions rates
-    co2_rates = get_costs(case.heat, case.fuel, FUEL_EMISSIONS)
+    co2_rates = case.co2_rates
 
     # Compute MEFs
     λ = compute_mefs(pmp, net, d, co2_rates)
 
     f_slack = pmax - abs.(F*(case.B * g - d))
     num_constr = sum(f_slack .< 1e-4)
-    @show (hour, day, month, pmp.problem.status, num_constr)
+    @show (date, pmp.problem.status, num_constr)
 
-    return (d=d, gmax=gmax, g=g, λ=λ, status=pmp.problem.status)
+    return (g=g, λ=λ, d=d, gmax=gmax, status=string(pmp.problem.status))
 end
 
-case, meta = make_static_case(1, 1, 1)
-results = [formulate_and_solve_static(h, day(d), month(d)) for h in HOURS, d in DATES]
+case, meta = make_static_case(DATES[1])
+results = [formulate_and_solve_static(d) for d in DATES]
 
 bson(
-    joinpath(SAVE_DIR, "wecc240_static_results.bson"),
-    case=case, meta=meta, results=results
+    joinpath(SAVE_DIR, "wecc240_static_results_$(yr).bson"),
+    meta=meta, case=case, results=results
 )

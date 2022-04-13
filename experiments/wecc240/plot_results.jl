@@ -8,38 +8,61 @@ using InteractiveUtils
 using Pkg; Pkg.activate("")
 
 # ╔═╡ 5303b439-2bbb-4a04-b17e-7df6f2983493
-using CSV, DataFrames
+using CSV, DataFrames, TOML
 
 # ╔═╡ 668445dc-2437-421f-9251-b4044e5849f6
 # We need all of these (including the weird ones like PooledArrays) 
 # to make the BSON file load
-using BSON, SparseArrays, InlineStrings, PooledArrays, MathOptInterface
+using Convex, InlineStrings, PooledArrays, MathOptInterface, BSON
+
+# ╔═╡ 64f8e88a-dfbf-4d25-b40e-af688e9e9f00
+using SparseArrays
 
 # ╔═╡ 32e5f26a-9b2f-4fc0-a0cd-1a5f101f0db9
 using StatsBase: mean
 
-# ╔═╡ 7a42f00e-193c-45ea-951f-dcd4e1c1975f
-using CairoMakie
-
-# ╔═╡ 475293d5-c16a-4251-ab2c-cddb515e85df
-using TOML
+# ╔═╡ e19f3dbe-b54a-45c3-b496-cf762f821ed5
+using Statistics
 
 # ╔═╡ 0f7e3ce7-9cf2-46ea-926b-43b7601246f7
 using StringDistances
 
+# ╔═╡ 7a42f00e-193c-45ea-951f-dcd4e1c1975f
+using CairoMakie
+
+# ╔═╡ 5cb1709a-eda0-41b3-8bff-f58c19608be5
+using PlutoUI
+
 # ╔═╡ 2d3cf797-4cc2-4aad-bc3e-94f5474e99f9
 begin
-	using GeoMakie, Proj4
+	using GeoMakie
 	using GeoMakie.GeoInterface
 	using GeoMakie.GeoJSON
 	using Downloads
 end
 
-# ╔═╡ 5cb1709a-eda0-41b3-8bff-f58c19608be5
-using PlutoUI
+# ╔═╡ cab761be-ee1b-4002-a187-df72c29d9771
+# equivalent to include that will replace it
 
-# ╔═╡ 7984cf6a-9a45-49b0-acff-0a070d60156c
-using Convex
+function ingredients(path::String)
+	# this is from the Julia source code (evalfile in base/loading.jl)
+	# but with the modification that it returns the module instead of the last object
+	name = Symbol(basename(path))
+	m = Module(name)
+	Core.eval(m,
+        Expr(:toplevel,
+             :(eval(x) = $(Expr(:core, :eval))($name, x)),
+             :(include(x) = $(Expr(:top, :include))($name, x)),
+             :(include(mapexpr::Function, x) = $(Expr(:top, :include))(mapexpr, $name, x)),
+             :(include($path))))
+	m
+end;
+
+# ╔═╡ 113b99d8-0708-4da8-a8d6-7c60734e4a31
+util = ingredients("util.jl")
+
+# ╔═╡ f13e5dea-33b9-45c0-876e-42654fe6a8c7
+util.FUEL_EMISSIONS
 
 # ╔═╡ 6db70f24-e8ba-461e-8d86-00e9a37b44d3
 md"""
@@ -50,19 +73,34 @@ md"""
 config = TOML.parsefile(joinpath(@__DIR__, "../../config.toml"))
 
 # ╔═╡ d7598abb-2be7-4e3b-af9e-14827ef5a3b0
-DATA_DIR = config["data"]["DATA_DIR"]
+DATA_DIR = config["data"]["GOOGLE_DRIVE"]
 
 # ╔═╡ 45c73bb3-eecf-4b92-8e91-6a4c83addfdc
 RESULTS_DIR = config["data"]["SAVE_DIR"]
 
+# ╔═╡ ae02b617-f2d0-4fa6-86f9-3a6e4088a803
+begin
+	fnm_static = "wecc240_static_results_initialCode.bson"
+	fnm_dynamic = "wecc240_dynamic_results_COND50_initialCode.bson"
+end
+
 # ╔═╡ 6de86962-a420-4885-ae7a-18748549c4c2
-path = joinpath(DATA_DIR, "wecc240_static_results.bson")
+path = joinpath(DATA_DIR, fnm_static)
 
 # ╔═╡ 2757231c-ef30-417a-87dd-7d155049ba47
 data = BSON.load(path, @__MODULE__);
 
-# ╔═╡ b41420e8-1710-415c-b7d3-8042a19f660f
+# ╔═╡ 37b3f4ba-9fb0-4285-aa33-f9905414c764
 results = data[:results];
+
+# ╔═╡ 8cab03dd-f034-443f-9a60-32aa87d1fde5
+path_dyn = joinpath(DATA_DIR, fnm_dynamic)
+
+# ╔═╡ 83e2c12a-fe36-4123-baf3-0e8c1bdecead
+data_dyn = BSON.load(path_dyn, @__MODULE__);
+
+# ╔═╡ 704175e9-921e-42ea-877f-35ce07610b8a
+results_dyn = data_dyn[:results];
 
 # ╔═╡ e3288d1f-4b66-49d5-9270-57827151a361
 nodes = data[:meta].node_names
@@ -72,33 +110,19 @@ md"""
 ## Load substation data
 """
 
-# ╔═╡ 34b6c866-0fc6-4f7d-91b5-15e27277ce9d
+# ╔═╡ 0f0b8da3-30b6-4166-aab8-322ee320e971
+"""
+Assign a geographical coordinate to nodes in the network. 
+"""
+
+# ╔═╡ bfb33d19-ceca-4a3a-87d0-d75960cd4544
+begin
 wecc_states = uppercase.(["ca", "or", "wa", "nv", "mt", "id", "wy", "ut", "co", "az", "nm"])
-
-# ╔═╡ b4f18908-f62f-479e-b808-4847c03dfd5d
 substations = let
-	df = DataFrame(CSV.File("/Users/degleris/Downloads/substations.csv"))
-	filter!(r -> !ismissing(r.STATE) && r.STATE in wecc_states, df)
-end
-
-# ╔═╡ de6cfbf2-afc6-4156-9c98-62287c8cd990
-node1 = 195
-
-# ╔═╡ 7756219f-f7c3-4a48-8a24-c65c8c0521c5
-node2 = 50
-
-# ╔═╡ ec338b2e-4106-454d-8687-237602636cf1
-k = 50
-
-# ╔═╡ d987edd6-421d-43f9-b54d-d63429db2a21
-nodes[k], rstrip(nodes[k][1:end-10])
-
-# ╔═╡ e4b7ffa3-9ee9-4e1b-8ec7-cf9965659c0c
-findnearest(
-	rstrip(nodes[k][1:end-10]), 
-	coalesce.(substations.NAME, ""), 
-	DamerauLevenshtein()
-)
+df = DataFrame(CSV.File(joinpath(DATA_DIR, "substations.csv")))
+filter!(r -> !ismissing(r.STATE) && r.STATE in wecc_states, df)
+end;
+end;
 
 # ╔═╡ a0591816-88a4-4144-9d43-09f1205614af
 function get_coords(node)
@@ -108,13 +132,13 @@ function get_coords(node)
 		 DamerauLevenshtein()
 	 )
 	 return substations.LATITUDE[i], substations.LONGITUDE[i]
-end
+end;
 
-# ╔═╡ 1190a679-bd6c-434f-962c-7e8a26b06213
+# ╔═╡ 5392f525-ecb3-47c7-a32f-73a6b02967df
+begin
 x = [c[2] for c in get_coords.(nodes)]
-
-# ╔═╡ e6e6a795-13f2-4cc0-97ba-83de95011696
 y = [c[1] for c in get_coords.(nodes)]
+end;
 
 # ╔═╡ d2bacf4a-af37-4ff9-bebb-3dc3d06edd8a
 md"""
@@ -130,36 +154,19 @@ mefs = [v ? d.λ : missing for (d, v) in zip(results, is_valid)];
 # ╔═╡ cfcc5416-2038-48c4-a2b0-bcd92b574441
 demands = [v ? d.d : missing for (d, v) in zip(results, is_valid)];
 
+# ╔═╡ ad687e9a-9d7b-4990-9772-d9cfafe26421
+begin
+	node1 = 195
+	node2 = 50
+end
+
 # ╔═╡ cbc71e2e-0bd1-441c-bf17-c60053a60795
 md"""
 ## Plot!
 """
 
-# ╔═╡ 5e79de08-58a1-4ddc-ac01-5a8f48a1b02d
-# let
-# 	fig = Figure()
-# 	ax = Axis(fig[1, 1], xgridvisible=false, ygridvisible=false)
-# 	sct = scatter!(ax, x, y, markersize=7, color=λ, colormap=:jet1, colorrange=(0.0, 1000.0))
-
-# 	A = data[:case].A
-# 	for j in 1:size(A, 2)
-# 		fr = findfirst(==(-1), A[:, j])
-# 		to = findfirst(==(1), A[:, j])
-
-# 		lines!(ax, [x[fr]; x[to]], [y[fr]; y[to]], color=(:gray, 0.1))
-# 	end
-# 	Colorbar(fig[1, 2], sct, label="Marginal Emissions Rate [kg CO2 / MWh]")
-
-# 	ax.xticks = [-150]
-# 	ax.yticks = [20]
-# 	ax.title = "WECC 2004: Average Nodal MEFs at Hour $hour"
-
-# 	fig
-# end;
-"Old plot"
-
 # ╔═╡ 59316c15-a94c-4c56-a30a-0e6c23629de7
-hour = 12
+hour = 6
 
 # ╔═╡ 161fcf67-b65b-4661-bc9e-ff714268b444
 λ = mean(skipmissing(mefs[hour, :]))[:, 1]
@@ -235,17 +242,8 @@ fig_map()[1];
 
 # ╔═╡ e5e10f07-1001-4438-b32d-c1f25cce04b1
 md"""
-## Load dynamic data
+## Analyze dynamic data
 """
-
-# ╔═╡ 8cab03dd-f034-443f-9a60-32aa87d1fde5
-path_dyn = "/Users/degleris/Data/carbon_networks/wecc240_dynamic_results.bson"
-
-# ╔═╡ 83e2c12a-fe36-4123-baf3-0e8c1bdecead
-data_dyn = BSON.load(path_dyn, @__MODULE__);
-
-# ╔═╡ 704175e9-921e-42ea-877f-35ce07610b8a
-results_dyn = data_dyn[:results];
 
 # ╔═╡ b90eb7df-a78c-4bc5-ae3b-41f62e38da54
 total_mef(λ) = sum(λ, dims=1)[1, :][hour]
@@ -254,7 +252,7 @@ total_mef(λ) = sum(λ, dims=1)[1, :][hour]
 nodal_mef_dyn(n) = reduce(vcat, [total_mef(results_dyn[d].λ[n, :, :]) for d in 1:365])
 
 # ╔═╡ d1f26911-bd79-4ce6-b0d8-218f8a772840
-all_λs_dyn = reduce(hcat, [nodal_mef_dyn(n) for n in 1:length(nodes)])
+all_λs_dyn = reduce(hcat, [nodal_mef_dyn(n) for n in 1:length(nodes)]);
 
 # ╔═╡ b53cc8dd-c36e-4cf8-9f1d-473a0e985234
 function fig_distr(fig = Figure(resolution=(300, 300)))
@@ -332,78 +330,56 @@ save(joinpath(RESULTS_DIR, "wecc240_full_figure.pdf"), full_figure)
 # ╔═╡ dfc765e0-39d3-4ae4-93f0-4f0406f9f358
 λ_dyn = mean(all_λs_dyn, dims=1)[1, :]
 
-# ╔═╡ e0a6073a-55fb-44f1-9598-e20106a4bf43
-# let
-# 	fig = Figure()
-# 	ax = Axis(fig[1, 1])
-# 	hm = heatmap!(ax, results_dyn[].λ[node1, :, :], colormap=:redsblues, colorrange=(-2000, 2000))
-
-# 	Colorbar(fig[1, 2], hm)
-
-# 	fig
-# end
-
-# ╔═╡ 4e0d39c7-83cb-45af-bf6a-9ff0fefd3bae
-results_dyn[90].status
-
-# ╔═╡ b5e6bd79-6f55-4fdc-9ca6-189bbe842c7e
-data[:meta].df.storage
-
 # ╔═╡ Cell order:
 # ╠═0ae79723-a5cf-4508-b41d-9622948185a9
 # ╠═5303b439-2bbb-4a04-b17e-7df6f2983493
 # ╠═668445dc-2437-421f-9251-b4044e5849f6
+# ╠═64f8e88a-dfbf-4d25-b40e-af688e9e9f00
 # ╠═32e5f26a-9b2f-4fc0-a0cd-1a5f101f0db9
-# ╠═7a42f00e-193c-45ea-951f-dcd4e1c1975f
-# ╠═475293d5-c16a-4251-ab2c-cddb515e85df
+# ╠═e19f3dbe-b54a-45c3-b496-cf762f821ed5
+# ╟─cab761be-ee1b-4002-a187-df72c29d9771
+# ╟─113b99d8-0708-4da8-a8d6-7c60734e4a31
+# ╟─f13e5dea-33b9-45c0-876e-42654fe6a8c7
 # ╟─6db70f24-e8ba-461e-8d86-00e9a37b44d3
 # ╠═f9fab4fe-baec-4bfd-9d84-ef9caac85f5f
 # ╠═d7598abb-2be7-4e3b-af9e-14827ef5a3b0
 # ╠═45c73bb3-eecf-4b92-8e91-6a4c83addfdc
+# ╠═ae02b617-f2d0-4fa6-86f9-3a6e4088a803
 # ╠═6de86962-a420-4885-ae7a-18748549c4c2
 # ╠═2757231c-ef30-417a-87dd-7d155049ba47
-# ╠═b41420e8-1710-415c-b7d3-8042a19f660f
+# ╠═37b3f4ba-9fb0-4285-aa33-f9905414c764
+# ╠═8cab03dd-f034-443f-9a60-32aa87d1fde5
+# ╠═83e2c12a-fe36-4123-baf3-0e8c1bdecead
+# ╠═704175e9-921e-42ea-877f-35ce07610b8a
 # ╠═e3288d1f-4b66-49d5-9270-57827151a361
 # ╟─b4f91614-ada2-4961-8913-96855f7ca81b
-# ╠═34b6c866-0fc6-4f7d-91b5-15e27277ce9d
-# ╠═b4f18908-f62f-479e-b808-4847c03dfd5d
+# ╟─0f0b8da3-30b6-4166-aab8-322ee320e971
 # ╠═0f7e3ce7-9cf2-46ea-926b-43b7601246f7
-# ╠═de6cfbf2-afc6-4156-9c98-62287c8cd990
-# ╠═7756219f-f7c3-4a48-8a24-c65c8c0521c5
-# ╠═ec338b2e-4106-454d-8687-237602636cf1
-# ╠═d987edd6-421d-43f9-b54d-d63429db2a21
-# ╠═e4b7ffa3-9ee9-4e1b-8ec7-cf9965659c0c
 # ╠═a0591816-88a4-4144-9d43-09f1205614af
-# ╠═1190a679-bd6c-434f-962c-7e8a26b06213
-# ╠═e6e6a795-13f2-4cc0-97ba-83de95011696
+# ╠═bfb33d19-ceca-4a3a-87d0-d75960cd4544
+# ╠═5392f525-ecb3-47c7-a32f-73a6b02967df
 # ╟─d2bacf4a-af37-4ff9-bebb-3dc3d06edd8a
 # ╠═3c9f279c-ca03-4a8d-b9bc-3ad3668b76f7
 # ╠═29d3d70d-03d2-4883-9efd-ff382afef4af
 # ╠═cfcc5416-2038-48c4-a2b0-bcd92b574441
 # ╠═161fcf67-b65b-4661-bc9e-ff714268b444
 # ╠═2c0c2056-01a0-48eb-852d-92a172703975
+# ╠═ad687e9a-9d7b-4990-9772-d9cfafe26421
 # ╠═a9362a09-277b-4e97-9e66-d6df99f18a70
 # ╠═fe91b3ba-3159-48b0-a3d5-7af7bfe6fc34
 # ╟─cbc71e2e-0bd1-441c-bf17-c60053a60795
-# ╠═2d3cf797-4cc2-4aad-bc3e-94f5474e99f9
-# ╟─5e79de08-58a1-4ddc-ac01-5a8f48a1b02d
+# ╠═7a42f00e-193c-45ea-951f-dcd4e1c1975f
 # ╠═5cb1709a-eda0-41b3-8bff-f58c19608be5
+# ╠═2d3cf797-4cc2-4aad-bc3e-94f5474e99f9
 # ╠═59316c15-a94c-4c56-a30a-0e6c23629de7
 # ╠═07268e37-5b62-4ab3-8d0d-5bab2286cdbe
 # ╟─7ffbe1bc-8cc6-4033-a70b-880209164199
 # ╠═e1a1acda-1d52-45bd-8257-8b7249318c9b
-# ╠═b53cc8dd-c36e-4cf8-9f1d-473a0e985234
-# ╠═c6f2eb39-a0e6-44bf-8649-f25ef72961a4
+# ╟─b53cc8dd-c36e-4cf8-9f1d-473a0e985234
+# ╟─c6f2eb39-a0e6-44bf-8649-f25ef72961a4
 # ╠═5154fdd8-a58d-4faa-aced-7212ed0dc705
-# ╠═e5e10f07-1001-4438-b32d-c1f25cce04b1
-# ╠═7984cf6a-9a45-49b0-acff-0a070d60156c
-# ╠═8cab03dd-f034-443f-9a60-32aa87d1fde5
-# ╠═83e2c12a-fe36-4123-baf3-0e8c1bdecead
-# ╠═704175e9-921e-42ea-877f-35ce07610b8a
+# ╟─e5e10f07-1001-4438-b32d-c1f25cce04b1
 # ╠═b90eb7df-a78c-4bc5-ae3b-41f62e38da54
 # ╠═d4d509bd-8f96-4da3-917f-a65acb569953
 # ╠═d1f26911-bd79-4ce6-b0d8-218f8a772840
 # ╠═dfc765e0-39d3-4ae4-93f0-4f0406f9f358
-# ╠═e0a6073a-55fb-44f1-9598-e20106a4bf43
-# ╠═4e0d39c7-83cb-45af-bf6a-9ff0fefd3bae
-# ╠═b5e6bd79-6f55-4fdc-9ca6-189bbe842c7e

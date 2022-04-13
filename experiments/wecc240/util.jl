@@ -1,10 +1,12 @@
 using Pkg; Pkg.activate(joinpath(@__DIR__, "../../dev"))
 
 using CSV
+using Dates
 using DataFrames
 using SparseArrays: spzeros
 using StatsBase: mean
 using TOML
+using XLSX
 
 config = TOML.parsefile(joinpath(@__DIR__, "../../config.toml"))
 DATA_DIR = joinpath(config["data"]["DATA_DIR"], "wecc240")
@@ -20,10 +22,15 @@ STORAGE_PATH = joinpath(DATA_DIR, "Storage & DR-Table 1.csv")
 HEAT_RATE_COAL = 10.3
 
 # https://www.eia.gov/totalenergy/data/annual/showtext.php?t=ptb0303
-FUEL_COSTS = Dict('G' => 7.91, 'C' => 1.41)
+FUEL_COSTS = Dict('G' => 7.91, 'C' => 1.41, 'R' => 1.0)
+
+# https://www.eia.gov/electricity/annual/html/epa_07_04.html
+FUEL_COSTS_18 = Dict('G' => 3.55, 'C' => 2.06, 'R' => 1.0)
 
 # https://www.epa.gov/sites/default/files/2015-07/documents/emission-factors_2014.pdf
-FUEL_EMISSIONS = Dict('G' => 53.0, 'C' => 97.0)
+FUEL_EMISSIONS = Dict('G' => 53.0, 'C' => 97.0, 'R' => 0.0)
+
+include("nrel.jl")
 
 
 """
@@ -44,7 +51,43 @@ end
 
 Return data for specifying a static case (no storage or ramping).
 """
-function make_static_case(hour, day, month, year=2004)
+function make_static_case(date)
+    @assert year(date) in [2004, 2018]
+
+    if year(date) == 2004
+        return _make_static_case2004(date)
+    else  # year == 2018
+        return _make_static_case2018(date)
+    end
+end
+
+function _make_static_case2018(date)
+    params = get_nrel_data(date)
+
+    (; name, lat, lon) = params.node
+    (; gmin, B, ramp, cost, fuel) = params.gen
+    (; A, β, fmax) = params.line
+    d = params.dt
+    gmax = params.gt
+
+    fl = cost
+
+    # To get the CO2 rate, divide the cost by the fuel cost to get the heat rate
+    # Then multiple by the emissions rate
+    _fuel = [get(NREL_FUEL_MAP, f, 'R') for f in fuel]
+    fuel_cost = [FUEL_COSTS_18[f] for f in _fuel]
+    fuel_emissions_rates = [FUEL_EMISSIONS[f] for f in _fuel]
+    co2_rates = (fl ./ fuel_cost) .* fuel_emissions_rates
+
+    case = (
+        A=A, β=β, fmax=fmax, 
+        B=B, gmin=gmin, gmax=gmax, ramp=ramp, fuel=fuel, fl=fl, co2_rates=co2_rates,
+        d=d,
+    )
+    return case, params
+end
+
+function _make_static_case2004(date)
     df = load_wecc_240_dataset()
 
     # Network structure
@@ -52,16 +95,19 @@ function make_static_case(hour, day, month, year=2004)
     A, β, fmax, cf = get_network_structure(df.branch)
 
     # Demand data
-    demand_map = get_demand_map(hour, day, month, year, df.demand)
+    demand_map = get_demand_map(hour(date)+1, day(date), month(date), year(date), df.demand)
     d = make_demand_vector(demand_map, node_names, df.participation)
 
     # Generator data
     B, gmin, gmax, ramp, heat, fuel = get_generator_data(demand_map, node_ids, df.gen, df.heat)
 
+    fl = get_costs(heat, fuel, FUEL_COSTS)
+    co2_rates = get_costs(heat, fuel, FUEL_EMISSIONS)
+
     meta = (node_names=node_names, node_ids=node_ids, df=df)
     case = (
         A=A, β=β, fmax=fmax, cf=cf, d=d, 
-        B=B, gmin=gmin, gmax=gmax, ramp=ramp, heat=heat, fuel=fuel
+        B=B, gmin=gmin, gmax=gmax, ramp=ramp, fuel=fuel, fl=fl, co2_rates=co2_rates,
     )
     return case, meta
 end
@@ -72,7 +118,49 @@ end
 
 Return data for specifying a dynamic case, for a given duration T in number of timesteps.
 """
-function make_dynamic_case(hour, day, month, T, year=2004, δ=1e-4)
+function make_dynamic_case(date, T)
+    @assert year(date) in [2004, 2018]
+
+    if year(date) == 2004
+        return _make_dynamic_case2004(date, T)
+    else  # year == 2018
+        return _make_dynamic_case2018(date, T)
+    end
+end
+
+function _make_dynamic_case2018(date, T, δ=1e-4)
+    params = [get_nrel_data(date + Hour(t)) for t in 0:(T-1)]
+
+    (; name, lat, lon) = params[1].node
+    (; B, cost, fuel) = params[1].gen
+    (; A, β, fmax) = params[1].line
+    (; S, ηd, ηc, P, C) = params[1].storage
+
+    d = [p.dt for p in params]
+    gmin = [p.gen.gmin for p in params]
+    gmax = [p.gt for p in params]
+    ramp = [p.gen.ramp for p in params]
+    
+    fl = [cost for _ in 1:T]
+
+
+    # To get the CO2 rate, divide the cost by the fuel cost to get the heat rate
+    # Then multiple by the emissions rate
+    _fuel = [get(NREL_FUEL_MAP, f, 'R') for f in fuel]
+    fuel_cost = [FUEL_COSTS_18[f] for f in _fuel]
+    fuel_emissions_rates = [FUEL_EMISSIONS[f] for f in _fuel]
+    co2_rates = (cost ./ fuel_cost) .* fuel_emissions_rates
+
+    case = (
+        A=A, β=β, fmax=fmax, 
+        B=B, gmin=gmin, gmax=gmax, ramp=ramp, fuel=fuel, fl=fl, co2_rates=co2_rates,
+        S=S, P=P, C=C, η_c=mean(ηc), η_d=mean(ηd),
+        d=d,
+    )
+    return case, params
+end
+
+function _make_dynamic_case2004(date, T, δ=1e-4)
     df = load_wecc_240_dataset()
 
     # Network structure
@@ -93,7 +181,7 @@ function make_dynamic_case(hour, day, month, T, year=2004, δ=1e-4)
     fuel = nothing
 
     for dt = 0:T-1
-        demand_map = get_demand_map(hour+dt, day, month, year, df.demand)
+        demand_map = get_demand_map(hour(date)+1+dt, day(date), month(date), year(date), df.demand)
         d = make_demand_vector(demand_map, node_names, df.participation)
         push!(d_dyn, d)
 
@@ -102,6 +190,9 @@ function make_dynamic_case(hour, day, month, T, year=2004, δ=1e-4)
         push!(gmax_dyn, gmax)
         push!(ramp_dyn, ramp)
     end
+
+    fl = [get_costs(heat, fuel, FUEL_COSTS) for _ in 1:T]
+    co2_rates = get_costs(heat, fuel, FUEL_EMISSIONS)
 
     # Storage data
     # TODO: clarify the meaning of each parameter
@@ -112,8 +203,8 @@ function make_dynamic_case(hour, day, month, T, year=2004, δ=1e-4)
     meta = (node_names=node_names, node_ids=node_ids, df=df)
     case = (
         A=A, β=β, fmax=fmax, cf=cf, d=d_dyn, 
-        B=B, gmin=gmin_dyn, gmax=gmax_dyn, ramp=ramp_dyn, heat=heat, fuel=fuel, 
-        η=sqrt(mean(efficiency)), C=s_capacity, P=s_rate, S=S
+        B=B, gmin=gmin_dyn, gmax=gmax_dyn, ramp=ramp_dyn, fuel=fuel, fl=fl, co2_rates=co2_rates,
+        η_c=sqrt(mean(efficiency)), η_d=sqrt(mean(efficiency)), C=s_capacity, P=s_rate, S=S
     )
     return case, meta
 end
