@@ -38,7 +38,7 @@ function formulate_and_solve_static(hour, day, month; Z=1e3, line_max=100.0, lin
     # Compute MEFs
     λ = compute_mefs(pmp, net, d, co2_rates)
 
-    f_slack = pmax - abs.(F*(case.B * g - d))
+    f_slack = [pmax; pmax] - abs.(F*(case.B * g - d))
     num_constr = sum(f_slack .< 1e-4)
     @show (hour, day, month, pmp.problem.status, num_constr)
 
