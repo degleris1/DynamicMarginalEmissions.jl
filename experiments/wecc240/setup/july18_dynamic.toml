@@ -1,4 +1,4 @@
-RUN_ID = "july18_static"
+RUN_ID = "july18_dynamic"
 START_DATETIME = "2018-07-01-00"
 TIME_HORIZON = 24
 NUM_DAYS = 31
