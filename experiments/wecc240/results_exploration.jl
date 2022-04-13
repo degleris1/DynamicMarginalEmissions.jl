@@ -24,6 +24,9 @@ using StatsBase: mean
 # ╔═╡ e19f3dbe-b54a-45c3-b496-cf762f821ed5
 using Statistics
 
+# ╔═╡ 31aedaa9-2d5c-4ddf-acfa-8b836a252f70
+using CarbonNetworks
+
 # ╔═╡ 0f7e3ce7-9cf2-46ea-926b-43b7601246f7
 using StringDistances
 
@@ -341,16 +344,12 @@ md"""
 # ╔═╡ 701285fc-887d-425c-98a3-1ee09235066f
 md"""
 Todo: 
-- Compute total emissions
-- Enable regression-based MEF estimation
-- Compare with diagonal terms in the matrix
-- Compare with analytic/exact MEF computation
 - demand map: estimate mef bsed on region-level demand and then map to nodal, compare with results from comptuations
-- step behavior . try to explore the cause of that, demand as a regressor. explore congestion level over time. (mef as a function of YY, explore YY)
 """
 
 # ╔═╡ 1d5d1c1c-050a-434e-a977-b8d2aea69b26
-co2_costs = util.get_costs(data[:case].heat, data[:case].fuel, util.FUEL_EMISSIONS)
+# get the co2 costs if they were not saved
+co2_costs = util.get_costs(data[:case].heat, data[:case].fuel, util.FUEL_EMISSIONS);
 
 # ╔═╡ a34e32d8-3e18-4c22-87e2-032360661498
 g_opt = [[results_dyn[d].g[k].value for k in 1:24] for d in 1:365];
@@ -366,18 +365,85 @@ We want to compute, at a given hour, the changes in emissions and related them t
 # ╔═╡ 82ad33b1-3719-4aeb-9c82-1f8f1812ed61
 node1, node2
 
+# ╔═╡ 7213814b-3dd9-4c8d-9f85-947a33d96e44
+# recontsruct the flows over the network
+function get_ps(case, results)
+
+	F = CarbonNetworks.make_pfdf_matrix(case.A, case.β)
+
+	ps = []
+
+	for k in 1:length(results)
+		p_crt = []
+		for j in 1:length(results[k].g)
+			g_crt = results[k].g[j]
+			d_crt = results[k].d[j]
+			p = CarbonNetworks.evaluate(F*(d_crt - case.B*g_crt))
+			push!(p_crt, p)
+		end
+		push!(ps, p_crt)
+	end
+
+	return ps
+end
+
+# ╔═╡ ff851aef-904f-444a-afb4-f7ef7d7766c4
+ps_dyn = get_ps(data_dyn[:case], results_dyn);
+
+# ╔═╡ d9f9dda4-b559-44a4-9677-fbe967322b2b
+# get pmax - HARDCODED for now
+begin
+line_weight = 2.0
+line_max = 100.0
+Z = 1e3
+pmax = line_weight * min.(data_dyn[:case].fmax / Z, line_max);
+end;
+
+# ╔═╡ 2ac72e25-e6f8-4468-be71-f64b3797a96c
+# gets the number of congested lines at each timestep
+congested = [[sum(abs.(ps_dyn[d][h]./pmax) .> .99) for h in 1:24] for d in 1:365];
+
 # ╔═╡ df45b862-8d94-4b71-951c-5d84a7d16af2
 # demand at the given hour over the year
-d_h = hcat([results_dyn[d].d[hour] for d in 1:365]...)
+d_h = hcat([results_dyn[d].d[hour] for d in 1:365]...);
+
+# ╔═╡ 087a3ba0-14f4-4373-99f1-3dd2ccdb71b9
+gmax = hcat([results_dyn[d].gmax[k] for k in 1:24 for d in 1:365]...)
+
+# ╔═╡ 5ba56789-c1bb-4c1b-95cc-4943561434f4
+md"""
+Plotting all the generator data. 
+"""
+
+# ╔═╡ 44674366-5546-44b7-b6cc-b2476e3c8fc6
+begin
+	f = Figure()
+	ax = Axis(f[1,1], xlabel="time", ylabel="gmax/gmax(t=0)")
+	ng, _ = size(gmax)
+	for gid in 1:ng
+		lines!(gmax[gid, :]./gmax[gid, 1], color="gray")
+	end
+	f
+end
+
+
+# ╔═╡ 91b474ba-e955-416c-8bc7-aa2d9b88995f
+md"""
+
+## regression-based mef estimation
+"""
+
+# ╔═╡ e1b5c93e-9241-442b-a8ce-5c7d91809efc
+md"""
+Regressing over each node
+"""
 
 # ╔═╡ 13478bcb-c4fc-4532-a1ef-4513b15e3295
 # changes in emissions
-
 ΔE = [(E_tot[d][hour] - E_tot[d][hour-1]) for d in 1:365];
 
 # ╔═╡ 70723775-1912-48ed-9ae5-d4663d0f81d3
-# gather all the demand changes, at ever node
-
+# gather all the demand changes, at every node
 Δd = hcat([
 	[results_dyn[d].d[hour][n] - results_dyn[d].d[hour-1][n] for d in 1:365] 
 	for n in 1:length(nodes)
@@ -403,6 +469,85 @@ lines(MEFs_reg)
 # ╔═╡ db737f8d-ed35-43c8-84fb-c7329763b3c1
 MEFs_reg[node1]
 
+# ╔═╡ 5e77a674-9ece-415e-abd5-2b244e47beb9
+md"""
+Regressing over demand regions.
+"""
+
+# ╔═╡ 3a472b5f-b6f4-462c-9e4e-513ff6b6e6c0
+df = util.load_wecc_240_dataset()
+
+# ╔═╡ 870d811d-ece6-4513-8f9a-558585d0d70a
+df.demand
+
+# ╔═╡ 18941712-b800-48c3-ad09-b16a0e5a8f9b
+demand_map = util.get_demand_map(1, 1, 1, 2004, df.demand)
+
+# ╔═╡ c81d94e7-0c70-44c7-8112-470fc51a0adb
+demand_map["10 SOUTHWST"]
+
+# ╔═╡ 64173d8e-b948-4061-bb55-d5d2c87e1fd2
+size(df.participation)
+
+# ╔═╡ 21b39b31-3936-43b8-a97f-80f8ad7b1aea
+length(demand_map)
+
+# ╔═╡ 8d7c5fd9-5325-481a-a572-ca4e8dcc8655
+regions = unique(Array(df.participation[:, "Region"]))
+
+# ╔═╡ adab0eb6-8c01-446e-8d65-cb87369ab0f1
+length(regions)
+
+# ╔═╡ 00c62ecd-2753-4895-ba3a-19d68561b680
+length(unique(collect(keys(demand_map))))
+
+# ╔═╡ 4c800043-fbfe-4940-8f89-9dc023f87141
+df.demand[1, "Year"]
+
+# ╔═╡ 2238db2f-3860-4abb-938a-8b771b0ee6d8
+# we want to create a vector of demands for all the regions only
+begin
+
+	demands_regions = []
+
+	for k in 1:size(df.demand)[1]
+		yr = df.demand[k, "Year"]
+		month = df.demand[k, "Month"]
+		day = df.demand[k, "Day"]
+		hr = df.demand[k, "Period"]
+
+		demand_map = util.get_demand_map(hr, day, month, yr, df.demand)
+
+		d_regions = [demand_map[rr] for rr in regions]
+
+		push!(demands_regions, d_regions)
+		
+	end
+	demands_regions = hcat(demands_regions...)
+end
+
+# ╔═╡ 4a1b69b6-1567-4199-9a32-b2019e88366c
+begin
+	_, nts = size(demands_regions)
+	ndays = Int(nts/24)
+	idx_hr = [hour+k*24 for k in 0:ndays-1]
+end
+
+# ╔═╡ 6f68dfa5-7f43-4ed0-baf0-683b8c14cc5b
+Δd_regions = transpose(hcat([demands_regions[:, idx] - demands_regions[:, idx-1] for idx in idx_hr]...))
+
+# ╔═╡ db354372-b117-4237-afc2-f68a98788f42
+length(ΔE)
+
+# ╔═╡ a61fa2b2-7304-426b-bdfe-6bb1c23f46c2
+md"""Q? why is the length 365 and not 366? I am guessing because feb 29th is omitted in the results? we can simply take it out of Δd_regions. 
+"""
+
+# ╔═╡ 90aa489d-3c50-4c4a-ac19-351de901fbe4
+md"""
+## add subtitle
+"""
+
 # ╔═╡ 28591eda-995f-4224-98b8-ca1eab27559e
 # only the diagonal terms in the mefs
 all_λs_obs_dyn = [[diag(results_dyn[d].λ[n, :, :]) for d in 1:365] for n in 1:length(nodes)];
@@ -417,6 +562,36 @@ begin
 	λ_total_1 = all_λs_dyn[:, node1]
 	λ_total_2 = all_λs_dyn[:, node2]
 end;
+
+# ╔═╡ 34253cd5-3049-4651-a5f6-06807a2233bd
+let
+	f = Figure()
+	ax = Axis(f[1,1], xlabel="day", ylabel="number of congested lines")
+
+	lines!([congested[d][hour] for d in 1:365])
+	lines!(λ_total_1./1000)
+
+	ax = Axis(f[1,2], xlabel="total demand", ylabel="number congested lines")
+
+	scatter!(vec(sum(d_h, dims=1)), [congested[d][hour] for d in 1:365])
+	# ylims!(ax, -2000, 2000)
+
+	ax = Axis(f[2,2], xlabel="# congested lines", ylabel="λ true")
+
+	scatter!([congested[d][hour] for d in 1:365], λ_total_1)
+	ylims!(ax, -2000, 2000)
+
+
+	ax = Axis(f[2,1], xlabel="# congested lines", ylabel="observed mef")
+
+	scatter!([congested[d][hour] for d in 1:365], λ_obs_1)
+	ylims!(ax, -2000, 2000)
+	
+
+	
+	f
+
+end
 
 # ╔═╡ 6f2896ac-ecf6-4256-82e0-0a4070fa14af
 begin
@@ -483,9 +658,6 @@ let
 
 end
 
-# ╔═╡ 14d1cc23-f62f-46ee-bb8d-64f6a9f36c6d
-results[1]
-
 # ╔═╡ bd656131-eb56-467d-8f98-5e8de88266c3
 md"""
 There clearly are two populations. Therefore you want to: 
@@ -546,6 +718,7 @@ p2=scatter(xx2, ΔE)
 # ╠═64f8e88a-dfbf-4d25-b40e-af688e9e9f00
 # ╠═32e5f26a-9b2f-4fc0-a0cd-1a5f101f0db9
 # ╠═e19f3dbe-b54a-45c3-b496-cf762f821ed5
+# ╠═31aedaa9-2d5c-4ddf-acfa-8b836a252f70
 # ╟─cab761be-ee1b-4002-a187-df72c29d9771
 # ╟─113b99d8-0708-4da8-a8d6-7c60734e4a31
 # ╟─f13e5dea-33b9-45c0-876e-42654fe6a8c7
@@ -593,13 +766,23 @@ p2=scatter(xx2, ΔE)
 # ╠═d1f26911-bd79-4ce6-b0d8-218f8a772840
 # ╠═dfc765e0-39d3-4ae4-93f0-4f0406f9f358
 # ╟─305bdb8a-e186-4c5a-b927-b7a406ac260a
-# ╠═701285fc-887d-425c-98a3-1ee09235066f
+# ╟─701285fc-887d-425c-98a3-1ee09235066f
 # ╠═1d5d1c1c-050a-434e-a977-b8d2aea69b26
 # ╠═a34e32d8-3e18-4c22-87e2-032360661498
 # ╠═fa51de9f-6f7a-4173-96d4-18f5f225aa1a
 # ╟─be2f82a2-5c22-41a3-abe4-5a6f9de4e6d7
 # ╠═82ad33b1-3719-4aeb-9c82-1f8f1812ed61
+# ╠═7213814b-3dd9-4c8d-9f85-947a33d96e44
+# ╠═ff851aef-904f-444a-afb4-f7ef7d7766c4
+# ╠═d9f9dda4-b559-44a4-9677-fbe967322b2b
+# ╠═2ac72e25-e6f8-4468-be71-f64b3797a96c
+# ╠═34253cd5-3049-4651-a5f6-06807a2233bd
 # ╠═df45b862-8d94-4b71-951c-5d84a7d16af2
+# ╠═087a3ba0-14f4-4373-99f1-3dd2ccdb71b9
+# ╠═5ba56789-c1bb-4c1b-95cc-4943561434f4
+# ╠═44674366-5546-44b7-b6cc-b2476e3c8fc6
+# ╟─91b474ba-e955-416c-8bc7-aa2d9b88995f
+# ╟─e1b5c93e-9241-442b-a8ce-5c7d91809efc
 # ╠═1fba9a4a-8090-4fc5-a373-670ed04dfb4e
 # ╠═13478bcb-c4fc-4532-a1ef-4513b15e3295
 # ╠═70723775-1912-48ed-9ae5-d4663d0f81d3
@@ -607,13 +790,29 @@ p2=scatter(xx2, ΔE)
 # ╠═50acbd4b-1a02-4c55-b605-caf07f12bd74
 # ╠═749ef6df-5909-4f40-a5ff-0ed7877de9ab
 # ╠═db737f8d-ed35-43c8-84fb-c7329763b3c1
+# ╟─5e77a674-9ece-415e-abd5-2b244e47beb9
+# ╠═3a472b5f-b6f4-462c-9e4e-513ff6b6e6c0
+# ╠═870d811d-ece6-4513-8f9a-558585d0d70a
+# ╠═18941712-b800-48c3-ad09-b16a0e5a8f9b
+# ╠═c81d94e7-0c70-44c7-8112-470fc51a0adb
+# ╠═64173d8e-b948-4061-bb55-d5d2c87e1fd2
+# ╠═21b39b31-3936-43b8-a97f-80f8ad7b1aea
+# ╠═8d7c5fd9-5325-481a-a572-ca4e8dcc8655
+# ╠═adab0eb6-8c01-446e-8d65-cb87369ab0f1
+# ╠═00c62ecd-2753-4895-ba3a-19d68561b680
+# ╠═4c800043-fbfe-4940-8f89-9dc023f87141
+# ╠═2238db2f-3860-4abb-938a-8b771b0ee6d8
+# ╠═4a1b69b6-1567-4199-9a32-b2019e88366c
+# ╠═6f68dfa5-7f43-4ed0-baf0-683b8c14cc5b
+# ╠═db354372-b117-4237-afc2-f68a98788f42
+# ╠═a61fa2b2-7304-426b-bdfe-6bb1c23f46c2
+# ╠═90aa489d-3c50-4c4a-ac19-351de901fbe4
 # ╠═28591eda-995f-4224-98b8-ca1eab27559e
 # ╠═8e1f0bef-459d-4598-a01a-e59e00f53247
 # ╠═6f2896ac-ecf6-4256-82e0-0a4070fa14af
 # ╠═982d36b3-a7b6-4066-9441-9e02596423dd
 # ╠═e834a7d2-5dd9-4995-b3c9-3c771673edaa
-# ╟─b886963f-e1a9-4782-918c-f5009e57abc5
-# ╠═14d1cc23-f62f-46ee-bb8d-64f6a9f36c6d
+# ╠═b886963f-e1a9-4782-918c-f5009e57abc5
 # ╟─bd656131-eb56-467d-8f98-5e8de88266c3
 # ╠═6377fd8f-7b2b-4720-bf3a-a542075bcedd
 # ╠═e91052d7-1ca0-4ff5-aae4-1b8ace8f93cf
