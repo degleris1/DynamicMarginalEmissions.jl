@@ -7,7 +7,7 @@ using CarbonNetworks
 yr = (length(ARGS) > 0) ? parse(Int, ARGS[1]) : 2018
 
 DURATION = 24
-NUM_HOURS = 24*365
+NUM_HOURS = 24*364
 DATES = DateTime(yr, 01, 01, 00) .+ Hour.(0:DURATION:(NUM_HOURS-DURATION))
 
 ECOS_OPT = CarbonNetworks.OPT
@@ -59,7 +59,7 @@ function formulate_and_solve_dynamic(
 
     @show (date, pmp.problem.status)
 
-    return (g=g, λ=mefs, status=pmp.problem.status, case=case)
+    return (g=g, λ=mefs, status=pmp.problem.status, d=d, gmax=gmax)
 end
 
 
@@ -67,16 +67,16 @@ case, meta = make_dynamic_case(DATES[1], DURATION)
 
 results = []
 for d in DATES
-    # try
+    try
         r = formulate_and_solve_dynamic(d, DURATION)
         push!(results, r)
-    # catch
-    #     @warn "No mefs on $d"
-    #     push!(results, missing)
-    # end
+    catch
+        @warn "No mefs on $d"
+        push!(results, missing)
+    end
 end
 
 bson(
     joinpath(SAVE_DIR, "wecc240_dynamic_results_$(yr).bson"),
-    meta=meta, results=results
+    meta=meta, case=case, results=results
 )

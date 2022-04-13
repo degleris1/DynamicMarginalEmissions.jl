@@ -22,10 +22,10 @@ STORAGE_PATH = joinpath(DATA_DIR, "Storage & DR-Table 1.csv")
 HEAT_RATE_COAL = 10.3
 
 # https://www.eia.gov/totalenergy/data/annual/showtext.php?t=ptb0303
-FUEL_COSTS = Dict('G' => 7.91, 'C' => 1.41, 'R' => 0.0)
+FUEL_COSTS = Dict('G' => 7.91, 'C' => 1.41, 'R' => 1.0)
 
 # https://www.eia.gov/electricity/annual/html/epa_07_04.html
-FUEL_COSTS_18 = Dict('G' => 3.55, 'C' => 2.06, 'R' => 0.0)
+FUEL_COSTS_18 = Dict('G' => 3.55, 'C' => 2.06, 'R' => 1.0)
 
 # https://www.epa.gov/sites/default/files/2015-07/documents/emission-factors_2014.pdf
 FUEL_EMISSIONS = Dict('G' => 53.0, 'C' => 97.0, 'R' => 0.0)

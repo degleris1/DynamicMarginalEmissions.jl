@@ -21,6 +21,8 @@ end
 
 
 function get_node_params()
+    cleanup(xi) = typeof(xi) <: Real ? xi : Base.parse(Float64, strip.(xi))
+
     df = DataFrame(XLSX.readtable(PATH_NETWORK, "Bus")...)
     df_gis = DataFrame(XLSX.readtable(PATH_GIS, "Test1")...)
     
@@ -29,8 +31,8 @@ function get_node_params()
     id_map = Dict(name => i for (i, name) in enumerate(busnames))
 
     nickname = df_gis[:, "Bus  Name"]
-    lat = df_gis.Lat
-    lon = df_gis.Long
+    lat = cleanup.(df_gis.Lat)
+    lon = cleanup.(df_gis.Long)
 
     return (name=busnames, region=regions, id_map=id_map, nickname=nickname, lat=lat, lon=lon)
 end

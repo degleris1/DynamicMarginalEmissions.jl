@@ -5,12 +5,12 @@ using CarbonNetworks
 
 yr = (length(ARGS) > 0) ? parse(Int, ARGS[1]) : 2018
 
-NUM_HOURS = 24*365
+NUM_HOURS = 24 * 3
 DATES = DateTime(yr, 01, 01, 00) .+ Hour.(0:(NUM_HOURS-1))
 
 @show unique(day.(DATES[month.(DATES) .== 2]))
 
-function formulate_and_solve_static(date; Z=1e3, line_max=100.0, line_weight=2.0)
+function formulate_and_solve_static(date; Z=1e3, line_max=100.0, line_weight=1.5)
     case, _ = make_static_case(date)
 
     # Construct flow matrix
@@ -44,13 +44,13 @@ function formulate_and_solve_static(date; Z=1e3, line_max=100.0, line_weight=2.0
     num_constr = sum(f_slack .< 1e-4)
     @show (date, pmp.problem.status, num_constr)
 
-    return (g=g, λ=λ, status=pmp.problem.status, case=case)
+    return (g=g, λ=λ, d=d, gmax=gmax, status=string(pmp.problem.status))
 end
 
-_, meta = make_static_case(DATES[1])
+case, meta = make_static_case(DATES[1])
 results = [formulate_and_solve_static(d) for d in DATES]
 
 bson(
     joinpath(SAVE_DIR, "wecc240_static_results_$(yr).bson"),
-    meta=meta, results=results
+    meta=meta, case=case, results=results
 )
