@@ -7,6 +7,9 @@ using SparseArrays: spzeros
 using StatsBase: mean
 using TOML
 using XLSX
+using BSON
+
+using CarbonNetworks
 
 config = TOML.parsefile(joinpath(@__DIR__, "../../config.toml"))
 DATA_DIR = joinpath(config["data"]["DATA_DIR"], "wecc240")
@@ -31,6 +34,98 @@ FUEL_COSTS_18 = Dict('G' => 3.55, 'C' => 2.06, 'R' => 1.0)
 FUEL_EMISSIONS = Dict('G' => 53.0, 'C' => 97.0, 'R' => 0.0)
 
 include("nrel.jl")
+
+
+
+
+function formulate_and_solve_dynamic(
+    date, T; 
+    Z=1e3, line_max=100e3, line_weight=2.0,
+)
+    println("-------")
+    @time case = make_dynamic_case(date, T)
+    n, _ = size(case.A)
+
+    # Construct flow matrix
+    F = make_pfdf_matrix(case.A, case.β)
+
+    # Get generator costs
+    fl = case.fl
+    fq = [zeros(length(fl[k])) for k in 1:length(fl)]
+
+    # Get line capacities
+    # (Specifically, increase them a little bit)
+    pmax = [line_weight * min.(case.fmax / Z, line_max) for _ in 1:T]
+    gmax = case.gmax / Z
+    d = case.d / Z
+    P = case.P / Z
+    C = case.C / Z
+    ρ = case.ramp[1] / Z
+
+    # Formulate problem
+    net = DynamicPowerNetwork(
+        fq, fl, pmax, gmax, case.A, case.B, F, case.S,
+        P, C, T; η_c=case.η_c, η_d=case.η_d, ρ=ρ,
+    )
+    pmp = DynamicPowerManagementProblem(net, d)
+
+    # Solve
+    @time solve!(pmp, CarbonNetworks.OPT)
+    g = CarbonNetworks.evaluate(pmp.g)
+    p = CarbonNetworks.evaluate(pmp.p)
+
+    # Get generator emissions rates
+    co2_rates = case.co2_rates
+
+    # Compute MEFs
+    mefs = zeros(n, T, T)
+    @time λ = compute_mefs(pmp, net, d, co2_rates)
+    for ind_t in 1:T
+        mefs[:, :, ind_t] .= λ[ind_t];
+    end
+
+    @show (date, pmp.problem.status)
+
+    return (g=g, λ=mefs, d=d, gmax=gmax, status=string(pmp.problem.status))
+end
+
+function formulate_and_solve_static(date; Z=1e3, line_max=100.0, line_weight=1.5)
+    case = make_static_case(date)
+
+    # Construct flow matrix
+    F = make_pfdf_matrix(case.A, case.β)
+
+    # Get generator costs
+    fl = case.fl
+    fq = zeros(length(fl))
+
+    # Get line capacities
+    # (Specifically, increase them a little bit)
+    pmax = line_weight * min.(case.fmax / Z, line_max)
+    gmax = case.gmax / Z
+    d = case.d / Z
+
+    # Formulate problem
+    net = PowerNetwork(fq, fl, pmax, gmax, case.A, case.B, F)
+    pmp = PowerManagementProblem(net, d)
+
+    # Solve
+    solve!(pmp, CarbonNetworks.OPT)
+    g = CarbonNetworks.evaluate(pmp.g)
+    p = CarbonNetworks.evaluate(pmp.p)
+
+    # Get generator emissions rates
+    co2_rates = case.co2_rates
+
+    # Compute MEFs
+    λ = compute_mefs(pmp, net, d, co2_rates)
+
+    f_slack = pmax - abs.(F*(case.B * g - d))
+    num_constr = sum(f_slack .< 1e-4)
+    @show (date, pmp.problem.status, num_constr)
+
+    return (g=g, λ=λ, d=d, gmax=gmax, status=string(pmp.problem.status))
+end
 
 
 """
@@ -83,8 +178,9 @@ function _make_static_case2018(date)
         A=A, β=β, fmax=fmax, 
         B=B, gmin=gmin, gmax=gmax, ramp=ramp, fuel=fuel, fl=fl, co2_rates=co2_rates,
         d=d,
+        params=params,
     )
-    return case, params
+    return case
 end
 
 function _make_static_case2004(date)
@@ -104,12 +200,12 @@ function _make_static_case2004(date)
     fl = get_costs(heat, fuel, FUEL_COSTS)
     co2_rates = get_costs(heat, fuel, FUEL_EMISSIONS)
 
-    meta = (node_names=node_names, node_ids=node_ids, df=df)
     case = (
         A=A, β=β, fmax=fmax, cf=cf, d=d, 
         B=B, gmin=gmin, gmax=gmax, ramp=ramp, fuel=fuel, fl=fl, co2_rates=co2_rates,
+        node_names=node_names, node_ids=node_ids,
     )
-    return case, meta
+    return case
 end
 
 
@@ -156,8 +252,9 @@ function _make_dynamic_case2018(date, T, δ=1e-4)
         B=B, gmin=gmin, gmax=gmax, ramp=ramp, fuel=fuel, fl=fl, co2_rates=co2_rates,
         S=S, P=P, C=C, η_c=mean(ηc), η_d=mean(ηd),
         d=d,
+        params=params,
     )
-    return case, params
+    return case
 end
 
 function _make_dynamic_case2004(date, T, δ=1e-4)
@@ -200,13 +297,13 @@ function _make_dynamic_case2004(date, T, δ=1e-4)
     efficiency, s_capacity, s_rate, _ = get_storage_data(df.storage)
     S = get_storage_map(df.storage, node_ids)
 
-    meta = (node_names=node_names, node_ids=node_ids, df=df)
     case = (
         A=A, β=β, fmax=fmax, cf=cf, d=d_dyn, 
         B=B, gmin=gmin_dyn, gmax=gmax_dyn, ramp=ramp_dyn, fuel=fuel, fl=fl, co2_rates=co2_rates,
-        η_c=sqrt(mean(efficiency)), η_d=sqrt(mean(efficiency)), C=s_capacity, P=s_rate, S=S
+        η_c=sqrt(mean(efficiency)), η_d=sqrt(mean(efficiency)), C=s_capacity, P=s_rate, S=S,
+        node_names=node_names, node_ids=node_ids,
     )
-    return case, meta
+    return case
 end
 
 """
