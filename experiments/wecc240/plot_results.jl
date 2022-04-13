@@ -50,9 +50,6 @@ DATA_DIR = config["data"]["GOOGLE_DRIVE"]
 # ╔═╡ 45c73bb3-eecf-4b92-8e91-6a4c83addfdc
 RESULTS_DIR = config["data"]["SAVE_DIR"]
 
-# ╔═╡ ae02b617-f2d0-4fa6-86f9-3a6e4088a803
-#fnm_dynamic = "wecc240_dynamic_results_COND50_initialCode.bson"
-
 # ╔═╡ 67130163-7a9e-4dc9-8458-b00239a1fb07
 run_names = ["test"]
 
@@ -63,12 +60,30 @@ paths = [joinpath(DATA_DIR, "results240", name) for name in run_names]
 cases = [BSON.load(joinpath(p, "case.bson")) for p in paths];
 
 # ╔═╡ 86256bed-e080-4c30-b730-82f3b06ec160
-load_results(p) = [
-	BSON.load(joinpath(p, f)) for f in filter(f -> f[1:2] in ["04", "18"], readdir(p))
+load_results(p) = [BSON.load(joinpath(p, f)) 
+	for f in filter(f -> f[1:2] in ["04", "18"], readdir(p))
 ]
 
 # ╔═╡ 9dcbc82a-2ced-4b5a-a879-cc5458d039e4
 results = map(load_results, paths);
+
+# ╔═╡ d96c7ecb-8898-45bd-bf81-890ef072b9a0
+cases[1][:params].node.lat[15]
+
+# ╔═╡ 804439ee-1890-4a41-9a50-ca52bdd7f2f5
+cases[1][:params].node.lon[15]
+
+# ╔═╡ 13e6a59a-ad47-419c-b1e2-03a29521deac
+begin
+	c1 = [results[1][t][:d][10] for t in 1:24]
+	c2 = [results[1][t][:d][15] for t in 1:24]
+	
+	fig, ax = lines(c1 / sum(c1))
+	lines!(ax, c2 / sum(c2))
+
+	fig
+
+end
 
 # ╔═╡ b4f91614-ada2-4961-8913-96855f7ca81b
 md"""
@@ -84,16 +99,22 @@ cleanup(xi) = typeof(xi) <: Real ? xi : Base.parse(Float64, strip(xi))
 # ╔═╡ ba2a3175-b445-4227-a401-18ff40fc4c53
 x, y = cleanup.(df_gis.Long), cleanup.(df_gis.Lat)
 
+# ╔═╡ 64627393-f9b2-4c64-95c8-458cc005e237
+num_nodes = length(x)
+
 # ╔═╡ d2bacf4a-af37-4ff9-bebb-3dc3d06edd8a
 md"""
 ## Average MEFs
 """
 
-# ╔═╡ ad687e9a-9d7b-4990-9772-d9cfafe26421
-begin
-	node1 = 195
-	node2 = 50
-end
+# ╔═╡ c39dbf95-c5b1-4122-b665-05069ff49f1b
+# TODO: generalize functions below to dynamic mefs
+
+# ╔═╡ 7126918a-eb31-40a9-8f2d-7e181a1fcb3b
+node1 = 195
+
+# ╔═╡ 35e55d76-d175-4e77-9b69-930225cb8573
+node2 = 50
 
 # ╔═╡ a9362a09-277b-4e97-9e66-d6df99f18a70
 # all_mefs_a = [m[node1] for m in skipmissing(mefs[hour, :])]
@@ -116,6 +137,17 @@ function get_average_nodal_mefs(r)
 	
 	return mean(skipmissing(mefs[hour, :]))[:, 1]
 end
+
+# ╔═╡ 153b3ae6-398a-44d8-9ef1-3889b8d44788
+function get_all_mefs(node_ind, r)
+	is_valid = [d[:status] for d in r] .== "OPTIMAL"
+	mefs = reduce(hcat, [v ? d[:λ] : missing for (d, v) in zip(r, is_valid)])
+
+	return mefs[node_ind, hour:24:end]
+end
+
+# ╔═╡ 7b3735f0-a31b-4505-99cd-2f1fd360fc4f
+get_all_mefs(node1, results[1])
 
 # ╔═╡ 7ffbe1bc-8cc6-4033-a70b-880209164199
 function fig_map(i; fig = Figure(resolution=(450, 300), fontsize=10))
@@ -141,7 +173,7 @@ function fig_map(i; fig = Figure(resolution=(450, 300), fontsize=10))
     ax.scene.transformation.transform_func[] = Makie.PointTrans{2}(trans)
 	
     xlims!(ax, -125, -100)
-	ylims!(ax, 32, 51)
+	ylims!(ax, 31, 51)
     
 	# now the plot 
     lines!(ax, GeoMakie.coastlines(), color = :black)
@@ -182,39 +214,41 @@ end
 # ╔═╡ 07268e37-5b62-4ab3-8d0d-5bab2286cdbe
 fig_map(1)[1]
 
-# ╔═╡ e5e10f07-1001-4438-b32d-c1f25cce04b1
-md"""
-## Analyze dynamic data
-"""
-
-# ╔═╡ b90eb7df-a78c-4bc5-ae3b-41f62e38da54
-total_mef(λ) = sum(λ, dims=1)[1, :][hour]
-
-# ╔═╡ d4d509bd-8f96-4da3-917f-a65acb569953
-nodal_mef_dyn(n) = reduce(vcat, [total_mef(results_dyn[d].λ[n, :, :]) for d in 1:365])
-
-# ╔═╡ d1f26911-bd79-4ce6-b0d8-218f8a772840
-all_λs_dyn = reduce(hcat, [nodal_mef_dyn(n) for n in 1:length(nodes)]);
-
 # ╔═╡ b53cc8dd-c36e-4cf8-9f1d-473a0e985234
-function fig_distr(fig = Figure(resolution=(300, 300)))
+function fig_distr(i1; i2=nothing, fig = Figure(resolution=(300, 300)))
+	r = results[i1]
+	all_mefs_a = get_all_mefs(node1, r)
+	all_mefs_b = get_all_mefs(node2, r)
+	all_mefs = reduce(vcat, map(j -> get_all_mefs(j, r), 1:num_nodes))
+	
 	ax = Axis(fig[1, 1])
 	hidedecorations!(ax, ticks=false, ticklabels=false, label=false)
-	
+
+	# Plot first set of data
 	kwargs = (strokewidth=1, strokecolor=:black, direction=:y)
 	density!(ax, all_mefs_a/1e3; offset=4.0, kwargs...)
 	density!(ax, all_mefs_b/1e3; offset=2.0, kwargs...)
-	density!(ax, all_λs/1e3; color=(:slategray, 0.7), kwargs...)
-
-	kwargs = (direction=:y,)
-	density!(ax, nodal_mef_dyn(node1)/1e3; color=(:red, 0.2), offset=4, kwargs...)
-	density!(ax, nodal_mef_dyn(node2)/1e3; color=(:red, 0.2), offset=2, kwargs...)
-	density!(ax, reshape(all_λs_dyn, :)/1e3; color=(:red, 0.2), kwargs...)
+	density!(ax, all_mefs/1e3; color=(:slategray, 0.7), kwargs...)
 
 	kwargs = (linewidth=4, color=:black)
 	hlines!(ax, [mean(all_mefs_a)/1e3]; xmin=4/6, kwargs...)
 	hlines!(ax, [mean(all_mefs_b)/1e3]; xmin=2/6, xmax=4/6, kwargs...)
-	hlines!(ax, [mean(all_λs)/1e3]; xmax=2/6, kwargs...)
+	hlines!(ax, [mean(all_mefs)/1e3]; xmax=2/6, kwargs...)
+
+	# Plot second set of data
+	if i2 != nothing
+		r = results[i2]
+		all_mefs_a = get_all_mefs(node1, r)
+		all_mefs_b = get_all_mefs(node2, r)
+		all_mefs = reduce(vcat, map(j -> get_all_mefs(j, r), 1:num_nodes))
+		
+		kwargs = (direction=:y,)
+		density!(ax, all_mefs_a/1e3; color=(:red, 0.2), offset=4, kwargs...)
+		density!(ax, all_mefs_b/1e3; color=(:red, 0.2), offset=2, kwargs...)
+		density!(ax, all_mefs/1e3; color=(:red, 0.2), kwargs...)
+	end
+
+	
 	
 
 	ylims!(ax, -0.25, 1.5)
@@ -230,15 +264,14 @@ function fig_distr(fig = Figure(resolution=(300, 300)))
 end
 
 # ╔═╡ e1a1acda-1d52-45bd-8257-8b7249318c9b
-fig_distr()[1];
+fig_distr(1)[1]
 
 # ╔═╡ c6f2eb39-a0e6-44bf-8649-f25ef72961a4
 full_figure = let
 	fig = Figure(resolution=(650, 300), fontsize=10)
 
-	f1, ax1 = fig_distr(fig[2, 1])
-	f2, ax2 = fig_map(fig[2, 2])
-
+	f1, ax1 = fig_distr(1, fig=fig[2, 1])
+	f2, ax2 = fig_map(1, fig=fig[2, 2])
 
 	colsize!(fig.layout, 1, Auto(0.5))
 	
@@ -261,16 +294,16 @@ full_figure = let
 	)
 	rowgap!(fig.layout, 1, 6)
 
-
-
 	fig
 end
 
 # ╔═╡ 5154fdd8-a58d-4faa-aced-7212ed0dc705
-save(joinpath(RESULTS_DIR, "wecc240_full_figure.pdf"), full_figure)
+# save(joinpath(RESULTS_DIR, "wecc240_full_figure.pdf"), full_figure)
 
-# ╔═╡ dfc765e0-39d3-4ae4-93f0-4f0406f9f358
-λ_dyn = mean(all_λs_dyn, dims=1)[1, :]
+# ╔═╡ e5e10f07-1001-4438-b32d-c1f25cce04b1
+md"""
+## Analyze dynamic data
+"""
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -1599,19 +1632,26 @@ version = "3.5.0+0"
 # ╠═f9fab4fe-baec-4bfd-9d84-ef9caac85f5f
 # ╠═d7598abb-2be7-4e3b-af9e-14827ef5a3b0
 # ╠═45c73bb3-eecf-4b92-8e91-6a4c83addfdc
-# ╠═ae02b617-f2d0-4fa6-86f9-3a6e4088a803
 # ╠═67130163-7a9e-4dc9-8458-b00239a1fb07
 # ╠═6de86962-a420-4885-ae7a-18748549c4c2
 # ╠═2757231c-ef30-417a-87dd-7d155049ba47
 # ╠═86256bed-e080-4c30-b730-82f3b06ec160
 # ╠═9dcbc82a-2ced-4b5a-a879-cc5458d039e4
+# ╠═d96c7ecb-8898-45bd-bf81-890ef072b9a0
+# ╠═804439ee-1890-4a41-9a50-ca52bdd7f2f5
+# ╠═13e6a59a-ad47-419c-b1e2-03a29521deac
 # ╟─b4f91614-ada2-4961-8913-96855f7ca81b
 # ╠═5392f525-ecb3-47c7-a32f-73a6b02967df
 # ╠═514b6f5f-c5d7-4937-8dec-a039b50b553c
 # ╠═ba2a3175-b445-4227-a401-18ff40fc4c53
+# ╠═64627393-f9b2-4c64-95c8-458cc005e237
 # ╟─d2bacf4a-af37-4ff9-bebb-3dc3d06edd8a
+# ╠═c39dbf95-c5b1-4122-b665-05069ff49f1b
 # ╠═61d78605-4bb1-4cb6-a9a2-c0f3499dff3a
-# ╠═ad687e9a-9d7b-4990-9772-d9cfafe26421
+# ╠═153b3ae6-398a-44d8-9ef1-3889b8d44788
+# ╠═7126918a-eb31-40a9-8f2d-7e181a1fcb3b
+# ╠═35e55d76-d175-4e77-9b69-930225cb8573
+# ╠═7b3735f0-a31b-4505-99cd-2f1fd360fc4f
 # ╠═a9362a09-277b-4e97-9e66-d6df99f18a70
 # ╠═fe91b3ba-3159-48b0-a3d5-7af7bfe6fc34
 # ╟─cbc71e2e-0bd1-441c-bf17-c60053a60795
@@ -1620,15 +1660,11 @@ version = "3.5.0+0"
 # ╠═2d3cf797-4cc2-4aad-bc3e-94f5474e99f9
 # ╠═59316c15-a94c-4c56-a30a-0e6c23629de7
 # ╠═07268e37-5b62-4ab3-8d0d-5bab2286cdbe
-# ╟─7ffbe1bc-8cc6-4033-a70b-880209164199
+# ╠═7ffbe1bc-8cc6-4033-a70b-880209164199
 # ╠═e1a1acda-1d52-45bd-8257-8b7249318c9b
 # ╟─b53cc8dd-c36e-4cf8-9f1d-473a0e985234
 # ╟─c6f2eb39-a0e6-44bf-8649-f25ef72961a4
 # ╠═5154fdd8-a58d-4faa-aced-7212ed0dc705
 # ╟─e5e10f07-1001-4438-b32d-c1f25cce04b1
-# ╠═b90eb7df-a78c-4bc5-ae3b-41f62e38da54
-# ╠═d4d509bd-8f96-4da3-917f-a65acb569953
-# ╠═d1f26911-bd79-4ce6-b0d8-218f8a772840
-# ╠═dfc765e0-39d3-4ae4-93f0-4f0406f9f358
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002

@@ -13,7 +13,6 @@ function run(setup_file::String, run_number)
 
 
     # Load run configuration
-    setup_file = joinpath(@__DIR__, setup_file)
     setup = TOML.parsefile(setup_file)
 
     run_id = setup["RUN_ID"]
