@@ -81,7 +81,9 @@ function formulate_and_solve_dynamic(date, T; Z=1e3, line_max=100.0, line_weight
         mefs[:, :, ind_t] .= λ[ind_t];
     end
 
-    @show (date, pmp.problem.status)
+    f_slack = [pmax[t] - abs.(p[t]) for t in 1:T]
+    num_constr = mean(map(fs -> sum(fs .< 1e-2), f_slack))
+    @show (date, pmp.problem.status, num_constr)
 
     return (g=g, p=p, λ=mefs, d=d, gmax=gmax, pmax=pmax, status=string(pmp.problem.status))
 end
@@ -117,7 +119,7 @@ function formulate_and_solve_static(date; Z=1e3, line_max=100.0, line_weight=1.5
     # Compute MEFs
     λ = compute_mefs(pmp, net, d, co2_rates)
 
-    f_slack = pmax - abs.(F*(case.B * g - d))
+    f_slack = pmax - abs.(p)
     num_constr = sum(f_slack .< 1e-4)
     @show (date, pmp.problem.status, num_constr)
 
