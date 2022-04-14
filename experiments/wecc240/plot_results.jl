@@ -54,7 +54,7 @@ DATA_DIR = config["data"]["GOOGLE_DRIVE"]
 RESULTS_DIR = config["data"]["SAVE_DIR"]
 
 # ╔═╡ 67130163-7a9e-4dc9-8458-b00239a1fb07
-run_names = ["july18_static"]
+run_names = ["july18_static", "july18_dynamic"]
 
 # ╔═╡ 6de86962-a420-4885-ae7a-18748549c4c2
 paths = [joinpath(DATA_DIR, "results240", name) for name in run_names]
@@ -140,6 +140,35 @@ end
 md"""
 ## Plot!
 """
+
+# ╔═╡ a993dd4c-c00c-450e-8247-89c2d44be04b
+keys(results[2])
+
+# ╔═╡ fd640755-2f9d-4845-9524-fce685e9053c
+let
+	t = 1
+
+	r = results[2][DateTime(0018, 07, 15, 00)]
+	rs = results[1][DateTime(0018, 07, 15, 00) .+ Hour(t-1)]
+	
+	d = r[:d][t]
+	g = r[:g][t]
+	p = r[:p][t]
+
+	pmax = 2.0 * min.(cases[2][:fmax] / 1e3, 100e3) 
+
+	A = cases[2][:A]
+	B = cases[2][:B]
+	S = cases[2][:S]
+
+	ds = d - B*g + A*p
+
+	s_inds = findall(abs.(ds) .> 1e-4)
+
+	@show sum((abs.(p) ./ abs.(pmax)) .> 0.99)
+
+	ds[s_inds]
+end
 
 # ╔═╡ 59316c15-a94c-4c56-a30a-0e6c23629de7
 hr = 12
@@ -1653,6 +1682,8 @@ version = "3.5.0+0"
 # ╠═7a42f00e-193c-45ea-951f-dcd4e1c1975f
 # ╠═5cb1709a-eda0-41b3-8bff-f58c19608be5
 # ╠═2d3cf797-4cc2-4aad-bc3e-94f5474e99f9
+# ╠═a993dd4c-c00c-450e-8247-89c2d44be04b
+# ╠═fd640755-2f9d-4845-9524-fce685e9053c
 # ╠═59316c15-a94c-4c56-a30a-0e6c23629de7
 # ╠═07268e37-5b62-4ab3-8d0d-5bab2286cdbe
 # ╟─7ffbe1bc-8cc6-4033-a70b-880209164199

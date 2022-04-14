@@ -38,10 +38,7 @@ include("nrel.jl")
 
 
 
-function formulate_and_solve_dynamic(
-    date, T; 
-    Z=1e3, line_max=100e3, line_weight=2.0,
-)
+function formulate_and_solve_dynamic(date, T; Z=1e3, line_max=100.0, line_weight=1.5)
     println("-------")
     @time case = make_dynamic_case(date, T)
     n, _ = size(case.A)
@@ -86,7 +83,7 @@ function formulate_and_solve_dynamic(
 
     @show (date, pmp.problem.status)
 
-    return (g=g, p=p, λ=mefs, d=d, gmax=gmax, status=string(pmp.problem.status))
+    return (g=g, p=p, λ=mefs, d=d, gmax=gmax, pmax=pmax, status=string(pmp.problem.status))
 end
 
 function formulate_and_solve_static(date; Z=1e3, line_max=100.0, line_weight=1.5)
@@ -124,7 +121,7 @@ function formulate_and_solve_static(date; Z=1e3, line_max=100.0, line_weight=1.5
     num_constr = sum(f_slack .< 1e-4)
     @show (date, pmp.problem.status, num_constr)
 
-    return (g=g, p=p, λ=λ, d=d, gmax=gmax, status=string(pmp.problem.status))
+    return (g=g, p=p, λ=λ, d=d, gmax=gmax, pmax=pmax, status=string(pmp.problem.status))
 end
 
 
