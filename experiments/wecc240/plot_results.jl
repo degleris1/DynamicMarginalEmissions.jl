@@ -4,6 +4,9 @@
 using Markdown
 using InteractiveUtils
 
+# ╔═╡ dd32f064-95ad-4321-a740-d87ff3653b50
+using Dates
+
 # ╔═╡ 5303b439-2bbb-4a04-b17e-7df6f2983493
 using TOML
 
@@ -51,7 +54,7 @@ DATA_DIR = config["data"]["GOOGLE_DRIVE"]
 RESULTS_DIR = config["data"]["SAVE_DIR"]
 
 # ╔═╡ 67130163-7a9e-4dc9-8458-b00239a1fb07
-run_names = ["test"]
+run_names = ["july18_static"]
 
 # ╔═╡ 6de86962-a420-4885-ae7a-18748549c4c2
 paths = [joinpath(DATA_DIR, "results240", name) for name in run_names]
@@ -60,30 +63,13 @@ paths = [joinpath(DATA_DIR, "results240", name) for name in run_names]
 cases = [BSON.load(joinpath(p, "case.bson")) for p in paths];
 
 # ╔═╡ 86256bed-e080-4c30-b730-82f3b06ec160
-load_results(p) = [BSON.load(joinpath(p, f)) 
+load_results(p) = Dict(
+	DateTime(f[1:end-5], "yy-mm-dd-HH") => BSON.load(joinpath(p, f), @__MODULE__) 
 	for f in filter(f -> f[1:2] in ["04", "18"], readdir(p))
-]
+)
 
 # ╔═╡ 9dcbc82a-2ced-4b5a-a879-cc5458d039e4
 results = map(load_results, paths);
-
-# ╔═╡ d96c7ecb-8898-45bd-bf81-890ef072b9a0
-cases[1][:params].node.lat[15]
-
-# ╔═╡ 804439ee-1890-4a41-9a50-ca52bdd7f2f5
-cases[1][:params].node.lon[15]
-
-# ╔═╡ 13e6a59a-ad47-419c-b1e2-03a29521deac
-begin
-	c1 = [results[1][t][:d][10] for t in 1:24]
-	c2 = [results[1][t][:d][15] for t in 1:24]
-	
-	fig, ax = lines(c1 / sum(c1))
-	lines!(ax, c2 / sum(c2))
-
-	fig
-
-end
 
 # ╔═╡ b4f91614-ada2-4961-8913-96855f7ca81b
 md"""
@@ -99,28 +85,56 @@ cleanup(xi) = typeof(xi) <: Real ? xi : Base.parse(Float64, strip(xi))
 # ╔═╡ ba2a3175-b445-4227-a401-18ff40fc4c53
 x, y = cleanup.(df_gis.Long), cleanup.(df_gis.Lat)
 
+# ╔═╡ b6e667a5-d2ed-4ab6-9c94-9e6e45be84e8
+coords(k) = y[k], x[k]
+
 # ╔═╡ 64627393-f9b2-4c64-95c8-458cc005e237
 num_nodes = length(x)
 
-# ╔═╡ d2bacf4a-af37-4ff9-bebb-3dc3d06edd8a
-md"""
-## Average MEFs
-"""
-
-# ╔═╡ c39dbf95-c5b1-4122-b665-05069ff49f1b
-# TODO: generalize functions below to dynamic mefs
-
 # ╔═╡ 7126918a-eb31-40a9-8f2d-7e181a1fcb3b
-node1 = 195
+node1 = 100; df_gis[node1, "Bus  Name"], coords(node1)
 
 # ╔═╡ 35e55d76-d175-4e77-9b69-930225cb8573
-node2 = 50
+node2 = 50; df_gis[node2, "Bus  Name"], coords(node2)
 
-# ╔═╡ a9362a09-277b-4e97-9e66-d6df99f18a70
-# all_mefs_a = [m[node1] for m in skipmissing(mefs[hour, :])]
+# ╔═╡ d2bacf4a-af37-4ff9-bebb-3dc3d06edd8a
+md"""
+## MEFs
+"""
 
-# ╔═╡ fe91b3ba-3159-48b0-a3d5-7af7bfe6fc34
-# all_mefs_b = [m[node2] for m in skipmissing(mefs[hour, :])]
+# ╔═╡ 6df9206a-fc56-4d85-a065-8f41a84adfbf
+function get_nodal_mefs(r, which_hours=1:24)
+	dates = sort(collect(keys(r)))
+	is_valid = [r[d][:status] for d in dates] .== "OPTIMAL"
+
+	# Get total mefs
+	get_total_mef = m -> (ndims(m) == 3) ? dropdims(sum(m, dims=3), dims=3) : m	
+	mefs = [v ? get_total_mef(r[d][:λ]) : missing for (d, v) in zip(dates, is_valid)]
+
+	# Expand dates
+	all_dates = [d .+ Hour.(0 : size(m, 2) - 1) for (d, m) in zip(dates, mefs)]
+
+	# Join lists of lists
+	mefs = reduce(hcat, mefs)
+	all_dates = reduce(vcat, all_dates)
+
+	# Filter by hour
+	mefs_hr = mefs[:, map(d -> hour(d) in which_hours, all_dates)]
+
+	return mefs_hr
+end
+
+# ╔═╡ 61d78605-4bb1-4cb6-a9a2-c0f3499dff3a
+function get_average_nodal_mefs(r, which_hours=1:24)
+	mefs = get_nodal_mefs(r, which_hours)
+	return [mean(skipmissing(mefs[i, :])) for i in 1:size(mefs, 1)]
+end
+
+# ╔═╡ 26570b0b-9d07-473e-9f91-3153b56de0ec
+# get_nodal_mefs(results[1], hr)
+
+# ╔═╡ 2d1da86e-0c7e-402a-98f9-faaeaee79a19
+# get_average_nodal_mefs(results[1], hr)
 
 # ╔═╡ cbc71e2e-0bd1-441c-bf17-c60053a60795
 md"""
@@ -128,32 +142,13 @@ md"""
 """
 
 # ╔═╡ 59316c15-a94c-4c56-a30a-0e6c23629de7
-hour = 6
-
-# ╔═╡ 61d78605-4bb1-4cb6-a9a2-c0f3499dff3a
-function get_average_nodal_mefs(r)
-	is_valid = [d[:status] for d in r] .== "OPTIMAL"
-	mefs = [v ? d[:λ] : missing for (d, v) in zip(r, is_valid)]
-	
-	return mean(skipmissing(mefs[hour, :]))[:, 1]
-end
-
-# ╔═╡ 153b3ae6-398a-44d8-9ef1-3889b8d44788
-function get_all_mefs(node_ind, r)
-	is_valid = [d[:status] for d in r] .== "OPTIMAL"
-	mefs = reduce(hcat, [v ? d[:λ] : missing for (d, v) in zip(r, is_valid)])
-
-	return mefs[node_ind, hour:24:end]
-end
-
-# ╔═╡ 7b3735f0-a31b-4505-99cd-2f1fd360fc4f
-get_all_mefs(node1, results[1])
+hr = 12
 
 # ╔═╡ 7ffbe1bc-8cc6-4033-a70b-880209164199
-function fig_map(i; fig = Figure(resolution=(450, 300), fontsize=10))
+function fig_map(i, which_hours=hr; fig=Figure(resolution=(450, 300), fontsize=10))
 	case = cases[i]
 	r = results[i]
-	λ = get_average_nodal_mefs(r)
+	λ = get_average_nodal_mefs(r, which_hours)
 
 	
 	# Everthing in === is from https://lazarusa.github.io/BeautifulMakie/GeoPlots/geoCoastlinesStatesUS/
@@ -197,14 +192,14 @@ function fig_map(i; fig = Figure(resolution=(450, 300), fontsize=10))
 
 	# Nodes
 	sct = scatter!(ax, x, y, markersize=8, marker=:hexagon, color=λ/1e3, 
-		colormap=:jet1, colorrange=(-0.25, 1.5))
+		colormap=:jet1, colorrange=(-0.1, 1.0))
 
 	# Colorbar
 	cb = Colorbar(fig[1, 2], sct, label="Marginal Emissions Rate [ton CO2 / MWh]")
 
 	ax.xticks = [-150]
 	ax.yticks = [20]
-	ax.title = "WECC 2004: Average Nodal MEFs at Hour $hour"
+	ax.title = "WECC: Average Nodal MEFs at Hour $hour"
 
 	cb.tellheight = true
 	
@@ -212,14 +207,15 @@ function fig_map(i; fig = Figure(resolution=(450, 300), fontsize=10))
 end
 
 # ╔═╡ 07268e37-5b62-4ab3-8d0d-5bab2286cdbe
-fig_map(1)[1]
+fig_map(2)[1]
 
 # ╔═╡ b53cc8dd-c36e-4cf8-9f1d-473a0e985234
-function fig_distr(i1; i2=nothing, fig = Figure(resolution=(300, 300)))
+function fig_distr(i1; which_hours=hr, i2=nothing, fig = Figure(resolution=(300, 300)))
 	r = results[i1]
-	all_mefs_a = get_all_mefs(node1, r)
-	all_mefs_b = get_all_mefs(node2, r)
-	all_mefs = reduce(vcat, map(j -> get_all_mefs(j, r), 1:num_nodes))
+	nodal_mefs = get_nodal_mefs(r, which_hours)
+	all_mefs_a = nodal_mefs[node1, :]
+	all_mefs_b = nodal_mefs[node2, :]
+	all_mefs = reshape(nodal_mefs, :)
 	
 	ax = Axis(fig[1, 1])
 	hidedecorations!(ax, ticks=false, ticklabels=false, label=false)
@@ -238,9 +234,10 @@ function fig_distr(i1; i2=nothing, fig = Figure(resolution=(300, 300)))
 	# Plot second set of data
 	if i2 != nothing
 		r = results[i2]
-		all_mefs_a = get_all_mefs(node1, r)
-		all_mefs_b = get_all_mefs(node2, r)
-		all_mefs = reduce(vcat, map(j -> get_all_mefs(j, r), 1:num_nodes))
+		nodal_mefs = get_nodal_mefs(r, which_hours)
+		all_mefs_a = nodal_mefs[node1, :]
+		all_mefs_b = nodal_mefs[node2, :]
+		all_mefs = reshape(nodal_mefs, :)
 		
 		kwargs = (direction=:y,)
 		density!(ax, all_mefs_a/1e3; color=(:red, 0.2), offset=4, kwargs...)
@@ -251,7 +248,7 @@ function fig_distr(i1; i2=nothing, fig = Figure(resolution=(300, 300)))
 	
 	
 
-	ylims!(ax, -0.25, 1.5)
+	ylims!(ax, -0.1, 1.0)
 	ax.ylabel = "MEF [ton CO2 / MWh]"
 	
 	
@@ -311,6 +308,7 @@ PLUTO_PROJECT_TOML_CONTENTS = """
 BSON = "fbb218c0-5317-5bc6-957e-2ee96dd4b1f0"
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 Downloads = "f43a241f-c20a-4ad4-852c-f6b1247861c6"
 GeoMakie = "db073c08-6b98-4ee5-b6a4-5efafb3259c6"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
@@ -1622,6 +1620,7 @@ version = "3.5.0+0"
 """
 
 # ╔═╡ Cell order:
+# ╠═dd32f064-95ad-4321-a740-d87ff3653b50
 # ╠═5303b439-2bbb-4a04-b17e-7df6f2983493
 # ╠═b3352ae6-d614-423d-bfa0-2ee28ab5b134
 # ╠═d145ef02-6511-4685-bb16-b421703e7dbf
@@ -1637,30 +1636,26 @@ version = "3.5.0+0"
 # ╠═2757231c-ef30-417a-87dd-7d155049ba47
 # ╠═86256bed-e080-4c30-b730-82f3b06ec160
 # ╠═9dcbc82a-2ced-4b5a-a879-cc5458d039e4
-# ╠═d96c7ecb-8898-45bd-bf81-890ef072b9a0
-# ╠═804439ee-1890-4a41-9a50-ca52bdd7f2f5
-# ╠═13e6a59a-ad47-419c-b1e2-03a29521deac
 # ╟─b4f91614-ada2-4961-8913-96855f7ca81b
 # ╠═5392f525-ecb3-47c7-a32f-73a6b02967df
 # ╠═514b6f5f-c5d7-4937-8dec-a039b50b553c
 # ╠═ba2a3175-b445-4227-a401-18ff40fc4c53
+# ╠═b6e667a5-d2ed-4ab6-9c94-9e6e45be84e8
 # ╠═64627393-f9b2-4c64-95c8-458cc005e237
-# ╟─d2bacf4a-af37-4ff9-bebb-3dc3d06edd8a
-# ╠═c39dbf95-c5b1-4122-b665-05069ff49f1b
-# ╠═61d78605-4bb1-4cb6-a9a2-c0f3499dff3a
-# ╠═153b3ae6-398a-44d8-9ef1-3889b8d44788
 # ╠═7126918a-eb31-40a9-8f2d-7e181a1fcb3b
 # ╠═35e55d76-d175-4e77-9b69-930225cb8573
-# ╠═7b3735f0-a31b-4505-99cd-2f1fd360fc4f
-# ╠═a9362a09-277b-4e97-9e66-d6df99f18a70
-# ╠═fe91b3ba-3159-48b0-a3d5-7af7bfe6fc34
+# ╟─d2bacf4a-af37-4ff9-bebb-3dc3d06edd8a
+# ╟─6df9206a-fc56-4d85-a065-8f41a84adfbf
+# ╟─61d78605-4bb1-4cb6-a9a2-c0f3499dff3a
+# ╠═26570b0b-9d07-473e-9f91-3153b56de0ec
+# ╠═2d1da86e-0c7e-402a-98f9-faaeaee79a19
 # ╟─cbc71e2e-0bd1-441c-bf17-c60053a60795
 # ╠═7a42f00e-193c-45ea-951f-dcd4e1c1975f
 # ╠═5cb1709a-eda0-41b3-8bff-f58c19608be5
 # ╠═2d3cf797-4cc2-4aad-bc3e-94f5474e99f9
 # ╠═59316c15-a94c-4c56-a30a-0e6c23629de7
 # ╠═07268e37-5b62-4ab3-8d0d-5bab2286cdbe
-# ╠═7ffbe1bc-8cc6-4033-a70b-880209164199
+# ╟─7ffbe1bc-8cc6-4033-a70b-880209164199
 # ╠═e1a1acda-1d52-45bd-8257-8b7249318c9b
 # ╟─b53cc8dd-c36e-4cf8-9f1d-473a0e985234
 # ╟─c6f2eb39-a0e6-44bf-8649-f25ef72961a4
