@@ -427,8 +427,35 @@ end
 # ╔═╡ 7ae73ea6-8878-43cc-9207-fda58fa41d9c
 df = util.load_wecc_240_dataset();
 
-# ╔═╡ 585574d5-0332-4193-a7e2-807e683e43e9
-findall((.~(df.gen.rating .=== missing)) .&& (.~ (df.gen.rating .== "Use profile data")))
+# ╔═╡ 812a305a-c9bb-4b57-9621-cadf4b70984c
+# what we would expect for the month of jan
+
+let
+gmax_ = []
+for hour in 1:24
+	for day in 1:1
+		for month in 1:1
+demand_map = util.get_demand_map(hour, day, month, 2004, df.demand)
+node_names, node_ids = util.get_node_info(df.branch)
+
+B, gmin, gmax, ramp, heat, fuel = util.get_generator_data(demand_map, node_ids, df.gen, df.heat)
+
+push!(gmax_, gmax)
+end
+end
+end
+	
+gmax_ = hcat(gmax_...)
+	
+f = Figure()
+ax = Axis(f[1,1], xlabel="time", ylabel="gmax/gmax(t=0)")
+ng, _ = size(gmax_)
+for gid in 1:ng
+lines!(gmax_[gid, :]./gmax_[gid, 1], color="gray")
+end
+f
+
+end
 
 # ╔═╡ 91b474ba-e955-416c-8bc7-aa2d9b88995f
 md"""
@@ -791,10 +818,10 @@ p2=scatter(xx2, ΔE)
 # ╠═34253cd5-3049-4651-a5f6-06807a2233bd
 # ╠═df45b862-8d94-4b71-951c-5d84a7d16af2
 # ╠═087a3ba0-14f4-4373-99f1-3dd2ccdb71b9
-# ╠═5ba56789-c1bb-4c1b-95cc-4943561434f4
+# ╟─5ba56789-c1bb-4c1b-95cc-4943561434f4
 # ╠═44674366-5546-44b7-b6cc-b2476e3c8fc6
 # ╠═7ae73ea6-8878-43cc-9207-fda58fa41d9c
-# ╠═585574d5-0332-4193-a7e2-807e683e43e9
+# ╟─812a305a-c9bb-4b57-9621-cadf4b70984c
 # ╟─91b474ba-e955-416c-8bc7-aa2d9b88995f
 # ╟─e1b5c93e-9241-442b-a8ce-5c7d91809efc
 # ╟─847333af-8145-433a-b24c-554af2468da4
