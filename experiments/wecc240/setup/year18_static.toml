@@ -1,0 +1,5 @@
+RUN_ID = "year18_static"
+START_DATETIME = "2018-01-01-00"
+TIME_HORIZON = 1
+NUM_DAYS = 364
+FLAG = ""

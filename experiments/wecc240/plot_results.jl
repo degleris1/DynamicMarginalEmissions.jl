@@ -102,39 +102,11 @@ md"""
 ## MEFs
 """
 
-# ╔═╡ 6df9206a-fc56-4d85-a065-8f41a84adfbf
-function get_nodal_mefs(r, which_hours=1:24)
-	dates = sort(collect(keys(r)))
-	is_valid = [r[d][:status] for d in dates] .== "OPTIMAL"
-
-	# Get total mefs
-	get_total_mef = m -> (ndims(m) == 3) ? dropdims(sum(m, dims=3), dims=3) : m	
-	mefs = [v ? get_total_mef(r[d][:λ]) : missing for (d, v) in zip(dates, is_valid)]
-
-	# Expand dates
-	all_dates = [d .+ Hour.(0 : size(m, 2) - 1) for (d, m) in zip(dates, mefs)]
-
-	# Join lists of lists
-	mefs = reduce(hcat, mefs)
-	all_dates = reduce(vcat, all_dates)
-
-	# Filter by hour
-	mefs_hr = mefs[:, map(d -> hour(d) in which_hours, all_dates)]
-
-	return mefs_hr
-end
-
-# ╔═╡ 61d78605-4bb1-4cb6-a9a2-c0f3499dff3a
-function get_average_nodal_mefs(r, which_hours=1:24)
-	mefs = get_nodal_mefs(r, which_hours)
-	return [mean(skipmissing(mefs[i, :])) for i in 1:size(mefs, 1)]
-end
-
 # ╔═╡ 26570b0b-9d07-473e-9f91-3153b56de0ec
-# get_nodal_mefs(results[1], hr)
+# get_nodal_mefs(results[1])
 
 # ╔═╡ 2d1da86e-0c7e-402a-98f9-faaeaee79a19
-# get_average_nodal_mefs(results[1], hr)
+# get_average_nodal_mefs(results[1])
 
 # ╔═╡ cbc71e2e-0bd1-441c-bf17-c60053a60795
 md"""
@@ -171,13 +143,46 @@ let
 end
 
 # ╔═╡ 59316c15-a94c-4c56-a30a-0e6c23629de7
-hr = 12
+hr = 6
+
+# ╔═╡ 6df9206a-fc56-4d85-a065-8f41a84adfbf
+function get_nodal_mefs(r, whichdates=d -> hour(d) == hr)
+	dates = sort(collect(keys(r)))
+	is_valid = [r[d][:status] for d in dates] .== "OPTIMAL"
+
+	# Get total mefs
+	get_total_mef = m -> (ndims(m) == 3) ? dropdims(sum(m, dims=3), dims=3) : m	
+	mefs = [v ? get_total_mef(r[d][:λ]) : missing for (d, v) in zip(dates, is_valid)]
+
+	# Expand dates
+	all_dates = [d .+ Hour.(0 : size(m, 2) - 1) for (d, m) in zip(dates, mefs)]
+
+	# Join lists of lists
+	mefs = reduce(hcat, mefs)
+	all_dates = reduce(vcat, all_dates)
+
+	# Filter by hour
+	mefs_hr = mefs[:, map(whichdates, all_dates)]
+
+	return mefs_hr
+end
+
+# ╔═╡ 61d78605-4bb1-4cb6-a9a2-c0f3499dff3a
+function get_average_nodal_mefs(r, whichdates=d -> hour(d) == hr)
+	mefs = get_nodal_mefs(r, whichdates)
+	return [mean(skipmissing(mefs[i, :])) for i in 1:size(mefs, 1)]
+end
+
+# ╔═╡ be39a732-89d0-4a8b-9c88-3acd34f96dcc
+md"""
+## Map
+"""
 
 # ╔═╡ 7ffbe1bc-8cc6-4033-a70b-880209164199
-function fig_map(i, which_hours=hr; fig=Figure(resolution=(450, 300), fontsize=10))
+function fig_map(i, whichdates=d -> hour(d) == hr; fig=Figure(resolution=(450, 300), fontsize=10))
 	case = cases[i]
 	r = results[i]
-	λ = get_average_nodal_mefs(r, which_hours)
+	λ = get_average_nodal_mefs(r, whichdates)
 
 	
 	# Everthing in === is from https://lazarusa.github.io/BeautifulMakie/GeoPlots/geoCoastlinesStatesUS/
@@ -238,10 +243,54 @@ end
 # ╔═╡ 07268e37-5b62-4ab3-8d0d-5bab2286cdbe
 fig_map(2)[1]
 
+# ╔═╡ a6178160-2471-4e6f-bcd9-debb529d39d4
+md"""
+## Time Series
+"""
+
+# ╔═╡ d6abbce4-27ba-4a1d-8fb0-ce97a40c716d
+function fig_time(
+	; run_id=1,
+	nodes=[1],
+	fig=Figure(resolution=(650, 200), fontsize=10)
+)
+	r = results[run_id]
+	
+	# Get MEF over time
+	mefs_hr = [get_average_nodal_mefs(r, d -> hour(d) == h) for h in 1:24]
+	mefs_hr = reduce(hcat, mefs_hr)
+
+	# Plot
+	ax = Axis(fig[1, 1], xgridvisible=false, ygridvisible=false)
+	for n in nodes
+		lines!(ax, mefs_hr[n, :], linewidth=4)
+	end
+	xlims!(ax, 1, 23)
+	ylims!(ax, 500, 825)
+	ax.xticks = 0:6:24
+	ax.xlabel = "Hour"
+	ax.ylabel = "MEF [ton CO2 / MWh]"
+	
+	fig
+end
+
+# ╔═╡ 971d68b9-c140-4594-a0af-4bb45f665508
+fig_time(nodes=[node1, node2])
+
+# ╔═╡ 20e85734-92ff-4c34-9572-dd65ddd1d327
+md"""
+## Distributions
+"""
+
 # ╔═╡ b53cc8dd-c36e-4cf8-9f1d-473a0e985234
-function fig_distr(i1; which_hours=hr, i2=nothing, fig = Figure(resolution=(300, 300)))
+function fig_distr(
+	i1; 
+	whichdates=d -> hour(d) == hr, 
+	i2=nothing, 
+	fig = Figure(resolution=(300, 300))
+)
 	r = results[i1]
-	nodal_mefs = get_nodal_mefs(r, which_hours)
+	nodal_mefs = get_nodal_mefs(r, whichdates)
 	all_mefs_a = nodal_mefs[node1, :]
 	all_mefs_b = nodal_mefs[node2, :]
 	all_mefs = reshape(nodal_mefs, :)
@@ -263,7 +312,7 @@ function fig_distr(i1; which_hours=hr, i2=nothing, fig = Figure(resolution=(300,
 	# Plot second set of data
 	if i2 != nothing
 		r = results[i2]
-		nodal_mefs = get_nodal_mefs(r, which_hours)
+		nodal_mefs = get_nodal_mefs(r, whichdates)
 		all_mefs_a = nodal_mefs[node1, :]
 		all_mefs_b = nodal_mefs[node2, :]
 		all_mefs = reshape(nodal_mefs, :)
@@ -1685,8 +1734,13 @@ version = "3.5.0+0"
 # ╠═a993dd4c-c00c-450e-8247-89c2d44be04b
 # ╠═fd640755-2f9d-4845-9524-fce685e9053c
 # ╠═59316c15-a94c-4c56-a30a-0e6c23629de7
+# ╟─be39a732-89d0-4a8b-9c88-3acd34f96dcc
 # ╠═07268e37-5b62-4ab3-8d0d-5bab2286cdbe
 # ╟─7ffbe1bc-8cc6-4033-a70b-880209164199
+# ╟─a6178160-2471-4e6f-bcd9-debb529d39d4
+# ╟─971d68b9-c140-4594-a0af-4bb45f665508
+# ╠═d6abbce4-27ba-4a1d-8fb0-ce97a40c716d
+# ╟─20e85734-92ff-4c34-9572-dd65ddd1d327
 # ╠═e1a1acda-1d52-45bd-8257-8b7249318c9b
 # ╟─b53cc8dd-c36e-4cf8-9f1d-473a0e985234
 # ╟─c6f2eb39-a0e6-44bf-8649-f25ef72961a4
