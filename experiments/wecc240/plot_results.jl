@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.18.1
+# v0.18.4
 
 using Markdown
 using InteractiveUtils
@@ -375,11 +375,6 @@ end
 # ╔═╡ 5154fdd8-a58d-4faa-aced-7212ed0dc705
 # save(joinpath(RESULTS_DIR, "wecc240_full_figure.pdf"), full_figure)
 
-# ╔═╡ e5e10f07-1001-4438-b32d-c1f25cce04b1
-md"""
-## Analyze dynamic data
-"""
-
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
@@ -410,7 +405,7 @@ XLSX = "~0.7.9"
 PLUTO_MANIFEST_TOML_CONTENTS = """
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.7.2"
+julia_version = "1.7.1"
 manifest_format = "2.0"
 
 [[deps.AbstractFFTs]]
@@ -1745,6 +1740,5 @@ version = "3.5.0+0"
 # ╟─b53cc8dd-c36e-4cf8-9f1d-473a0e985234
 # ╟─c6f2eb39-a0e6-44bf-8649-f25ef72961a4
 # ╠═5154fdd8-a58d-4faa-aced-7212ed0dc705
-# ╟─e5e10f07-1001-4438-b32d-c1f25cce04b1
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
