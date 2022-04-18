@@ -86,6 +86,7 @@ function formulate_and_solve_dynamic(date, T; Z=1e3, line_max=100.0, line_weight
     p_static = []
     λ_static = []
     for t in 1:T
+        @show t
         gmax_t = min.(gmax[t], g[t] .+ ρ)
 
         net_t = PowerNetwork(fq[t], fl[t], pmax[t], gmax_t, case.A, case.B, F)
@@ -93,10 +94,10 @@ function formulate_and_solve_dynamic(date, T; Z=1e3, line_max=100.0, line_weight
         pmp_t = PowerManagementProblem(net_t, d_t)
 
         # Solve
-        solve!(pmp_t, CarbonNetworks.OPT)
+        @time solve!(pmp_t, CarbonNetworks.OPT)
         g_t = CarbonNetworks.evaluate(pmp_t.g)
         p_t = CarbonNetworks.evaluate(pmp_t.p)
-        λ_t = compute_mefs(pmp, net, d, co2_rates)
+        @time λ_t = compute_mefs(pmp_t, net_t, d_t, co2_rates)
         push!(g_static, g_t)
         push!(p_static, p_t)
         push!(λ_static, λ_t)

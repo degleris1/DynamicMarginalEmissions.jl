@@ -66,7 +66,7 @@ function get_gen_params(id_map)
         capacities = [r.MW1, r.MW2, r.MW3, r.MW4]
         append!(gmax, [r.MW1; diff(capacities)])
 
-        append!(ramp, fill(r.Ramp_Rate, 4))
+        append!(ramp, 60*fill(r.Ramp_Rate, 4))
 
         append!(fuel, fill(r.Gen_Type, 4))
 
