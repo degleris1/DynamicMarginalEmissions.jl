@@ -374,7 +374,7 @@ function get_generator_data(demand_map, node_ids, df_gen, df_heat)
 
         # Compute max capacity
         try
-            gmax[j] = load_map[row.generator]
+            gmax[j] = demand_map[row.generator]
         catch
             try
                 gmax[j] = parse(Float64, row.rating)

@@ -330,9 +330,6 @@ full_figure = let
 	fig
 end
 
-# ╔═╡ 5154fdd8-a58d-4faa-aced-7212ed0dc705
-save(joinpath(RESULTS_DIR, "wecc240_full_figure.pdf"), full_figure)
-
 # ╔═╡ dfc765e0-39d3-4ae4-93f0-4f0406f9f358
 λ_dyn = mean(all_λs_dyn, dims=1)[1, :]
 
@@ -427,6 +424,39 @@ begin
 end
 
 
+# ╔═╡ 7ae73ea6-8878-43cc-9207-fda58fa41d9c
+df = util.load_wecc_240_dataset();
+
+# ╔═╡ 812a305a-c9bb-4b57-9621-cadf4b70984c
+# what we would expect for the month of jan
+
+let
+gmax_ = []
+for hour in 1:24
+	for day in 1:1
+		for month in 1:1
+demand_map = util.get_demand_map(hour, day, month, 2004, df.demand)
+node_names, node_ids = util.get_node_info(df.branch)
+
+B, gmin, gmax, ramp, heat, fuel = util.get_generator_data(demand_map, node_ids, df.gen, df.heat)
+
+push!(gmax_, gmax)
+end
+end
+end
+	
+gmax_ = hcat(gmax_...)
+	
+f = Figure()
+ax = Axis(f[1,1], xlabel="time", ylabel="gmax/gmax(t=0)")
+ng, _ = size(gmax_)
+for gid in 1:ng
+lines!(gmax_[gid, :]./gmax_[gid, 1], color="gray")
+end
+f
+
+end
+
 # ╔═╡ 91b474ba-e955-416c-8bc7-aa2d9b88995f
 md"""
 
@@ -435,7 +465,12 @@ md"""
 
 # ╔═╡ e1b5c93e-9241-442b-a8ce-5c7d91809efc
 md"""
-Regressing over each node
+### Regressing over each node
+"""
+
+# ╔═╡ 847333af-8145-433a-b24c-554af2468da4
+md"""
+Here we want to estimate the MEF from each node. The problem is that demand is proportionally divided, therefore a regression analysis would probably have mefs lie on an affine set and easily attribute negative MEFs.
 """
 
 # ╔═╡ 13478bcb-c4fc-4532-a1ef-4513b15e3295
@@ -451,10 +486,10 @@ Regressing over each node
 
 # ╔═╡ 1fba9a4a-8090-4fc5-a373-670ed04dfb4e
 # get the values for the scatter plot at the two nodes of interest
-
 begin
-xx1 = Δd[:, node1]
-xx2 = Δd[:, node2]
+xx(node) = Δd[:, node]
+xx1 = xx(node1)
+xx2 = xx(node2)
 end;
 
 # ╔═╡ 0df59933-2c53-46ae-88fe-a7fbd1b4b339
@@ -466,16 +501,15 @@ MEFs_reg = LinearRegression.slope(lr_E)
 # ╔═╡ 749ef6df-5909-4f40-a5ff-0ed7877de9ab
 lines(MEFs_reg)
 
-# ╔═╡ db737f8d-ed35-43c8-84fb-c7329763b3c1
-MEFs_reg[node1]
+# ╔═╡ eb4e9485-5365-4c39-b791-3a2137679280
+md"""
+we see that many nodes have a negative average MEF, which does not make sense from scatter plots
+"""
 
 # ╔═╡ 5e77a674-9ece-415e-abd5-2b244e47beb9
 md"""
 Regressing over demand regions.
 """
-
-# ╔═╡ 3a472b5f-b6f4-462c-9e4e-513ff6b6e6c0
-df = util.load_wecc_240_dataset()
 
 # ╔═╡ 870d811d-ece6-4513-8f9a-558585d0d70a
 df.demand
@@ -483,26 +517,8 @@ df.demand
 # ╔═╡ 18941712-b800-48c3-ad09-b16a0e5a8f9b
 demand_map = util.get_demand_map(1, 1, 1, 2004, df.demand)
 
-# ╔═╡ c81d94e7-0c70-44c7-8112-470fc51a0adb
-demand_map["10 SOUTHWST"]
-
-# ╔═╡ 64173d8e-b948-4061-bb55-d5d2c87e1fd2
-size(df.participation)
-
-# ╔═╡ 21b39b31-3936-43b8-a97f-80f8ad7b1aea
-length(demand_map)
-
 # ╔═╡ 8d7c5fd9-5325-481a-a572-ca4e8dcc8655
 regions = unique(Array(df.participation[:, "Region"]))
-
-# ╔═╡ adab0eb6-8c01-446e-8d65-cb87369ab0f1
-length(regions)
-
-# ╔═╡ 00c62ecd-2753-4895-ba3a-19d68561b680
-length(unique(collect(keys(demand_map))))
-
-# ╔═╡ 4c800043-fbfe-4940-8f89-9dc023f87141
-df.demand[1, "Year"]
 
 # ╔═╡ 2238db2f-3860-4abb-938a-8b771b0ee6d8
 # we want to create a vector of demands for all the regions only
@@ -524,7 +540,7 @@ begin
 		
 	end
 	demands_regions = hcat(demands_regions...)
-end
+end;
 
 # ╔═╡ 4a1b69b6-1567-4199-9a32-b2019e88366c
 begin
@@ -534,13 +550,37 @@ begin
 end
 
 # ╔═╡ 6f68dfa5-7f43-4ed0-baf0-683b8c14cc5b
-Δd_regions = transpose(hcat([demands_regions[:, idx] - demands_regions[:, idx-1] for idx in idx_hr]...))
+begin
+	Δd_regions = transpose(hcat([demands_regions[:, idx] - demands_regions[:, idx-1] for idx in idx_hr]...));
+	Δd_regions = Δd_regions[1:end-1, :]; # we remove the last day as we assume we did not compute anything for it
+end
 
-# ╔═╡ db354372-b117-4237-afc2-f68a98788f42
-length(ΔE)
+# ╔═╡ 81a3439e-0a5c-41ab-b4fa-9bda14451282
+lr_regions = linregress(Δd_regions, ΔE);
 
-# ╔═╡ a61fa2b2-7304-426b-bdfe-6bb1c23f46c2
-md"""Q? why is the length 365 and not 366? I am guessing because feb 29th is omitted in the results? we can simply take it out of Δd_regions. 
+# ╔═╡ cb04852d-6ccf-46b2-94cb-e5faa3f4cb7a
+mefs_regions = LinearRegression.slope(lr_regions)
+
+# ╔═╡ c22d2cc0-8ea3-4a06-8283-9af4d13d78eb
+lines(mefs_regions)
+
+# ╔═╡ 5cce0ff7-b8ae-4288-84b4-20e2fc50b0b4
+region_id = 7
+
+# ╔═╡ 85a13faf-79ce-4e40-a69e-48f65dc2a7e9
+begin
+	
+	Δd_crt = Δd_regions[:, region_id]
+	x_crt = LinRange(1, maximum(Δd_crt), 100)
+	p=scatter(Δd_crt, ΔE)
+	slope_reg = mefs_regions[region_id]
+	lines!(x_crt, slope_reg*x_crt, color=:black)
+	p
+end
+
+# ╔═╡ 34cd82e7-b58f-469e-be91-a1391903d661
+md"""
+## NOTE: the linear regression really does not work... to inquire. 
 """
 
 # ╔═╡ 90aa489d-3c50-4c4a-ac19-351de901fbe4
@@ -759,7 +799,6 @@ p2=scatter(xx2, ΔE)
 # ╠═e1a1acda-1d52-45bd-8257-8b7249318c9b
 # ╟─b53cc8dd-c36e-4cf8-9f1d-473a0e985234
 # ╟─c6f2eb39-a0e6-44bf-8649-f25ef72961a4
-# ╠═5154fdd8-a58d-4faa-aced-7212ed0dc705
 # ╟─e5e10f07-1001-4438-b32d-c1f25cce04b1
 # ╠═b90eb7df-a78c-4bc5-ae3b-41f62e38da54
 # ╠═d4d509bd-8f96-4da3-917f-a65acb569953
@@ -779,33 +818,33 @@ p2=scatter(xx2, ΔE)
 # ╠═34253cd5-3049-4651-a5f6-06807a2233bd
 # ╠═df45b862-8d94-4b71-951c-5d84a7d16af2
 # ╠═087a3ba0-14f4-4373-99f1-3dd2ccdb71b9
-# ╠═5ba56789-c1bb-4c1b-95cc-4943561434f4
+# ╟─5ba56789-c1bb-4c1b-95cc-4943561434f4
 # ╠═44674366-5546-44b7-b6cc-b2476e3c8fc6
+# ╠═7ae73ea6-8878-43cc-9207-fda58fa41d9c
+# ╟─812a305a-c9bb-4b57-9621-cadf4b70984c
 # ╟─91b474ba-e955-416c-8bc7-aa2d9b88995f
 # ╟─e1b5c93e-9241-442b-a8ce-5c7d91809efc
+# ╟─847333af-8145-433a-b24c-554af2468da4
 # ╠═1fba9a4a-8090-4fc5-a373-670ed04dfb4e
 # ╠═13478bcb-c4fc-4532-a1ef-4513b15e3295
 # ╠═70723775-1912-48ed-9ae5-d4663d0f81d3
 # ╠═0df59933-2c53-46ae-88fe-a7fbd1b4b339
 # ╠═50acbd4b-1a02-4c55-b605-caf07f12bd74
 # ╠═749ef6df-5909-4f40-a5ff-0ed7877de9ab
-# ╠═db737f8d-ed35-43c8-84fb-c7329763b3c1
+# ╟─eb4e9485-5365-4c39-b791-3a2137679280
 # ╟─5e77a674-9ece-415e-abd5-2b244e47beb9
-# ╠═3a472b5f-b6f4-462c-9e4e-513ff6b6e6c0
 # ╠═870d811d-ece6-4513-8f9a-558585d0d70a
 # ╠═18941712-b800-48c3-ad09-b16a0e5a8f9b
-# ╠═c81d94e7-0c70-44c7-8112-470fc51a0adb
-# ╠═64173d8e-b948-4061-bb55-d5d2c87e1fd2
-# ╠═21b39b31-3936-43b8-a97f-80f8ad7b1aea
 # ╠═8d7c5fd9-5325-481a-a572-ca4e8dcc8655
-# ╠═adab0eb6-8c01-446e-8d65-cb87369ab0f1
-# ╠═00c62ecd-2753-4895-ba3a-19d68561b680
-# ╠═4c800043-fbfe-4940-8f89-9dc023f87141
 # ╠═2238db2f-3860-4abb-938a-8b771b0ee6d8
 # ╠═4a1b69b6-1567-4199-9a32-b2019e88366c
 # ╠═6f68dfa5-7f43-4ed0-baf0-683b8c14cc5b
-# ╠═db354372-b117-4237-afc2-f68a98788f42
-# ╠═a61fa2b2-7304-426b-bdfe-6bb1c23f46c2
+# ╠═81a3439e-0a5c-41ab-b4fa-9bda14451282
+# ╠═cb04852d-6ccf-46b2-94cb-e5faa3f4cb7a
+# ╠═c22d2cc0-8ea3-4a06-8283-9af4d13d78eb
+# ╠═5cce0ff7-b8ae-4288-84b4-20e2fc50b0b4
+# ╠═85a13faf-79ce-4e40-a69e-48f65dc2a7e9
+# ╠═34cd82e7-b58f-469e-be91-a1391903d661
 # ╠═90aa489d-3c50-4c4a-ac19-351de901fbe4
 # ╠═28591eda-995f-4224-98b8-ca1eab27559e
 # ╠═8e1f0bef-459d-4598-a01a-e59e00f53247
