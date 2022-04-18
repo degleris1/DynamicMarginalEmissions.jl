@@ -81,11 +81,35 @@ function formulate_and_solve_dynamic(date, T; Z=1e3, line_max=100.0, line_weight
         mefs[:, :, ind_t] .= λ[ind_t];
     end
 
+    # Solve again for equivalent static problems
+    g_static = []
+    p_static = []
+    λ_static = []
+    for t in 1:T
+        gmax_t = min.(gmax[t], g[t] .+ ρ)
+
+        net_t = PowerNetwork(fq[t], fl[t], pmax[t], gmax_t, case.A, case.B, F)
+        d_t = d[t] + case.S*(CarbonNetworks.evaluate(pmp.ch[t]) - CarbonNetworks.evaluate(pmp.dis[t]))
+        pmp_t = PowerManagementProblem(net_t, d_t)
+
+        # Solve
+        solve!(pmp_t, CarbonNetworks.OPT)
+        g_t = CarbonNetworks.evaluate(pmp_t.g)
+        p_t = CarbonNetworks.evaluate(pmp_t.p)
+        λ_t = compute_mefs(pmp, net, d, co2_rates)
+        push!(g_static, g_t)
+        push!(p_static, p_t)
+        push!(λ_static, λ_t)
+    end
+
     f_slack = [pmax[t] - abs.(p[t]) for t in 1:T]
     num_constr = mean(map(fs -> sum(fs .< 1e-2), f_slack))
     @show (date, pmp.problem.status, num_constr)
 
-    return (g=g, p=p, λ=mefs, d=d, gmax=gmax, pmax=pmax, status=string(pmp.problem.status))
+    return (
+        g=g, p=p, λ=mefs, d=d, gmax=gmax, pmax=pmax, status=string(pmp.problem.status),
+        g_static=g_static, p_static=p_static, λ_static=λ_static,
+    )
 end
 
 function formulate_and_solve_static(date; Z=1e3, line_max=100.0, line_weight=1.5)
