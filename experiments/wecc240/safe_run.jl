@@ -16,8 +16,9 @@ num_days = TOML.parsefile(setup)["NUM_DAYS"]
 horizon = TOML.parsefile(setup)["TIME_HORIZON"]
 
 num_runs = (num_days * 24) ÷ horizon
-@show num_runs
+@show num_days, horizon, num_runs
 
 for i in 1:num_runs
+    @show i
     run(`julia $command $setup $i`)
 end
