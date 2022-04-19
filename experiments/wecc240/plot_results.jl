@@ -113,37 +113,38 @@ md"""
 ## Plot!
 """
 
-# ╔═╡ a993dd4c-c00c-450e-8247-89c2d44be04b
-keys(results[2])
-
 # ╔═╡ fd640755-2f9d-4845-9524-fce685e9053c
 let
-	t = 1
+	t = 10
 
-	r = results[2][DateTime(0018, 07, 15, 00)]
 	rs = results[1][DateTime(0018, 07, 15, 00) .+ Hour(t-1)]
+	r = results[2][DateTime(0018, 07, 15, 00)]
 	
 	d = r[:d][t]
 	g = r[:g][t]
 	p = r[:p][t]
 
-	pmax = 2.0 * min.(cases[2][:fmax] / 1e3, 100e3) 
+	pmax = 1.5 * min.(cases[2][:fmax] / 1e3, 100e3) 
 
 	A = cases[2][:A]
 	B = cases[2][:B]
 	S = cases[2][:S]
+	ρ = cases[2][:ramp][1] / 1e3
 
 	ds = d - B*g + A*p
 
-	s_inds = findall(abs.(ds) .> 1e-4)
+	s_inds = findall(abs.(ds) .> 1e-6)
 
-	@show sum((abs.(p) ./ abs.(pmax)) .> 0.99)
-
-	ds[s_inds]
+	# @show sum((abs.(p) ./ abs.(pmax)) .> 0.99)
+	# @show sum((abs.(rs[:p]) ./ abs.(pmax)) .> 0.999), "foo"
+	
+	#ds[s_inds] / sum(d)
+	sum(abs, rs[:g] - g) / sum(abs, g)
+	#sum(abs.(g - r[:g][t-1]) ./ ρ .> 0.99)
 end
 
 # ╔═╡ 59316c15-a94c-4c56-a30a-0e6c23629de7
-hr = 6
+hr = 18
 
 # ╔═╡ 6df9206a-fc56-4d85-a065-8f41a84adfbf
 function get_nodal_mefs(r, whichdates=d -> hour(d) == hr)
@@ -151,11 +152,12 @@ function get_nodal_mefs(r, whichdates=d -> hour(d) == hr)
 	is_valid = [r[d][:status] for d in dates] .== "OPTIMAL"
 
 	# Get total mefs
-	get_total_mef = m -> (ndims(m) == 3) ? dropdims(sum(m, dims=3), dims=3) : m	
+	get_total_mef = m -> (ndims(m) == 3) ? dropdims(sum(m, dims=2), dims=2) : m	
 	mefs = [v ? get_total_mef(r[d][:λ]) : missing for (d, v) in zip(dates, is_valid)]
-
+	
 	# Expand dates
-	all_dates = [d .+ Hour.(0 : size(m, 2) - 1) for (d, m) in zip(dates, mefs)]
+	all_dates = [d .+ Hour.(0 : size(m, 2) - 1) for (d, m) in zip(dates, mefs) if !ismissing(m)]
+	mefs = [m for m in mefs if !ismissing(m)]
 
 	# Join lists of lists
 	mefs = reduce(hcat, mefs)
@@ -241,7 +243,7 @@ function fig_map(i, whichdates=d -> hour(d) == hr; fig=Figure(resolution=(450, 3
 end
 
 # ╔═╡ 07268e37-5b62-4ab3-8d0d-5bab2286cdbe
-fig_map(2)[1]
+fig_map(1)[1]
 
 # ╔═╡ a6178160-2471-4e6f-bcd9-debb529d39d4
 md"""
@@ -266,7 +268,7 @@ function fig_time(
 		lines!(ax, mefs_hr[n, :], linewidth=4)
 	end
 	xlims!(ax, 1, 23)
-	ylims!(ax, 500, 825)
+	ylims!(ax, 0, 1500)
 	ax.xticks = 0:6:24
 	ax.xlabel = "Hour"
 	ax.ylabel = "MEF [ton CO2 / MWh]"
@@ -275,7 +277,7 @@ function fig_time(
 end
 
 # ╔═╡ 971d68b9-c140-4594-a0af-4bb45f665508
-fig_time(nodes=[node1, node2])
+fig_time(run_id=2, nodes=[node1, node2])
 
 # ╔═╡ 20e85734-92ff-4c34-9572-dd65ddd1d327
 md"""
@@ -326,7 +328,7 @@ function fig_distr(
 	
 	
 
-	ylims!(ax, -0.1, 1.0)
+	ylims!(ax, -0.25, 1.5)
 	ax.ylabel = "MEF [ton CO2 / MWh]"
 	
 	
@@ -339,7 +341,7 @@ function fig_distr(
 end
 
 # ╔═╡ e1a1acda-1d52-45bd-8257-8b7249318c9b
-fig_distr(1)[1]
+fig_distr(2)[1]
 
 # ╔═╡ c6f2eb39-a0e6-44bf-8649-f25ef72961a4
 full_figure = let
@@ -1718,7 +1720,7 @@ version = "3.5.0+0"
 # ╠═7126918a-eb31-40a9-8f2d-7e181a1fcb3b
 # ╠═35e55d76-d175-4e77-9b69-930225cb8573
 # ╟─d2bacf4a-af37-4ff9-bebb-3dc3d06edd8a
-# ╟─6df9206a-fc56-4d85-a065-8f41a84adfbf
+# ╠═6df9206a-fc56-4d85-a065-8f41a84adfbf
 # ╟─61d78605-4bb1-4cb6-a9a2-c0f3499dff3a
 # ╠═26570b0b-9d07-473e-9f91-3153b56de0ec
 # ╠═2d1da86e-0c7e-402a-98f9-faaeaee79a19
@@ -1726,14 +1728,13 @@ version = "3.5.0+0"
 # ╠═7a42f00e-193c-45ea-951f-dcd4e1c1975f
 # ╠═5cb1709a-eda0-41b3-8bff-f58c19608be5
 # ╠═2d3cf797-4cc2-4aad-bc3e-94f5474e99f9
-# ╠═a993dd4c-c00c-450e-8247-89c2d44be04b
 # ╠═fd640755-2f9d-4845-9524-fce685e9053c
 # ╠═59316c15-a94c-4c56-a30a-0e6c23629de7
 # ╟─be39a732-89d0-4a8b-9c88-3acd34f96dcc
 # ╠═07268e37-5b62-4ab3-8d0d-5bab2286cdbe
 # ╟─7ffbe1bc-8cc6-4033-a70b-880209164199
 # ╟─a6178160-2471-4e6f-bcd9-debb529d39d4
-# ╟─971d68b9-c140-4594-a0af-4bb45f665508
+# ╠═971d68b9-c140-4594-a0af-4bb45f665508
 # ╠═d6abbce4-27ba-4a1d-8fb0-ce97a40c716d
 # ╟─20e85734-92ff-4c34-9572-dd65ddd1d327
 # ╠═e1a1acda-1d52-45bd-8257-8b7249318c9b
