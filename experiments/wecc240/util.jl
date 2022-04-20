@@ -38,7 +38,7 @@ include("nrel.jl")
 
 
 
-function formulate_and_solve_dynamic(date, T; Z=1e3, line_max=100.0, line_weight=1.5)
+function formulate_and_solve_dynamic(date, T; Z=1e3, line_max=100.0, line_weight=2.)
     println("-------")
     case = make_dynamic_case(date, T)
     n, _ = size(case.A)
@@ -81,6 +81,10 @@ function formulate_and_solve_dynamic(date, T; Z=1e3, line_max=100.0, line_weight
         mefs[:, :, ind_t] .= λ[ind_t];
     end
 
+    f_slack = [pmax[t] - abs.(p[t]) for t in 1:T]
+    num_constr = mean(map(fs -> sum(fs .< 1e-2), f_slack))
+    @show (date, pmp.problem.status, num_constr)
+
     # Solve again for equivalent static problems
     g_static = []
     p_static = []
@@ -103,9 +107,6 @@ function formulate_and_solve_dynamic(date, T; Z=1e3, line_max=100.0, line_weight
         push!(λ_static, λ_t)
     end
 
-    f_slack = [pmax[t] - abs.(p[t]) for t in 1:T]
-    num_constr = mean(map(fs -> sum(fs .< 1e-2), f_slack))
-    @show (date, pmp.problem.status, num_constr)
 
     return (
         g=g, p=p, λ=mefs, d=d, gmax=gmax, pmax=pmax, status=string(pmp.problem.status),
@@ -113,7 +114,7 @@ function formulate_and_solve_dynamic(date, T; Z=1e3, line_max=100.0, line_weight
     )
 end
 
-function formulate_and_solve_static(date; Z=1e3, line_max=100.0, line_weight=1.5)
+function formulate_and_solve_static(date; Z=1e3, line_max=100.0, line_weight=2.)
     case = make_static_case(date)
 
     # Construct flow matrix
@@ -218,7 +219,7 @@ function _make_static_case2004(date)
     df = load_wecc_240_dataset()
 
     # Network structure
-    node_names, node_ids = get_node_info(df.branch)
+    node_names, node_ids, _ = get_node_info(df.branch)
     A, β, fmax, cf = get_network_structure(df.branch)
 
     # Demand data
@@ -292,7 +293,7 @@ function _make_dynamic_case2004(date, T, δ=1e-4)
     df = load_wecc_240_dataset()
 
     # Network structure
-    node_names, node_ids = get_node_info(df.branch)
+    node_names, node_ids, _ = get_node_info(df.branch)
     A, β, fmax, cf = get_network_structure(df.branch) 
 
     # Demand and Generator data
@@ -480,13 +481,14 @@ end
 """
     get_node_info(df_branch)
 
-Return node names and IDs.
+Return node names and IDs and nicknames
 """
 function get_node_info(df_branch)
     nodes = sort(unique([df_branch.source; df_branch.sink]))
     node_ids = map(x -> parse(Int, match(r"\{....\}", x).match[2:end-1]), nodes)
+    nicknames = map(x -> strip(rsplit(x, " ", limit=3)[1]), nodes)
 
-    return nodes, node_ids
+    return nodes, node_ids, nicknames
 end
 
 """
@@ -495,7 +497,7 @@ end
 Return incidence matrix, line susceptances, line capacities, and line hurdle rates.
 """
 function get_network_structure(df_branch)
-    node_names, node_ids = get_node_info(df_branch)
+    node_names, node_ids, _ = get_node_info(df_branch)
     n, m = length(node_names), nrow(df_branch)
 
     β = abs.(1 ./ df_branch.reactance)
