@@ -1,0 +1,5 @@
+RUN_ID = "oct04_static"
+START_DATETIME = "2004-10-01-00"
+TIME_HORIZON = 1
+NUM_DAYS = 31
+FLAG = ""

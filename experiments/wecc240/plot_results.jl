@@ -17,7 +17,7 @@ using BSON
 using XLSX, DataFrames
 
 # ╔═╡ 64f8e88a-dfbf-4d25-b40e-af688e9e9f00
-using SparseArrays
+using SparseArrays, InlineStrings
 
 # ╔═╡ 32e5f26a-9b2f-4fc0-a0cd-1a5f101f0db9
 using StatsBase: mean
@@ -54,13 +54,13 @@ DATA_DIR = config["data"]["GOOGLE_DRIVE"]
 RESULTS_DIR = config["data"]["SAVE_DIR"]
 
 # ╔═╡ 67130163-7a9e-4dc9-8458-b00239a1fb07
-run_names = ["july18_static", "july18_dynamic"]
+run_names = ["july04_static", "july18_static", "july18_dynamic"]
 
 # ╔═╡ 6de86962-a420-4885-ae7a-18748549c4c2
 paths = [joinpath(DATA_DIR, "results240", name) for name in run_names]
 
 # ╔═╡ 2757231c-ef30-417a-87dd-7d155049ba47
-cases = [BSON.load(joinpath(p, "case.bson")) for p in paths];
+cases = [BSON.load(joinpath(p, "case.bson"), @__MODULE__) for p in paths];
 
 # ╔═╡ 86256bed-e080-4c30-b730-82f3b06ec160
 load_results(p) = Dict(
@@ -117,8 +117,8 @@ md"""
 let
 	t = 10
 
-	rs = results[1][DateTime(0018, 07, 15, 00) .+ Hour(t-1)]
-	r = results[2][DateTime(0018, 07, 15, 00)]
+	rs = results[2][DateTime(0018, 07, 15, 00) .+ Hour(t-1)]
+	r = results[3][DateTime(0018, 07, 15, 00)]
 	
 	d = r[:d][t]
 	g = r[:g][t]
@@ -126,10 +126,10 @@ let
 
 	pmax = 1.5 * min.(cases[2][:fmax] / 1e3, 100e3) 
 
-	A = cases[2][:A]
-	B = cases[2][:B]
-	S = cases[2][:S]
-	ρ = cases[2][:ramp][1] / 1e3
+	A = cases[3][:A]
+	B = cases[3][:B]
+	S = cases[3][:S]
+	ρ = cases[3][:ramp][1] / 1e3
 
 	ds = d - B*g + A*p
 
@@ -243,41 +243,57 @@ function fig_map(i, whichdates=d -> hour(d) == hr; fig=Figure(resolution=(450, 3
 end
 
 # ╔═╡ 07268e37-5b62-4ab3-8d0d-5bab2286cdbe
-fig_map(1)[1]
+fig_map(2)[1]
 
 # ╔═╡ a6178160-2471-4e6f-bcd9-debb529d39d4
 md"""
 ## Time Series
 """
 
+# ╔═╡ 76277c5f-c415-4861-b934-c76cc07a3820
+day_range = 1:31
+
 # ╔═╡ d6abbce4-27ba-4a1d-8fb0-ce97a40c716d
 function fig_time(
 	; run_id=1,
 	nodes=[1],
-	fig=Figure(resolution=(650, 200), fontsize=10)
+	fig=Figure(resolution=(650, 200), fontsize=10),
+	whichdates=d -> true,
+	ls_cycle=[:solid, :dash],
+	color_cycle=[:black, :blue]
 )
-	r = results[run_id]
-	
-	# Get MEF over time
-	mefs_hr = [get_average_nodal_mefs(r, d -> hour(d) == h) for h in 1:24]
-	mefs_hr = reduce(hcat, mefs_hr)
+	run_id = typeof(run_id) <: Array ? run_id : [run_id]
 
-	# Plot
 	ax = Axis(fig[1, 1], xgridvisible=false, ygridvisible=false)
-	for n in nodes
-		lines!(ax, mefs_hr[n, :], linewidth=4)
-	end
 	xlims!(ax, 1, 23)
-	ylims!(ax, 0, 1500)
+	ylims!(ax, 400, 900)
 	ax.xticks = 0:6:24
 	ax.xlabel = "Hour"
 	ax.ylabel = "MEF [ton CO2 / MWh]"
+
+	for (indr, rid) in enumerate(run_id)
+		r = results[rid]
+		
+		# Get MEF over time
+		mefs_hr = [
+			get_average_nodal_mefs(r, d -> whichdates(d) && hour(d) == h) 
+			for h in 1:24
+		]
+		mefs_hr = reduce(hcat, mefs_hr)
+	
+		for (ind, n) in enumerate(nodes)
+			lines!(ax, mefs_hr[n, :], label="Run $rid, Node $n",
+				linewidth=4, linestyle=ls_cycle[ind], color=color_cycle[indr])
+		end
+	end
+
+	Legend(fig[1, 2], ax, merge=true, unique=true)
 	
 	fig
 end
 
 # ╔═╡ 971d68b9-c140-4594-a0af-4bb45f665508
-fig_time(run_id=2, nodes=[node1, node2])
+fig_time(run_id=[1, 2], nodes=[node1], whichdates=d -> day(d) in day_range)
 
 # ╔═╡ 20e85734-92ff-4c34-9572-dd65ddd1d327
 md"""
@@ -386,6 +402,7 @@ DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 Downloads = "f43a241f-c20a-4ad4-852c-f6b1247861c6"
 GeoMakie = "db073c08-6b98-4ee5-b6a4-5efafb3259c6"
+InlineStrings = "842dd82b-1e85-43dc-bf29-5d0ee9dffc48"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
@@ -398,6 +415,7 @@ BSON = "~0.3.5"
 CairoMakie = "~0.7.5"
 DataFrames = "~1.3.2"
 GeoMakie = "~0.3.1"
+InlineStrings = "~1.1.2"
 PlutoUI = "~0.7.38"
 StatsBase = "~0.33.16"
 XLSX = "~0.7.9"
@@ -863,6 +881,12 @@ version = "1.0.0"
 git-tree-sha1 = "f5fc07d4e706b84f72d54eedcc1c13d92fb0871c"
 uuid = "d25df0c9-e2be-5dd7-82c8-3ad0b3e990b9"
 version = "0.1.2"
+
+[[deps.InlineStrings]]
+deps = ["Parsers"]
+git-tree-sha1 = "61feba885fac3a407465726d0c330b3055df897f"
+uuid = "842dd82b-1e85-43dc-bf29-5d0ee9dffc48"
+version = "1.1.2"
 
 [[deps.IntelOpenMP_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -1734,6 +1758,7 @@ version = "3.5.0+0"
 # ╠═07268e37-5b62-4ab3-8d0d-5bab2286cdbe
 # ╟─7ffbe1bc-8cc6-4033-a70b-880209164199
 # ╟─a6178160-2471-4e6f-bcd9-debb529d39d4
+# ╠═76277c5f-c415-4861-b934-c76cc07a3820
 # ╠═971d68b9-c140-4594-a0af-4bb45f665508
 # ╠═d6abbce4-27ba-4a1d-8fb0-ce97a40c716d
 # ╟─20e85734-92ff-4c34-9572-dd65ddd1d327
