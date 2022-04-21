@@ -8,8 +8,15 @@ using StatsBase: mean
 using TOML
 using XLSX
 using BSON
+using LinearAlgebra
 
 using CarbonNetworks
+
+
+Z = 1e3
+line_max = 100.0
+line_weight = 2.
+use_NREL_network = true #only applies to 2004 dataset
 
 config = TOML.parsefile(joinpath(@__DIR__, "../../config.toml"))
 DATA_DIR = joinpath(config["data"]["DATA_DIR"], "wecc240")
@@ -33,9 +40,9 @@ include("nrel.jl")
 
 
 
-function formulate_and_solve_dynamic(date, T; Z=1e3, line_max=100.0, line_weight=2.)
+function formulate_and_solve_dynamic(date, T; Z=Z, line_max=line_max, line_weight=line_weight, use_NREL_network=use_NREL_network)
     println("-------")
-    case = make_dynamic_case(date, T)
+    case = make_dynamic_case(date, T; use_NREL_network=use_NREL_network)
     n, _ = size(case.A)
 
     # Construct flow matrix
@@ -109,8 +116,9 @@ function formulate_and_solve_dynamic(date, T; Z=1e3, line_max=100.0, line_weight
     )
 end
 
-function formulate_and_solve_static(date; Z=1e3, line_max=100.0, line_weight=2.)
-    case = make_static_case(date)
+function formulate_and_solve_static(date; Z=Z, line_max=line_max, line_weight=line_weight, use_NREL_network=use_NREL_network)
+
+    case = make_static_case(date; use_NREL_network=use_NREL_network)
 
     # Construct flow matrix
     F = make_pfdf_matrix(case.A, case.β)
@@ -173,11 +181,11 @@ end
 
 Return data for specifying a static case (no storage or ramping).
 """
-function make_static_case(date)
+function make_static_case(date; use_NREL_network=false)
     @assert year(date) in [2004, 2018]
 
     if year(date) == 2004
-        return _make_static_case2004(date)
+        return _make_static_case2004(date; use_NREL_network=use_NREL_network)
     else  # year == 2018
         return _make_static_case2018(date)
     end
@@ -210,12 +218,12 @@ function _make_static_case2018(date)
     return case
 end
 
-function _make_static_case2004(date)
+function _make_static_case2004(date; use_NREL_network=false)
     df = load_wecc_240_dataset()
 
-    # Network structure
+    # you need to keep the 2004 formatting to match with all the
+    # different files (e.g. df.participation)
     node_names, node_ids, _ = get_node_info(df.branch)
-    A, β, fmax, cf = get_network_structure(df.branch)
 
     # Demand data
     demand_map = get_demand_map(hour(date)+1, day(date), month(date), year(date), df.demand)
@@ -224,11 +232,27 @@ function _make_static_case2004(date)
     # Generator data
     B, gmin, gmax, ramp, heat, fuel = get_generator_data(demand_map, node_ids, df.gen, df.heat)
 
+    # Network structure
+    if use_NREL_network
+
+        # get the map between datasets
+        node_nrel = get_node_params()
+        node_ids_nrel = node_nrel.name
+        map_nodes = get_map_nodes(node_ids, node_ids_nrel)
+
+        # map parameters
+        d, B = map_nodes*d, map_nodes*B
+        
+        (; A, β, fmax) = get_line_params(node_nrel.id_map)
+    else
+        A, β, fmax, _ = get_network_structure(df.branch)
+    end
+
     fl = get_costs(heat, fuel, FUEL_COSTS)
     co2_rates = get_costs(heat, fuel, FUEL_EMISSIONS)
 
     case = (
-        A=A, β=β, fmax=fmax, cf=cf, d=d, 
+        A=A, β=β, fmax=fmax, d=d, 
         B=B, gmin=gmin, gmax=gmax, ramp=ramp, fuel=fuel, fl=fl, co2_rates=co2_rates,
         node_names=node_names, node_ids=node_ids,
     )
@@ -241,11 +265,11 @@ end
 
 Return data for specifying a dynamic case, for a given duration T in number of timesteps.
 """
-function make_dynamic_case(date, T)
+function make_dynamic_case(date, T; use_NREL_network=false)
     @assert year(date) in [2004, 2018]
 
     if year(date) == 2004
-        return _make_dynamic_case2004(date, T)
+        return _make_dynamic_case2004(date, T; use_NREL_network=use_NREL_network)
     else  # year == 2018
         return _make_dynamic_case2018(date, T)
     end
@@ -284,12 +308,25 @@ function _make_dynamic_case2018(date, T, δ=1e-4)
     return case
 end
 
-function _make_dynamic_case2004(date, T, δ=1e-4)
+function _make_dynamic_case2004(date, T, δ=1e-4; use_NREL_network=false)
     df = load_wecc_240_dataset()
 
     # Network structure
     node_names, node_ids, _ = get_node_info(df.branch)
-    A, β, fmax, cf = get_network_structure(df.branch) 
+
+    if use_NREL_network
+
+        # get the map between datasets
+        node_nrel = get_node_params()
+        node_ids_nrel = node_nrel.name
+        map_nodes = get_map_nodes(node_ids, node_ids_nrel)
+
+        (; A, β, fmax) = get_line_params(node_nrel.id_map)
+
+    else
+        map_nodes = I(length(node_ids))
+        A, β, fmax, _ = get_network_structure(df.branch) 
+    end
 
     # Demand and Generator data
     # Needs to be extracted at every time step
@@ -307,9 +344,13 @@ function _make_dynamic_case2004(date, T, δ=1e-4)
     for dt = 0:T-1
         demand_map = get_demand_map(hour(date)+1+dt, day(date), month(date), year(date), df.demand)
         d = make_demand_vector(demand_map, node_names, df.participation)
-        push!(d_dyn, d)
 
         B, gmin, gmax, ramp, heat, fuel = get_generator_data(demand_map, node_ids, df.gen, df.heat)
+
+        d, B = map_nodes*d, map_nodes*B
+
+
+        push!(d_dyn, d)
         push!(gmin_dyn, gmin)
         push!(gmax_dyn, gmax)
         push!(ramp_dyn, ramp)
@@ -322,14 +363,31 @@ function _make_dynamic_case2004(date, T, δ=1e-4)
     # TODO: clarify the meaning of each parameter
     # TODO: make vector-valued efficiencies compatible with the code
     efficiency, s_capacity, s_rate, _ = get_storage_data(df.storage)
-    S = get_storage_map(df.storage, node_ids)
+    S = map_nodes*get_storage_map(df.storage, node_ids)
 
     case = (
-        A=A, β=β, fmax=fmax, cf=cf, d=d_dyn, 
+        A=A, β=β, fmax=fmax, d=d_dyn, 
         B=B, gmin=gmin_dyn, gmax=gmax_dyn, ramp=ramp_dyn, fuel=fuel, fl=fl, co2_rates=co2_rates,
         η_c=sqrt(mean(efficiency)), η_d=sqrt(mean(efficiency)), C=s_capacity, P=s_rate, S=S,
         node_names=node_names, node_ids=node_ids,
     )
     return case
+end
+
+
+"""
+    get_map_nodes(node_ids_04, node_ids_nrel, nicknames_04)
+
+Returns a matrix that maps the nodes from the 2004 to the 2018 dataset. 
+"""
+function get_map_nodes(node_ids_04, node_ids_nrel)
+	map_nodes = zeros(length(node_ids_nrel), length(node_ids_04))
+	for (k, id_crt) in enumerate(node_ids_nrel)
+		idx = findall(node_ids_04.==id_crt)
+		if length(idx)==1
+			map_nodes[k, idx[1]] = 1
+		end
+	end
+	return map_nodes
 end
 

@@ -7,6 +7,9 @@ using InteractiveUtils
 # ╔═╡ 87226227-885e-4e0c-a0c0-59f9027a8e08
 using Dates
 
+# ╔═╡ fc5263ff-e382-4f42-bad1-df958cbf553b
+using LinearAlgebra
+
 # ╔═╡ 0446fb81-0a2c-42ec-8e88-9fe77caef65d
 using DataFrames
 
@@ -103,18 +106,19 @@ It seems that the node_id from 004 matches the node name from 2018.
 let us check if the nicknames match
 """
 
+# ╔═╡ da43a648-6308-4c95-b4b6-823801e4ae71
+I(5)
+
 # ╔═╡ 8d6ce266-f068-4be3-acdd-5e288cd7edb4
 begin
-	nickname_04 = []
-	for nm in params.node.name
-		ids_crt = findall(node_ids_04.==nm)
-		if length(ids_crt)==1
-			push!(nickname_04, nicknames_04[ids_crt[1]])
-		else
-			push!(nickname_04, missing)
-		end
-	end
+map_nodes, nickname_04 = get_map_nodes(node_ids_04, params.node.name, nicknames_04)
 end
+
+# ╔═╡ 3554d619-22a8-47c8-bb92-e1743cc022da
+sum(sum(map_nodes, dims=2).==0)
+
+# ╔═╡ 67336d03-be80-48ce-9410-a1d54daaad3e
+size(map_nodes)
 
 # ╔═╡ 090e4c52-b7eb-41d2-ac39-9347a6bcf2fa
 df_name = DataFrame(Number=params.node.name, Name04=nickname_04, Name18=params.node.nickname);
@@ -149,11 +153,33 @@ Looking at the code, it seems that the generator data is matched via node_ids, a
 - handle the `missing` possibility in `get_generator_data` for 2004
 """
 
+# ╔═╡ 47656f59-56c8-4313-b5ff-46807e4e1e3c
+sum(map_nodes[idx_missing, :], dims=2) # those are the nodes that don't have matching with the map!
+
+# ╔═╡ 4d96331b-b89b-4f84-bc9c-f09c97c10e9d
+md"""
+## How to integrate that in the code? 
+"""
+
+# ╔═╡ 437ab621-b63e-4af2-b469-aa086e131e54
+begin
+	year=2004
+	month=1
+	day=1
+	hour=1
+	demand_map = util.get_demand_map(hour, day, month, year, df.demand)
+    d = util.make_demand_vector(demand_map, node_names_04, df.participation)
+end
+
+# ╔═╡ 893863dd-1e75-4227-85ed-df587ccd44db
+demand_map
+
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 
 [compat]
 DataFrames = "~1.3.3"
@@ -440,7 +466,11 @@ uuid = "3f19e933-33d8-53b3-aaab-bd5110c3b7a0"
 # ╠═ec94cfb9-51d6-4289-b142-0dfa41c2403b
 # ╟─f880f159-595a-4d58-a92c-b96ae5d69288
 # ╟─c87e4809-da9d-4671-b092-5a749a49eb72
+# ╠═fc5263ff-e382-4f42-bad1-df958cbf553b
+# ╠═da43a648-6308-4c95-b4b6-823801e4ae71
 # ╠═8d6ce266-f068-4be3-acdd-5e288cd7edb4
+# ╠═3554d619-22a8-47c8-bb92-e1743cc022da
+# ╠═67336d03-be80-48ce-9410-a1d54daaad3e
 # ╠═0446fb81-0a2c-42ec-8e88-9fe77caef65d
 # ╠═090e4c52-b7eb-41d2-ac39-9347a6bcf2fa
 # ╠═9f18bc61-6e03-4370-9e92-b7e73bc2e789
@@ -450,6 +480,10 @@ uuid = "3f19e933-33d8-53b3-aaab-bd5110c3b7a0"
 # ╟─277274a0-0e7b-4571-bee5-eecd75e05d36
 # ╠═15b6fa3d-c5e3-4eb3-a6de-3f830b8deda9
 # ╠═bd22b4ff-2fb9-41ee-b62f-34de2f9bda21
-# ╠═3b117431-c016-4c19-b20a-b6f5e1df31dd
+# ╟─3b117431-c016-4c19-b20a-b6f5e1df31dd
+# ╠═47656f59-56c8-4313-b5ff-46807e4e1e3c
+# ╠═4d96331b-b89b-4f84-bc9c-f09c97c10e9d
+# ╠═437ab621-b63e-4af2-b469-aa086e131e54
+# ╠═893863dd-1e75-4227-85ed-df587ccd44db
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
