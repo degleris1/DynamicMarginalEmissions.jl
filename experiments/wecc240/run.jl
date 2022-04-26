@@ -22,13 +22,14 @@ function run(setup_file::String, run_number)
     start_date = DateTime(setup["START_DATETIME"], DATE_FORMAT)
     num_days = setup["NUM_DAYS"]
     T = setup["TIME_HORIZON"]
+    added_storage = get(setup, "ADDED_STORAGE", 0.0)
 
 
 
 
     # Decide whether or not to use static or dynamic runs
     load_case = (T == 1) ? make_static_case : (d -> make_dynamic_case(d, T))
-    run_model = (T == 1) ? formulate_and_solve_static : (d -> formulate_and_solve_dynamic(d, T))
+    run_model = (T == 1) ? formulate_and_solve_static : (d -> formulate_and_solve_dynamic(d, T; added_storage=added_storage))
 
     # Create dates
     dates = start_date .+ Hour.(0 : T : (HOURS_PER_DAY*num_days-1))

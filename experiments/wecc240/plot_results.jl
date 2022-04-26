@@ -92,7 +92,7 @@ coords(k) = y[k], x[k]
 num_nodes = length(x)
 
 # ╔═╡ 7126918a-eb31-40a9-8f2d-7e181a1fcb3b
-node1 = 100; df_gis[node1, "Bus  Name"], coords(node1)
+node1 = 10; df_gis[node1, "Bus  Name"], coords(node1)
 
 # ╔═╡ 35e55d76-d175-4e77-9b69-930225cb8573
 node2 = 50; df_gis[node2, "Bus  Name"], coords(node2)
@@ -144,16 +144,26 @@ let
 end
 
 # ╔═╡ 59316c15-a94c-4c56-a30a-0e6c23629de7
-hr = 18
+hr = 12
 
 # ╔═╡ 6df9206a-fc56-4d85-a065-8f41a84adfbf
-function get_nodal_mefs(r, whichdates=d -> hour(d) == hr)
+function get_nodal_mefs(r, whichdates=d -> hour(d) == hr; hybrid_mode=true)
+	is_dynamic = (ndims(first(r)[2][:λ]) == 3)
+
 	dates = sort(collect(keys(r)))
 	is_valid = [r[d][:status] for d in dates] .== "OPTIMAL"
 
 	# Get total mefs
-	get_total_mef = m -> (ndims(m) == 3) ? dropdims(sum(m, dims=2), dims=2) : m	
-	mefs = [v ? get_total_mef(r[d][:λ]) : missing for (d, v) in zip(dates, is_valid)]
+	function get_total_mef(rd)
+		if is_dynamic && hybrid_mode
+			return reduce(hcat, rd[:λ_static])
+		elseif is_dynamic
+			return dropdims(sum(rd[:λ], dims=2), dims=2)
+		else
+			return rd[:λ]
+		end
+	end
+	mefs = [v ? get_total_mef(r[d]) : missing for (d, v) in zip(dates, is_valid)]
 	
 	# Expand dates
 	all_dates = [d .+ Hour.(0 : size(m, 2) - 1) for (d, m) in zip(dates, mefs) if !ismissing(m)]
@@ -170,8 +180,8 @@ function get_nodal_mefs(r, whichdates=d -> hour(d) == hr)
 end
 
 # ╔═╡ 61d78605-4bb1-4cb6-a9a2-c0f3499dff3a
-function get_average_nodal_mefs(r, whichdates=d -> hour(d) == hr)
-	mefs = get_nodal_mefs(r, whichdates)
+function get_average_nodal_mefs(r, whichdates=d -> hour(d) == hr; hybrid_mode=true)
+	mefs = get_nodal_mefs(r, whichdates; hybrid_mode=hybrid_mode)
 	return [mean(skipmissing(mefs[i, :])) for i in 1:size(mefs, 1)]
 end
 
@@ -217,7 +227,8 @@ function fig_map(i, whichdates=d -> hour(d) == hr; fig=Figure(resolution=(450, 3
 	# and my part
 	
 	# Edges
-	A = case[:A]
+	_case = BSON.load(joinpath(DATA_DIR, "results240", "july18_static", "case.bson"), @__MODULE__)
+	A = _case[:A]
 	for j in 1:size(A, 2)
 		fr = findfirst(==(-1), A[:, j])
 		to = findfirst(==(1), A[:, j])
@@ -227,15 +238,20 @@ function fig_map(i, whichdates=d -> hour(d) == hr; fig=Figure(resolution=(450, 3
 	end
 
 	# Nodes
-	sct = scatter!(ax, x, y, markersize=8, marker=:hexagon, color=λ/1e3, 
+	marker = [i in [node1, node2] ? :hexagon : :circle for i in 1:length(x)]
+	ms = [i in [node1, node2] ? 12 : 6 for i in 1:length(x)]
+	sw = [i in [node1, node2] ? 1 : 0.1 for i in 1:length(x)]
+	sct = scatter!(ax, x, y, markersize=ms, strokewidth=sw, marker=marker, color=λ/1e3, 
 		colormap=:jet1, colorrange=(-0.1, 1.0))
+
+	
 
 	# Colorbar
 	cb = Colorbar(fig[1, 2], sct, label="Marginal Emissions Rate [ton CO2 / MWh]")
 
 	ax.xticks = [-150]
 	ax.yticks = [20]
-	ax.title = "WECC: Average Nodal MEFs at Hour $hour"
+	ax.title = "WECC: Average Nodal MEFs at Hour $hr "
 
 	cb.tellheight = true
 	
@@ -257,10 +273,12 @@ day_range = 1:31
 function fig_time(
 	; run_id=1,
 	nodes=[1],
+	hybrid_mode=[false],
+	labels=["run A"],
 	fig=Figure(resolution=(650, 200), fontsize=10),
 	whichdates=d -> true,
 	ls_cycle=[:solid, :dash],
-	color_cycle=[:black, :blue]
+	color_cycle=[:black, :blue, :orange]
 )
 	run_id = typeof(run_id) <: Array ? run_id : [run_id]
 
@@ -273,16 +291,17 @@ function fig_time(
 
 	for (indr, rid) in enumerate(run_id)
 		r = results[rid]
+		hm = hybrid_mode[indr]
 		
 		# Get MEF over time
 		mefs_hr = [
-			get_average_nodal_mefs(r, d -> whichdates(d) && hour(d) == h) 
+			get_average_nodal_mefs(r, d -> whichdates(d) && hour(d) == h, hybrid_mode=hm) 
 			for h in 1:24
 		]
 		mefs_hr = reduce(hcat, mefs_hr)
 	
 		for (ind, n) in enumerate(nodes)
-			lines!(ax, mefs_hr[n, :], label="Run $rid, Node $n",
+			lines!(ax, mefs_hr[n, :], label="Run $(labels[indr]), Node $n",
 				linewidth=4, linestyle=ls_cycle[ind], color=color_cycle[indr])
 		end
 	end
@@ -293,7 +312,13 @@ function fig_time(
 end
 
 # ╔═╡ 971d68b9-c140-4594-a0af-4bb45f665508
-fig_time(run_id=[1, 2], nodes=[node1], whichdates=d -> day(d) in day_range)
+fig_time(
+	run_id=[2, 3, 3], 
+	hybrid_mode=[false, true, false],
+	labels=["stat", "mix", "dyn"],
+	nodes=[node2], 
+	whichdates=d -> day(d) in day_range
+)
 
 # ╔═╡ 20e85734-92ff-4c34-9572-dd65ddd1d327
 md"""
@@ -1744,7 +1769,7 @@ version = "3.5.0+0"
 # ╠═7126918a-eb31-40a9-8f2d-7e181a1fcb3b
 # ╠═35e55d76-d175-4e77-9b69-930225cb8573
 # ╟─d2bacf4a-af37-4ff9-bebb-3dc3d06edd8a
-# ╠═6df9206a-fc56-4d85-a065-8f41a84adfbf
+# ╟─6df9206a-fc56-4d85-a065-8f41a84adfbf
 # ╟─61d78605-4bb1-4cb6-a9a2-c0f3499dff3a
 # ╠═26570b0b-9d07-473e-9f91-3153b56de0ec
 # ╠═2d1da86e-0c7e-402a-98f9-faaeaee79a19
@@ -1752,7 +1777,7 @@ version = "3.5.0+0"
 # ╠═7a42f00e-193c-45ea-951f-dcd4e1c1975f
 # ╠═5cb1709a-eda0-41b3-8bff-f58c19608be5
 # ╠═2d3cf797-4cc2-4aad-bc3e-94f5474e99f9
-# ╠═fd640755-2f9d-4845-9524-fce685e9053c
+# ╟─fd640755-2f9d-4845-9524-fce685e9053c
 # ╠═59316c15-a94c-4c56-a30a-0e6c23629de7
 # ╟─be39a732-89d0-4a8b-9c88-3acd34f96dcc
 # ╠═07268e37-5b62-4ab3-8d0d-5bab2286cdbe
@@ -1760,7 +1785,7 @@ version = "3.5.0+0"
 # ╟─a6178160-2471-4e6f-bcd9-debb529d39d4
 # ╠═76277c5f-c415-4861-b934-c76cc07a3820
 # ╠═971d68b9-c140-4594-a0af-4bb45f665508
-# ╠═d6abbce4-27ba-4a1d-8fb0-ce97a40c716d
+# ╟─d6abbce4-27ba-4a1d-8fb0-ce97a40c716d
 # ╟─20e85734-92ff-4c34-9572-dd65ddd1d327
 # ╠═e1a1acda-1d52-45bd-8257-8b7249318c9b
 # ╟─b53cc8dd-c36e-4cf8-9f1d-473a0e985234

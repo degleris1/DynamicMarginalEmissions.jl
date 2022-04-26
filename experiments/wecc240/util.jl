@@ -15,8 +15,10 @@ using CarbonNetworks
 
 Z = 1e3
 line_max = 100.0
-line_weight = 2.
-use_NREL_network = true #only applies to 2004 dataset
+line_weight = 1.0
+use_NREL_network = true # Only applies to 2004 dataset
+BATTERY_DURATION = 4
+NUM_SOLAR_BATTERY = 10
 
 config = TOML.parsefile(joinpath(@__DIR__, "../../config.toml"))
 DATA_DIR = joinpath(config["data"]["DATA_DIR"], "wecc240")
@@ -40,7 +42,15 @@ include("nrel.jl")
 
 
 
-function formulate_and_solve_dynamic(date, T; Z=Z, line_max=line_max, line_weight=line_weight, use_NREL_network=use_NREL_network)
+function formulate_and_solve_dynamic(
+    date, 
+    T; 
+    Z=Z, 
+    line_max=line_max, 
+    line_weight=line_weight, 
+    use_NREL_network=use_NREL_network,
+    added_storage=0.0
+)
     println("-------")
     case = make_dynamic_case(date, T; use_NREL_network=use_NREL_network)
     n, _ = size(case.A)
@@ -61,9 +71,35 @@ function formulate_and_solve_dynamic(date, T; Z=Z, line_max=line_max, line_weigh
     C = case.C / Z
     ρ = case.ramp[1] / Z
 
+    B = case.B
+    S = case.S
+
+    # Add grid scale storage at solar nodes
+    # Added storage is in units of MW
+    # And has C-rate of 0.25
+    if added_storage > 0.0
+        fuel = case.params[1].gen.fuel
+
+        # Get the "nameplate capacity", not the available capacity at time t
+        ḡ = case.params[1].gen.gmax
+        k = length(ḡ)
+
+        renewables = filter(i -> occursin("PV", fuel[i]), 1:k)
+        
+        top_renewables = renewables[sortperm(ḡ[renewables], rev=true)][1:NUM_SOLAR_BATTERY]
+        weights = ḡ[top_renewables] / sum(ḡ[top_renewables])
+
+        for (i, w) in zip(top_renewables, weights)
+            push!(C, w * BATTERY_DURATION * added_storage / Z)
+            push!(P, w * added_storage / Z)
+
+            S = hcat(S, B[:, i])
+        end
+    end
+
     # Formulate problem
     net = DynamicPowerNetwork(
-        fq, fl, pmax, gmax, case.A, case.B, F, case.S,
+        fq, fl, pmax, gmax, case.A, B, F, S,
         P, C, T; η_c=case.η_c, η_d=case.η_d, ρ=ρ,
     )
     pmp = DynamicPowerManagementProblem(net, d)
@@ -96,7 +132,7 @@ function formulate_and_solve_dynamic(date, T; Z=Z, line_max=line_max, line_weigh
         gmax_t = min.(gmax[t], g[t] .+ ρ)
 
         net_t = PowerNetwork(fq[t], fl[t], pmax[t], gmax_t, case.A, case.B, F)
-        d_t = d[t] + case.S*(CarbonNetworks.evaluate(pmp.ch[t]) - CarbonNetworks.evaluate(pmp.dis[t]))
+        d_t = d[t] + S*(CarbonNetworks.evaluate(pmp.ch[t]) - CarbonNetworks.evaluate(pmp.dis[t]))
         pmp_t = PowerManagementProblem(net_t, d_t)
 
         # Solve
@@ -116,7 +152,14 @@ function formulate_and_solve_dynamic(date, T; Z=Z, line_max=line_max, line_weigh
     )
 end
 
-function formulate_and_solve_static(date; Z=Z, line_max=line_max, line_weight=line_weight, use_NREL_network=use_NREL_network)
+function formulate_and_solve_static(
+    date; 
+    Z=Z, 
+    line_max=line_max, 
+    line_weight=line_weight, 
+    use_NREL_network=use_NREL_network,
+    added_storage=0.0
+)
 
     case = make_static_case(date; use_NREL_network=use_NREL_network)
 
