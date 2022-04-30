@@ -82,12 +82,6 @@ paths = [joinpath(DATA_DIR, "results240", name) for name in run_names]
 # ╔═╡ 2757231c-ef30-417a-87dd-7d155049ba47
 cases = [BSON.load(joinpath(p, "case.bson"), @__MODULE__) for p in paths];
 
-# ╔═╡ 86256bed-e080-4c30-b730-82f3b06ec160
-load_results(p) = Dict(
-	DateTime(f[1:end-5], "yy-mm-dd-HH") => BSON.load(joinpath(p, f), @__MODULE__) 
-	for f in filter(f -> f[1:2] in ["04", "18"], readdir(p))
-)
-
 # ╔═╡ 9dcbc82a-2ced-4b5a-a879-cc5458d039e4
 results = map(analysis.load_results, paths);
 
@@ -158,7 +152,7 @@ let
 end
 
 # ╔═╡ 59316c15-a94c-4c56-a30a-0e6c23629de7
-hr = 12
+hr = 10
 
 # ╔═╡ be39a732-89d0-4a8b-9c88-3acd34f96dcc
 md"""
@@ -1735,7 +1729,6 @@ version = "3.5.0+0"
 # ╠═67130163-7a9e-4dc9-8458-b00239a1fb07
 # ╠═6de86962-a420-4885-ae7a-18748549c4c2
 # ╠═2757231c-ef30-417a-87dd-7d155049ba47
-# ╠═86256bed-e080-4c30-b730-82f3b06ec160
 # ╠═9dcbc82a-2ced-4b5a-a879-cc5458d039e4
 # ╟─b4f91614-ada2-4961-8913-96855f7ca81b
 # ╠═5392f525-ecb3-47c7-a32f-73a6b02967df
@@ -1754,14 +1747,14 @@ version = "3.5.0+0"
 # ╠═59316c15-a94c-4c56-a30a-0e6c23629de7
 # ╟─be39a732-89d0-4a8b-9c88-3acd34f96dcc
 # ╠═07268e37-5b62-4ab3-8d0d-5bab2286cdbe
-# ╟─7ffbe1bc-8cc6-4033-a70b-880209164199
+# ╠═7ffbe1bc-8cc6-4033-a70b-880209164199
 # ╟─a6178160-2471-4e6f-bcd9-debb529d39d4
 # ╠═76277c5f-c415-4861-b934-c76cc07a3820
 # ╠═971d68b9-c140-4594-a0af-4bb45f665508
-# ╟─d6abbce4-27ba-4a1d-8fb0-ce97a40c716d
+# ╠═d6abbce4-27ba-4a1d-8fb0-ce97a40c716d
 # ╟─20e85734-92ff-4c34-9572-dd65ddd1d327
 # ╠═e1a1acda-1d52-45bd-8257-8b7249318c9b
-# ╟─b53cc8dd-c36e-4cf8-9f1d-473a0e985234
+# ╠═b53cc8dd-c36e-4cf8-9f1d-473a0e985234
 # ╟─c6f2eb39-a0e6-44bf-8649-f25ef72961a4
 # ╠═5154fdd8-a58d-4faa-aced-7212ed0dc705
 # ╟─00000000-0000-0000-0000-000000000001
