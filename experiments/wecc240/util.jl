@@ -49,7 +49,9 @@ function formulate_and_solve_dynamic(
     line_max=line_max, 
     line_weight=line_weight, 
     use_NREL_network=use_NREL_network,
-    added_storage=0.0
+    added_storage=0.0,
+    renewable_factor=1.0,
+    demand_factor=1.0,
 )
     println("-------")
     case = make_dynamic_case(date, T; use_NREL_network=use_NREL_network)
@@ -66,7 +68,7 @@ function formulate_and_solve_dynamic(
     # (Specifically, increase them a little bit)
     pmax = [line_weight * min.(case.fmax / Z, line_max) for _ in 1:T]
     gmax = case.gmax / Z
-    d = case.d / Z
+    d = demand_factor * case.d / Z
     P = case.P / Z
     C = case.C / Z
     ρ = case.ramp[1] / Z
@@ -77,14 +79,17 @@ function formulate_and_solve_dynamic(
     # Add grid scale storage at solar nodes
     # Added storage is in units of MW
     # And has C-rate of 0.25
-    if added_storage > 0.0
-        fuel = case.params[1].gen.fuel
+    fuel = case.params[1].gen.fuel
+    gmax = [scale_renewables(renewable_factor, gmax_t, fuel) for gmax_t in gmax]
 
+    if added_storage > 0.0
+        println("Adding $added_storage MW of batteries")
+        
         # Get the "nameplate capacity", not the available capacity at time t
         ḡ = case.params[1].gen.gmax
         k = length(ḡ)
 
-        renewables = filter(i -> occursin("PV", fuel[i]), 1:k)
+        renewables = get_renewables(fuel)
         
         top_renewables = renewables[sortperm(ḡ[renewables], rev=true)][1:NUM_SOLAR_BATTERY]
         weights = ḡ[top_renewables] / sum(ḡ[top_renewables])
@@ -158,7 +163,9 @@ function formulate_and_solve_static(
     line_max=line_max, 
     line_weight=line_weight, 
     use_NREL_network=use_NREL_network,
-    added_storage=0.0
+    added_storage=0.0,
+    renewable_factor=1.0,
+    demand_factor=1.0,
 )
 
     case = make_static_case(date; use_NREL_network=use_NREL_network)
@@ -174,7 +181,10 @@ function formulate_and_solve_static(
     # (Specifically, increase them a little bit)
     pmax = line_weight * min.(case.fmax / Z, line_max)
     gmax = case.gmax / Z
-    d = case.d / Z
+    d = demand_factor * case.d / Z
+
+    fuel = case.params.gen.fuel
+    gmax = scale_renewables(renewable_factor, gmax, fuel)
 
     # Formulate problem
     net = PowerNetwork(fq, fl, pmax, gmax, case.A, case.B, F)
@@ -196,6 +206,21 @@ function formulate_and_solve_static(
     @show (date, pmp.problem.status, num_constr)
 
     return (g=g, p=p, λ=λ, d=d, gmax=gmax, pmax=pmax, status=string(pmp.problem.status))
+end
+
+function scale_renewables(renewable_factor, gmax, fuel)
+    k = length(gmax)
+    renewables = get_renewables(fuel)
+
+    new_gmax = copy(gmax)
+    new_gmax[renewables] *= renewable_factor
+
+    return new_gmax
+end
+
+function get_renewables(fuel)
+    k = length(fuel)
+    return filter(i -> occursin("PV", fuel[i]) || occursin("Wind", fuel[i]), 1:k)
 end
 
 function get_F_and_pmax()
