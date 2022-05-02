@@ -14,8 +14,11 @@ function load_results(p)
 
 
 """
+    get_nodal_mefs(r, whichdates=d -> true; hybrid_mode=true, observed=false)
+
+Get the nodal MEFs, filtering so that only MEFs from `whichdates` are returned.
 """
-function get_nodal_mefs(r, whichdates=d -> hour(d) == hr; hybrid_mode=true, observed=false)
+function get_nodal_mefs(r, whichdates=d -> true; hybrid_mode=true, observed=false)
     is_dynamic = (ndims(first(r)[2][:λ]) == 3)
 
     dates = sort(collect(keys(r)))
@@ -62,8 +65,11 @@ function get_nodal_mefs(r, whichdates=d -> hour(d) == hr; hybrid_mode=true, obse
 end
 
 """
+    get_average_nodal_mefs(r, whichdates=d -> true; hybrid_mode=true)
+
+Get the nodal MEFs averaged across `whichdates`.
 """
-function get_average_nodal_mefs(r, whichdates=d -> hour(d) == hr; hybrid_mode=true)
+function get_average_nodal_mefs(r, whichdates=d -> true; hybrid_mode=true)
 	mefs = get_nodal_mefs(r, whichdates; hybrid_mode=hybrid_mode)
 	return [mean(skipmissing(mefs[i, :])) for i in 1:size(mefs, 1)]
 end
