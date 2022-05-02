@@ -42,6 +42,26 @@ begin
 	using Downloads
 end
 
+# ╔═╡ b2b2e596-0f92-4e3c-ab1c-46a0bff9fb4b
+# equivalent to include that will replace it
+
+function ingredients(path::String)
+	# this is from the Julia source code (evalfile in base/loading.jl)
+	# but with the modification that it returns the module instead of the last object
+	name = Symbol(basename(path))
+	m = Module(name)
+	Core.eval(m,
+        Expr(:toplevel,
+             :(eval(x) = $(Expr(:core, :eval))($name, x)),
+             :(include(x) = $(Expr(:top, :include))($name, x)),
+             :(include(mapexpr::Function, x) = $(Expr(:top, :include))(mapexpr, $name, x)),
+             :(include($path))))
+	m
+end;
+
+# ╔═╡ 3f03a7e6-2889-428d-984c-0995574f1fc3
+analysis = ingredients("analysis_utils.jl")
+
 # ╔═╡ 6db70f24-e8ba-461e-8d86-00e9a37b44d3
 md"""
 ## Load data
@@ -65,14 +85,8 @@ paths = [joinpath(DATA_DIR, "results240", name) for name in run_names]
 # ╔═╡ 2757231c-ef30-417a-87dd-7d155049ba47
 cases = [BSON.load(joinpath(p, "case.bson"), @__MODULE__) for p in paths];
 
-# ╔═╡ 86256bed-e080-4c30-b730-82f3b06ec160
-load_results(p) = Dict(
-	DateTime(f[1:end-5], "yy-mm-dd-HH") => BSON.load(joinpath(p, f), @__MODULE__) 
-	for f in filter(f -> f[1:2] in ["04", "18"], readdir(p))
-)
-
 # ╔═╡ 9dcbc82a-2ced-4b5a-a879-cc5458d039e4
-results = map(load_results, paths);
+results = map(analysis.load_results, paths);
 
 # ╔═╡ b4f91614-ada2-4961-8913-96855f7ca81b
 md"""
@@ -104,12 +118,6 @@ node2 = 50; df_gis[node2, "Bus  Name"], coords(node2)
 md"""
 ## MEFs
 """
-
-# ╔═╡ 26570b0b-9d07-473e-9f91-3153b56de0ec
-# get_nodal_mefs(results[1])
-
-# ╔═╡ 2d1da86e-0c7e-402a-98f9-faaeaee79a19
-# get_average_nodal_mefs(results[1])
 
 # ╔═╡ cbc71e2e-0bd1-441c-bf17-c60053a60795
 md"""
@@ -162,46 +170,7 @@ p1 = (x=x[node1], y=y[node1])
 p2 = (x=x[node2], y=y[node2])
 
 # ╔═╡ 59316c15-a94c-4c56-a30a-0e6c23629de7
-hr = 18
-
-# ╔═╡ 6df9206a-fc56-4d85-a065-8f41a84adfbf
-function get_nodal_mefs(r, whichdates=d -> hour(d) == hr; hybrid_mode=true)
-	is_dynamic = (ndims(first(r)[2][:λ]) == 3)
-
-	dates = sort(collect(keys(r)))
-	is_valid = [r[d][:status] for d in dates] .== "OPTIMAL"
-
-	# Get total mefs
-	function get_total_mef(rd)
-		if is_dynamic && hybrid_mode
-			return reduce(hcat, rd[:λ_static])
-		elseif is_dynamic
-			return dropdims(sum(rd[:λ], dims=2), dims=2)
-		else
-			return rd[:λ]
-		end
-	end
-	mefs = [v ? get_total_mef(r[d]) : missing for (d, v) in zip(dates, is_valid)]
-	
-	# Expand dates
-	all_dates = [d .+ Hour.(0 : size(m, 2) - 1) for (d, m) in zip(dates, mefs) if !ismissing(m)]
-	mefs = [m for m in mefs if !ismissing(m)]
-
-	# Join lists of lists
-	mefs = reduce(hcat, mefs)
-	all_dates = reduce(vcat, all_dates)
-
-	# Filter by hour
-	mefs_hr = mefs[:, map(whichdates, all_dates)]
-
-	return mefs_hr
-end
-
-# ╔═╡ 61d78605-4bb1-4cb6-a9a2-c0f3499dff3a
-function get_average_nodal_mefs(r, whichdates=d -> hour(d) == hr; hybrid_mode=true)
-	mefs = get_nodal_mefs(r, whichdates; hybrid_mode=hybrid_mode)
-	return [mean(skipmissing(mefs[i, :])) for i in 1:size(mefs, 1)]
-end
+hr = 10
 
 # ╔═╡ 85f3a3f3-ca15-4e70-8745-a780e069aa9b
 minimum(sum.(first(results[3])[2][:gmax]))
@@ -218,9 +187,7 @@ md"""
 function fig_map(i, whichdates=d -> hour(d) == hr; fig=Figure(resolution=(450, 300), fontsize=10))
 	case = cases[i]
 	r = results[i]
-	λ = get_average_nodal_mefs(r, whichdates)
-	#λ = cases[i][:fuel] .== "Steam"
-
+	λ = analysis.get_average_nodal_mefs(r, whichdates)
 	
 	# Everthing in === is from https://lazarusa.github.io/BeautifulMakie/GeoPlots/geoCoastlinesStatesUS/
 	# ===========
@@ -320,7 +287,7 @@ function fig_time(
 		
 		# Get MEF over time
 		mefs_hr = [
-			get_average_nodal_mefs(r, d -> whichdates(d) && hour(d) == h, hybrid_mode=hm) 
+			analysis.get_average_nodal_mefs(r, d -> whichdates(d) && hour(d) == h, hybrid_mode=hm) 
 			for h in 1:24
 		]
 		mefs_hr = reduce(hcat, mefs_hr)
@@ -362,7 +329,7 @@ function fig_distr(
 	fig = Figure(resolution=(300, 300))
 )
 	r = results[i1]
-	nodal_mefs = get_nodal_mefs(r, whichdates)
+	nodal_mefs = analysis.get_nodal_mefs(r, whichdates)
 	all_mefs_a = nodal_mefs[in_rect.(1:num_nodes, p1.x, p1.y, 1), :][:]
 	all_mefs_b = nodal_mefs[in_rect.(1:num_nodes, p2.x, p2.y, 1), :][:]
 	all_mefs = reshape(nodal_mefs, :)
@@ -1783,6 +1750,8 @@ version = "3.5.0+0"
 # ╠═64f8e88a-dfbf-4d25-b40e-af688e9e9f00
 # ╠═32e5f26a-9b2f-4fc0-a0cd-1a5f101f0db9
 # ╠═e19f3dbe-b54a-45c3-b496-cf762f821ed5
+# ╟─b2b2e596-0f92-4e3c-ab1c-46a0bff9fb4b
+# ╠═3f03a7e6-2889-428d-984c-0995574f1fc3
 # ╟─6db70f24-e8ba-461e-8d86-00e9a37b44d3
 # ╠═f9fab4fe-baec-4bfd-9d84-ef9caac85f5f
 # ╠═d7598abb-2be7-4e3b-af9e-14827ef5a3b0
@@ -1790,7 +1759,6 @@ version = "3.5.0+0"
 # ╠═67130163-7a9e-4dc9-8458-b00239a1fb07
 # ╠═6de86962-a420-4885-ae7a-18748549c4c2
 # ╠═2757231c-ef30-417a-87dd-7d155049ba47
-# ╠═86256bed-e080-4c30-b730-82f3b06ec160
 # ╠═9dcbc82a-2ced-4b5a-a879-cc5458d039e4
 # ╟─b4f91614-ada2-4961-8913-96855f7ca81b
 # ╠═5392f525-ecb3-47c7-a32f-73a6b02967df
@@ -1801,10 +1769,6 @@ version = "3.5.0+0"
 # ╠═7126918a-eb31-40a9-8f2d-7e181a1fcb3b
 # ╠═35e55d76-d175-4e77-9b69-930225cb8573
 # ╟─d2bacf4a-af37-4ff9-bebb-3dc3d06edd8a
-# ╟─6df9206a-fc56-4d85-a065-8f41a84adfbf
-# ╟─61d78605-4bb1-4cb6-a9a2-c0f3499dff3a
-# ╠═26570b0b-9d07-473e-9f91-3153b56de0ec
-# ╠═2d1da86e-0c7e-402a-98f9-faaeaee79a19
 # ╟─cbc71e2e-0bd1-441c-bf17-c60053a60795
 # ╠═7a42f00e-193c-45ea-951f-dcd4e1c1975f
 # ╠═5cb1709a-eda0-41b3-8bff-f58c19608be5
