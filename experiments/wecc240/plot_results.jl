@@ -302,19 +302,24 @@ function fig_time(
 
 	Legend(fig[1, 2], ax, merge=true, unique=true)
 	
-	fig
+	fig, ax
 end
 
 # ╔═╡ 971d68b9-c140-4594-a0af-4bb45f665508
-fig_time(
-	run_id=[4, 5, 5], 
-	hybrid_mode=[false, true, false],
-	labels=["No Storage", "Storage - Static", "Storage - Dynamic"],
-	regions=[(p1, 1)], 
-	whichdates=d -> day(d) in day_range,
-	ls_cycle=[:solid, :dash],
-	color_cycle=[:black, :blue, :orange]
-)
+let
+	fig, ax = fig_time(
+		run_id=[4, 5, 5], 
+		hybrid_mode=[false, true, false],
+		labels=["No Storage", "Storage - Static", "Storage - Dynamic"],
+		regions=[(p1, 1)], 
+		whichdates=d -> day(d) in day_range,
+		ls_cycle=[:solid, :dash],
+		color_cycle=[:black, :blue, :orange]
+	)
+
+	ax.title = "Hourly Marginal Emissions Rates for High Renewables Grid"
+	fig
+end
 
 # ╔═╡ 20e85734-92ff-4c34-9572-dd65ddd1d327
 md"""
@@ -382,7 +387,7 @@ fig_distr(4)[1]
 
 # ╔═╡ c6f2eb39-a0e6-44bf-8649-f25ef72961a4
 full_figure = let
-	ri = 3
+	ri = 5
 	fig = Figure(resolution=(650, 300), fontsize=10)
 
 	f1, ax1 = fig_distr(ri, fig=fig[2, 1])
@@ -1793,7 +1798,7 @@ version = "3.5.0+0"
 # ╟─20e85734-92ff-4c34-9572-dd65ddd1d327
 # ╠═e1a1acda-1d52-45bd-8257-8b7249318c9b
 # ╟─b53cc8dd-c36e-4cf8-9f1d-473a0e985234
-# ╟─c6f2eb39-a0e6-44bf-8649-f25ef72961a4
+# ╠═c6f2eb39-a0e6-44bf-8649-f25ef72961a4
 # ╠═5154fdd8-a58d-4faa-aced-7212ed0dc705
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
