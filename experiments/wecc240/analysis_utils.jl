@@ -102,3 +102,13 @@ function get_total_emissions(r, co2_rates)
 
 	return E
 end
+
+function get_deviations(metric, r1, r2)
+    # Get all date-times in R1 and R2
+    dts = intersect(keys(r1.data), keys(r2.data))
+
+    # Compute deviations for all date-times in both
+    mef = (ri, dt) -> get_nodal_mefs(ri.data, d -> d == dt, hybrid_mode=ri.hm)[:]
+
+    return [metric(mef(r1, dt), mef(r2, dt)) for dt in dts]
+end

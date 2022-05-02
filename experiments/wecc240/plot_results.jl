@@ -42,6 +42,9 @@ begin
 	using Downloads
 end
 
+# ╔═╡ c6c3d56a-3782-4272-b6c2-b1088160d675
+import StatsBase
+
 # ╔═╡ b2b2e596-0f92-4e3c-ab1c-46a0bff9fb4b
 # equivalent to include that will replace it
 
@@ -419,6 +422,44 @@ end
 
 # ╔═╡ 5154fdd8-a58d-4faa-aced-7212ed0dc705
 # save(joinpath(RESULTS_DIR, "wecc240_full_figure.pdf"), full_figure)
+
+# ╔═╡ 7b14b74e-bc68-4fe7-9a6e-5e58f322f02d
+md"""
+## Compute deviations between results
+"""
+
+# ╔═╡ 56065ebb-9d06-427c-bddc-fb02b803203e
+let
+	node = 200
+	metric_all = (x, y) -> sum(abs, x-y) / (sqrt(sum(abs, x)) * sqrt(sum(abs, y)))
+	metric = (x, y) -> (x[node] - y[node]) / (sqrt(abs(x[node])) * sqrt(abs(y[node])))
+	agg = d -> StatsBase.mean(abs.(d))
+
+	r_no_storage = (data=results[4], hm=false)
+	r_storage_static = (data=results[5], hm=true)
+	r_storage_dynamic = (data=results[5], hm=false)
+
+	fig = Figure(resolution=(600, 300))
+	ax = Axis(fig[1, 1])
+
+	devs1 = analysis.get_deviations(metric, r_no_storage, r_storage_dynamic)
+	devs2 = analysis.get_deviations(metric, r_storage_static, r_storage_dynamic)
+
+	@show agg(analysis.get_deviations(metric_all, r_no_storage, r_storage_dynamic))
+	@show agg(analysis.get_deviations(metric_all, r_storage_static, r_storage_dynamic))
+	
+	density!(ax, devs1, label="No Storage vs Storage (dynamic)")
+	density!(ax, devs2, label="Storage (static) vs Storage (dynamic)")
+
+	xlims!(-0.25, 0.25)
+	ax.title = "Mean Relative Absolute Deviation at Node $node"
+	ax.ylabel = "Frequency"
+
+	
+	Legend(fig[0, 1], ax)
+
+	fig
+end
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -1753,6 +1794,7 @@ version = "3.5.0+0"
 # ╠═b3352ae6-d614-423d-bfa0-2ee28ab5b134
 # ╠═d145ef02-6511-4685-bb16-b421703e7dbf
 # ╠═64f8e88a-dfbf-4d25-b40e-af688e9e9f00
+# ╠═c6c3d56a-3782-4272-b6c2-b1088160d675
 # ╠═32e5f26a-9b2f-4fc0-a0cd-1a5f101f0db9
 # ╠═e19f3dbe-b54a-45c3-b496-cf762f821ed5
 # ╟─b2b2e596-0f92-4e3c-ab1c-46a0bff9fb4b
@@ -1798,7 +1840,9 @@ version = "3.5.0+0"
 # ╟─20e85734-92ff-4c34-9572-dd65ddd1d327
 # ╠═e1a1acda-1d52-45bd-8257-8b7249318c9b
 # ╟─b53cc8dd-c36e-4cf8-9f1d-473a0e985234
-# ╠═c6f2eb39-a0e6-44bf-8649-f25ef72961a4
+# ╟─c6f2eb39-a0e6-44bf-8649-f25ef72961a4
 # ╠═5154fdd8-a58d-4faa-aced-7212ed0dc705
+# ╠═7b14b74e-bc68-4fe7-9a6e-5e58f322f02d
+# ╠═56065ebb-9d06-427c-bddc-fb02b803203e
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
