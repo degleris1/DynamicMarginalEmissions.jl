@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.18.1
+# v0.18.4
 
 using Markdown
 using InteractiveUtils
@@ -30,6 +30,9 @@ using CairoMakie
 
 # ╔═╡ 5cb1709a-eda0-41b3-8bff-f58c19608be5
 using PlutoUI
+
+# ╔═╡ ee25f56b-b3a0-4e6d-9410-72f95a15b432
+using Makie.GeometryBasics
 
 # ╔═╡ 2d3cf797-4cc2-4aad-bc3e-94f5474e99f9
 begin
@@ -74,7 +77,7 @@ DATA_DIR = config["data"]["GOOGLE_DRIVE"]
 RESULTS_DIR = config["data"]["SAVE_DIR"]
 
 # ╔═╡ 67130163-7a9e-4dc9-8458-b00239a1fb07
-run_names = ["july04_static", "july18_static", "july18_dynamic"]
+run_names = ["july04_static", "july18_static", "july18_dynamic", "future_0gw", "future_15gw"]
 
 # ╔═╡ 6de86962-a420-4885-ae7a-18748549c4c2
 paths = [joinpath(DATA_DIR, "results240", name) for name in run_names]
@@ -106,7 +109,7 @@ coords(k) = y[k], x[k]
 num_nodes = length(x)
 
 # ╔═╡ 7126918a-eb31-40a9-8f2d-7e181a1fcb3b
-node1 = 10; df_gis[node1, "Bus  Name"], coords(node1)
+node1 = 100; df_gis[node1, "Bus  Name"], coords(node1)
 
 # ╔═╡ 35e55d76-d175-4e77-9b69-930225cb8573
 node2 = 50; df_gis[node2, "Bus  Name"], coords(node2)
@@ -151,8 +154,29 @@ let
 	#sum(abs.(g - r[:g][t-1]) ./ ρ .> 0.99)
 end
 
+# ╔═╡ 73fa2393-d2a2-429b-a84a-493acd8fb841
+make_rect(xi, yi, w, h) = [xi-w/2, xi-w/2, xi+w/2, xi+w/2, xi-w/2], [yi-h/2, yi+h/2, yi+h/2, yi-h/2, yi-h/2]
+
+# ╔═╡ 9900463f-5bc6-4649-b970-9456c5712d50
+make_rect(xi, yi, r=1) = make_rect(xi, yi, 2r, 2r)
+
+# ╔═╡ effd6c24-94ad-4803-9c30-7186a677480b
+in_rect(node, xi, yi, r=1) = (xi-r/2 < x[node] < xi+r/2) && (yi-r/2 < y[node] < yi+2/2)
+
+# ╔═╡ 35ec1921-8f4c-46cd-aa80-778a475b1542
+p1 = (x=x[node1], y=y[node1])
+
+# ╔═╡ 04d0d66a-8427-48a5-9c0e-e93eb619cd05
+p2 = (x=x[node2], y=y[node2])
+
 # ╔═╡ 59316c15-a94c-4c56-a30a-0e6c23629de7
 hr = 10
+
+# ╔═╡ 85f3a3f3-ca15-4e70-8745-a780e069aa9b
+minimum(sum.(first(results[3])[2][:gmax]))
+
+# ╔═╡ 7771eb73-3ddb-4f80-b487-4685c1838501
+maximum(sum.(first(results[3])[2][:d]))
 
 # ╔═╡ be39a732-89d0-4a8b-9c88-3acd34f96dcc
 md"""
@@ -164,7 +188,6 @@ function fig_map(i, whichdates=d -> hour(d) == hr; fig=Figure(resolution=(450, 3
 	case = cases[i]
 	r = results[i]
 	λ = analysis.get_average_nodal_mefs(r, whichdates)
-
 	
 	# Everthing in === is from https://lazarusa.github.io/BeautifulMakie/GeoPlots/geoCoastlinesStatesUS/
 	# ===========
@@ -207,12 +230,12 @@ function fig_map(i, whichdates=d -> hour(d) == hr; fig=Figure(resolution=(450, 3
 	end
 
 	# Nodes
-	marker = [i in [node1, node2] ? :hexagon : :circle for i in 1:length(x)]
-	ms = [i in [node1, node2] ? 12 : 6 for i in 1:length(x)]
-	sw = [i in [node1, node2] ? 1 : 0.1 for i in 1:length(x)]
-	sct = scatter!(ax, x, y, markersize=ms, strokewidth=sw, marker=marker, color=λ/1e3, 
-		colormap=:jet1, colorrange=(-0.1, 1.0))
+	sct = scatter!(ax, x, y, markersize=8, strokewidth=0.2, marker=:circle, color=λ/1e3, 
+		colormap=:jet1, colorrange=(0.25, 1.0))
 
+	# Plot region
+	lines!(ax, make_rect(p1[1], p1[2])..., color=:black)
+	lines!(ax, make_rect(p2[1], p2[2])..., color=:black)
 	
 
 	# Colorbar
@@ -227,9 +250,6 @@ function fig_map(i, whichdates=d -> hour(d) == hr; fig=Figure(resolution=(450, 3
     return fig, ax
 end
 
-# ╔═╡ 07268e37-5b62-4ab3-8d0d-5bab2286cdbe
-fig_map(2)[1]
-
 # ╔═╡ a6178160-2471-4e6f-bcd9-debb529d39d4
 md"""
 ## Time Series
@@ -238,10 +258,13 @@ md"""
 # ╔═╡ 76277c5f-c415-4861-b934-c76cc07a3820
 day_range = 1:31
 
+# ╔═╡ 07268e37-5b62-4ab3-8d0d-5bab2286cdbe
+fig_map(5, d -> hour(d) == hr && day(d) in day_range)[1]
+
 # ╔═╡ d6abbce4-27ba-4a1d-8fb0-ce97a40c716d
 function fig_time(
 	; run_id=1,
-	nodes=[1],
+	regions=[((0, 0), 1)],
 	hybrid_mode=[false],
 	labels=["run A"],
 	fig=Figure(resolution=(650, 200), fontsize=10),
@@ -253,7 +276,7 @@ function fig_time(
 
 	ax = Axis(fig[1, 1], xgridvisible=false, ygridvisible=false)
 	xlims!(ax, 1, 23)
-	ylims!(ax, 400, 900)
+	#ylims!(ax, 250, 750)
 	ax.xticks = 0:6:24
 	ax.xlabel = "Hour"
 	ax.ylabel = "MEF [ton CO2 / MWh]"
@@ -269,9 +292,11 @@ function fig_time(
 		]
 		mefs_hr = reduce(hcat, mefs_hr)
 	
-		for (ind, n) in enumerate(nodes)
-			lines!(ax, mefs_hr[n, :], label="Run $(labels[indr]), Node $n",
-				linewidth=4, linestyle=ls_cycle[ind], color=color_cycle[indr])
+		for (ind, (p, radius)) in enumerate(regions)
+			nodes = in_rect.(1:num_nodes, p.x, p.y, radius)
+			λ_nodes = reshape(mean(mefs_hr[nodes, :], dims=1), :)
+			lines!(ax, λ_nodes, label="$(labels[indr])",
+				linewidth=3, linestyle=ls_cycle[ind], color=color_cycle[indr])
 		end
 	end
 
@@ -282,11 +307,13 @@ end
 
 # ╔═╡ 971d68b9-c140-4594-a0af-4bb45f665508
 fig_time(
-	run_id=[2, 3, 3], 
+	run_id=[4, 5, 5], 
 	hybrid_mode=[false, true, false],
-	labels=["stat", "mix", "dyn"],
-	nodes=[node2], 
-	whichdates=d -> day(d) in day_range
+	labels=["No Storage", "Storage - Static", "Storage - Dynamic"],
+	regions=[(p1, 1)], 
+	whichdates=d -> day(d) in day_range,
+	ls_cycle=[:solid, :dash],
+	color_cycle=[:black, :blue, :orange]
 )
 
 # ╔═╡ 20e85734-92ff-4c34-9572-dd65ddd1d327
@@ -303,8 +330,8 @@ function fig_distr(
 )
 	r = results[i1]
 	nodal_mefs = analysis.get_nodal_mefs(r, whichdates)
-	all_mefs_a = nodal_mefs[node1, :]
-	all_mefs_b = nodal_mefs[node2, :]
+	all_mefs_a = nodal_mefs[in_rect.(1:num_nodes, p1.x, p1.y, 1), :][:]
+	all_mefs_b = nodal_mefs[in_rect.(1:num_nodes, p2.x, p2.y, 1), :][:]
 	all_mefs = reshape(nodal_mefs, :)
 	
 	ax = Axis(fig[1, 1])
@@ -351,14 +378,15 @@ function fig_distr(
 end
 
 # ╔═╡ e1a1acda-1d52-45bd-8257-8b7249318c9b
-fig_distr(2)[1]
+fig_distr(4)[1]
 
 # ╔═╡ c6f2eb39-a0e6-44bf-8649-f25ef72961a4
 full_figure = let
+	ri = 3
 	fig = Figure(resolution=(650, 300), fontsize=10)
 
-	f1, ax1 = fig_distr(1, fig=fig[2, 1])
-	f2, ax2 = fig_map(1, fig=fig[2, 2])
+	f1, ax1 = fig_distr(ri, fig=fig[2, 1])
+	f2, ax2 = fig_map(ri, fig=fig[2, 2])
 
 	colsize!(fig.layout, 1, Auto(0.5))
 	
@@ -397,6 +425,7 @@ Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 Downloads = "f43a241f-c20a-4ad4-852c-f6b1247861c6"
 GeoMakie = "db073c08-6b98-4ee5-b6a4-5efafb3259c6"
 InlineStrings = "842dd82b-1e85-43dc-bf29-5d0ee9dffc48"
+Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
@@ -410,6 +439,7 @@ CairoMakie = "~0.7.5"
 DataFrames = "~1.3.2"
 GeoMakie = "~0.3.1"
 InlineStrings = "~1.1.2"
+Makie = "~0.16.6"
 PlutoUI = "~0.7.38"
 StatsBase = "~0.33.16"
 XLSX = "~0.7.9"
@@ -419,7 +449,7 @@ XLSX = "~0.7.9"
 PLUTO_MANIFEST_TOML_CONTENTS = """
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.7.2"
+julia_version = "1.7.1"
 manifest_format = "2.0"
 
 [[deps.AbstractFFTs]]
@@ -1742,19 +1772,27 @@ version = "3.5.0+0"
 # ╟─cbc71e2e-0bd1-441c-bf17-c60053a60795
 # ╠═7a42f00e-193c-45ea-951f-dcd4e1c1975f
 # ╠═5cb1709a-eda0-41b3-8bff-f58c19608be5
+# ╠═ee25f56b-b3a0-4e6d-9410-72f95a15b432
 # ╠═2d3cf797-4cc2-4aad-bc3e-94f5474e99f9
 # ╟─fd640755-2f9d-4845-9524-fce685e9053c
+# ╠═73fa2393-d2a2-429b-a84a-493acd8fb841
+# ╠═9900463f-5bc6-4649-b970-9456c5712d50
+# ╠═effd6c24-94ad-4803-9c30-7186a677480b
+# ╠═35ec1921-8f4c-46cd-aa80-778a475b1542
+# ╠═04d0d66a-8427-48a5-9c0e-e93eb619cd05
 # ╠═59316c15-a94c-4c56-a30a-0e6c23629de7
+# ╠═85f3a3f3-ca15-4e70-8745-a780e069aa9b
+# ╠═7771eb73-3ddb-4f80-b487-4685c1838501
 # ╟─be39a732-89d0-4a8b-9c88-3acd34f96dcc
 # ╠═07268e37-5b62-4ab3-8d0d-5bab2286cdbe
-# ╠═7ffbe1bc-8cc6-4033-a70b-880209164199
+# ╟─7ffbe1bc-8cc6-4033-a70b-880209164199
 # ╟─a6178160-2471-4e6f-bcd9-debb529d39d4
 # ╠═76277c5f-c415-4861-b934-c76cc07a3820
 # ╠═971d68b9-c140-4594-a0af-4bb45f665508
-# ╠═d6abbce4-27ba-4a1d-8fb0-ce97a40c716d
+# ╟─d6abbce4-27ba-4a1d-8fb0-ce97a40c716d
 # ╟─20e85734-92ff-4c34-9572-dd65ddd1d327
 # ╠═e1a1acda-1d52-45bd-8257-8b7249318c9b
-# ╠═b53cc8dd-c36e-4cf8-9f1d-473a0e985234
+# ╟─b53cc8dd-c36e-4cf8-9f1d-473a0e985234
 # ╟─c6f2eb39-a0e6-44bf-8649-f25ef72961a4
 # ╠═5154fdd8-a58d-4faa-aced-7212ed0dc705
 # ╟─00000000-0000-0000-0000-000000000001
