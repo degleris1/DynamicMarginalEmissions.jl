@@ -3,6 +3,9 @@ using BSON
 using StatsBase: mean
 using LinearAlgebra
 
+
+DEMAND_MISSING = -1
+
 """
 """
 function load_results(p)
@@ -80,12 +83,12 @@ end
 
 Returns a matrix of demand of size n_nodes x n_timesteps
 """
-function get_demand(r)
+function get_demand(r; n_nodes=243, n_timesteps=24)
 
 	dates = sort(collect(keys(r)))
 	is_valid = [r[d][:status] for d in dates] .== "OPTIMAL"
 
-	demand = hcat([v ? hcat(r[d][:d]...) : missing for (d,v) in zip(dates, is_valid)]...)
+	demand = hcat([v ? hcat(r[d][:d]...) : Array{Union{Missing, String}}(missing, n_nodes, n_timesteps) for (d,v) in zip(dates, is_valid)]...)
 
 	
 	return demand
@@ -93,14 +96,14 @@ end
 
 """
 """
-function get_total_emissions(r, co2_rates)
+function get_total_emissions(r, co2_rates; n_gens=309, n_timesteps=24)
     dates = sort(collect(keys(r)))
 	is_valid = [r[d][:status] for d in dates] .== "OPTIMAL"
 
-	g_opt = hcat([ v ? hcat(r[d][:g]...) : missing for (d, v) in zip(dates, is_valid)]...)
+	g_opt = reduce(hcat, [ v ? hcat(r[d][:g]...) : Array{Union{Missing, String}}(missing, n_gens, n_timesteps)  for (d, v) in zip(dates, is_valid)])
     E = co2_rates * g_opt
 
-	return E
+	return vec(E)
 end
 
 function get_deviations(metric, r1, r2)
