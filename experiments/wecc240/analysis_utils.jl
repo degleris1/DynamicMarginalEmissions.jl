@@ -4,8 +4,6 @@ using StatsBase: mean
 using LinearAlgebra
 
 
-DEMAND_MISSING = -1
-
 """
 """
 function load_results(p)
