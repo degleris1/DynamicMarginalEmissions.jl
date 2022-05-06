@@ -185,9 +185,9 @@ end
 
 # ╔═╡ 7bbd7076-5a16-4914-8118-0d9238f75569
 begin
-	mefs_node_days = reshape(mefs[node, :], (24, Int(length(mefs[node, :])/24)))
-	mean_ = mean(mefs_node_days, dims=2)
-	std_ = std(mefs_node_days, dims=2);
+	mefs_nodes_days = [reshape(mefs[n, :], (24, Int(length(mefs[n, :])/24))) for n in 1:n_nodes]
+	mean_ = mean(mefs_nodes_days[node], dims=2)
+	std_ = std(mefs_nodes_days[node], dims=2);
 	plot(mean_ - std_, fillrange=mean_ .+ std_, fillalpha = .3, label="std range")
 	plot!(mean_, label="mean", lw=2)
 	xlabel!("Hour of day")
@@ -233,88 +233,76 @@ begin
 	ylabel!("Total emissions across the network")
 end
 
-# ╔═╡ c3741c04-abf3-4004-af8f-7b9433bc0bc1
-size(E)
-
 # ╔═╡ fb6a6791-c704-43f1-9784-1cd17dfa7858
 ΔE = diff(E, dims=1);
 
-# ╔═╡ a7d00e5c-6ba3-4ac2-b1d8-a64b1f6168c9
-ΔE
-
-# ╔═╡ 07c3faea-d89b-4e88-98f6-21423aa8d202
-begin
-	scatter(Δd[node, :], ΔE, label=false)
-	xlabel!("Δd at node $(node)")
-	ylabel!("ΔE")
-	title!("ΔE total wrt Δd at node $(node)")
-end
-
-# ╔═╡ fd198417-f955-443f-b7bd-40b5106356eb
-hour_filt1 = 10 .<= hours[2:end] .<= 20;
-
-# ╔═╡ 09b71d83-53ad-4b7b-ba70-b51ea90aa37e
-begin
-	scatter(Δd[node, hour_filt1], ΔE[hour_filt1], alpha=.3, label="10-20")
-	scatter!(Δd[node, .!hour_filt1], ΔE[.!hour_filt1], alpha=.3, label="20-10")
-	# mef_node = mefs_reg[node]
-	# xx = LinRange(minimum(Δd[node, :]), maximum(Δd[node, :]), 10)
-	# plot!(xx, mef_single_node*xx, lw=3)
-	
-	xlabel!("Δd at node $(node)")
-	ylabel!("ΔE")
-	title!("ΔE total wrt Δd at node $(node)")
-end
+# ╔═╡ 01805ad9-0d4c-4d8e-8f79-69da710a3d2f
+scatter_alpha=.2
 
 # ╔═╡ ec0278e1-0300-4842-80f0-857b414867a9
 μ = 1e-4
-
-# ╔═╡ 66ecb9fd-b976-432a-9df3-7a6a8618bc2e
-# linear regression on all nodes at once
-begin
-	X = transpose(Δd); # matrix has many nodes with zero demand; therefore columns have to be filtered so as to use only the nodes with actual mef
-	demand_nodes = findall(vec(sum(abs.(X), dims=1)).!==0.0)
-	colin_node = 64 # node that is a lin comb of others
-	demand_nodes = demand_nodes[demand_nodes .!= colin_node]
-	X_demand = X[:, demand_nodes]
-	rank_ = rank(X_demand)
-	@assert rank_ == size(X_demand)[2]
-	mef_opt = inv(X_demand'*X_demand + μ*I(rank_))*X_demand'*ΔE
-	mefs_reg = zeros(n_nodes)
-	mefs_reg[demand_nodes] .= mef_opt
-end;
-
-# ╔═╡ 364f3ff0-75b7-4ba2-a82a-08e92171daa2
-# linear regression on a single node
-begin
-	XX = transpose(Δd)[:, node]; # matrix has many nodes with zero demand; therefore columns have to be filtered so as to use only the nodes with actual mef
-	mef_single_node = inv(transpose(XX)*XX)*transpose(XX)*ΔE
-end
-
-# ╔═╡ 7db52f69-03f7-4c9d-b746-4312b9c038b2
-md"""
-The MEF computed by linear regression at node $(node) is $(round(mefs_reg[node])). 
-
-The MEF if computed on a single node at the same node is $(round(mef_single_node))
-"""
-
-# ╔═╡ 3dc3b990-1e8b-43b7-856a-17667c6be634
-# histogram
-begin
-	bins = -1000:100:3000
-	histogram(mefs[node, :], bins=bins, alpha=0.4, label="True")
-	histogram!(mefs_obs[node, :], bins=bins, alpha=0.4, label="Observed")
-	plot!([mefs_reg[node]], seriestype="vline", label="Regression", lw=3)
-	plot!([mean(mefs[node, :])], seriestype="vline", label="Mean True", lw=3)
-	plot!([mean(mefs_obs[node, :])], seriestype="vline", label="Mean Observed", lw=3)
-	xlabel!("MEF")
-	ylabel!("Counts")
-end
 
 # ╔═╡ ad960911-9354-4a31-bcbc-f1f0a95482ae
 md"""
 ### Analysis of regression-based mefs estimation
 """
+
+# ╔═╡ dede3a80-c551-4673-97d4-66640ac0023b
+md"""
+## Same analysis, but with two groups
+"""
+
+# ╔═╡ fd198417-f955-443f-b7bd-40b5106356eb
+hour_filt1 = 10 .<= hours[2:end] .<= 20;
+
+# ╔═╡ 7991857c-eef0-4536-89df-600131e188d6
+function get_reg_mefs(X, y, μ)
+	return inv(X'*X + μ*I(size(X, 2)))*X'*y
+end
+
+# ╔═╡ 66ecb9fd-b976-432a-9df3-7a6a8618bc2e
+# linear regression on all nodes at once, over all timesteps lumped together
+begin
+	X = transpose(Δd); # matrix has many nodes with zero demand; therefore columns have to be filtered so as to use only the nodes with actual mef
+	
+	# colin_node = 64 # node that is a lin comb of others
+	# demand_nodes = demand_nodes[demand_nodes .!= colin_node]
+	idx_valid = vec(sum(X .=== missing, dims=2).== 0)
+	X_demand = X[idx_valid, :]
+	demand_nodes = findall(vec(sum(abs.(X_demand), dims=1)).!==0.0)
+	X_demand = X_demand[:, demand_nodes]
+	rank_ = rank(X_demand)
+	# @assert rank_ == size(X_demand)[2]
+	mef_opt = get_reg_mefs(X_demand, ΔE[idx_valid], μ)
+	mefs_reg = zeros(n_nodes)
+	mefs_reg[demand_nodes] .= mef_opt
+end;
+
+# ╔═╡ 07c3faea-d89b-4e88-98f6-21423aa8d202
+let
+	lw = 4
+	p = scatter(Δd[node, :], ΔE, label=false, alpha=scatter_alpha)
+	xx = LinRange(minimum(skipmissing(Δd[node, :])), maximum(skipmissing(Δd[node, :])), 10)
+	plot!(xx, mefs_reg[node]*xx, lw=lw, label="Reg MEF=$(round(mefs_reg[node]))")
+	plot!(xx, mean(mefs[node, :])*xx, ls=:dash, lw=lw, label="Mean True MEF=$(round( mean(mefs[node, :])))")
+	xlabel!("Δd at node $(node)")
+	ylabel!("ΔE")
+	title!("ΔE total wrt Δd at node $(node)")
+	p
+end
+
+# ╔═╡ 3dc3b990-1e8b-43b7-856a-17667c6be634
+# histogram
+let
+	bins = -1000:100:3000
+	histogram(mefs[node, :], bins=bins, alpha=0.4, label="True")
+	histogram!(mefs_obs[node, :], bins=bins, alpha=0.4, label="Observed")
+	plot!([mefs_reg[node]], seriestype="vline", label="Regression", lw=3)
+	plot!([median(mefs[node, :])], seriestype="vline", label="Median True", lw=3)
+	plot!([median(mefs_obs[node, :])], seriestype="vline", label="Median Observed", lw=3, color="firebrick")
+	xlabel!("MEF")
+	ylabel!("Counts")
+end
 
 # ╔═╡ 7833642f-5b87-4d1d-b311-72901851a58f
 let
@@ -329,8 +317,99 @@ let
 	title!("MEFs of nodes, sorted according to true")
 end
 
-# ╔═╡ e42f39c5-9f4e-4e1c-bfdc-f7bc9cd29623
-demand_nodes[35]
+# ╔═╡ e3c716f3-0460-4b6b-a49a-f783a23950b8
+# linear regression on all nodes at once, over all timesteps lumped together
+begin
+	X_demand_g1 = X_demand[hour_filt1[idx_valid], :]
+	X_demand_g2 = X_demand[.!hour_filt1[idx_valid], :]
+	mefs_g1, mefs_g2 = zeros(n_nodes), zeros(n_nodes)
+	mefs_g1[demand_nodes] = get_reg_mefs(X_demand_g1, ΔE[idx_valid][hour_filt1[idx_valid]], μ)
+	mefs_g2[demand_nodes] = get_reg_mefs(X_demand_g2, ΔE[idx_valid][.!hour_filt1[idx_valid]], μ)
+end;
+
+# ╔═╡ 7d4a7daf-778e-4040-997a-be1cc95c75c0
+# histogram
+let
+	bins = -1000:100:3000
+	histogram(mefs[node, :], bins=bins, alpha=0.4, label="True")
+	# histogram!(mefs_obs[node, :], bins=bins, alpha=0.4, label="Observed")
+	plot!([mefs_g1[node]], seriestype="vline", label="Regression 1", lw=3)
+	plot!([mefs_g2[node]], seriestype="vline", label="Regression 2", lw=3)
+	# plot!([median(mefs[node, :])], seriestype="vline", label="Median True", lw=3)
+	# plot!([median(mefs_obs[node, :])], seriestype="vline", label="Median Observed", lw=3, color="firebrick")
+	xlabel!("MEF")
+	ylabel!("Counts")
+end
+
+# ╔═╡ dc7ebc3f-38bb-4416-a488-7035ad34d1e8
+md"""
+## Orders of magnitude of estimated MEFS with these methods
+"""
+
+# ╔═╡ 6166cad7-1b60-4df2-95d3-1974d297dce0
+let
+	bins = -1000:100:3000
+	alpha=0.4
+	histogram(mean(mefs, dims=2), bins=bins, alpha=alpha, label="True")
+	histogram!(mefs_reg, bins=bins, alpha=alpha, label="Reg")
+	xlabel!("MEF")
+	ylabel!("Counts")
+	title!("Average values over all timesteps")
+end
+
+# ╔═╡ a757ff7e-402d-4ba3-9ecd-f2e1cd539a6e
+hours_filt_day = 10 .< (1:24) .< 20
+
+# ╔═╡ 7ee50896-add5-4e32-a72c-5470ce6c7849
+true_mefs_g1 = [mean(mean(mefs_[hours_filt_day, :], dims=2)) for mefs_ in mefs_nodes_days]
+
+# ╔═╡ 984d0af5-0afc-4146-b570-0d6a0547f3b8
+true_mefs_g2 = [mean(mean(mefs_[.!hours_filt_day, :], dims=2)) for mefs_ in mefs_nodes_days]
+
+# ╔═╡ 09b71d83-53ad-4b7b-ba70-b51ea90aa37e
+let
+	c1 = :skyblue2 
+	c2 = :firebrick
+	lw = 4
+	
+	scatter(Δd[node, hour_filt1], ΔE[hour_filt1], alpha=scatter_alpha, label="10-20", color=c1)
+	scatter!(Δd[node, .!hour_filt1], ΔE[.!hour_filt1], alpha=scatter_alpha, label="20-10", color=c2)
+	xx = LinRange(minimum(skipmissing(Δd[node, :])), maximum(skipmissing(Δd[node, :])), 10)
+	plot!(xx, mefs_g1[node]*xx, lw=4, label="MEF=$(round(mefs_g1[node]))", color=c1)
+	plot!(xx, mefs_g2[node]*xx, lw=4, label="MEF=$(round(mefs_g2[node]))", color=c2)
+	plot!(xx, true_mefs_g1[node]*xx, lw=4, label="MEF=$(round(mefs_g1[node]))", color=c1, ls=:dash)
+	plot!(xx, true_mefs_g2[node]*xx, lw=4, ls=:dash, label="MEF=$(round(mefs_g2[node]))", color=c2)
+	
+	xlabel!("Δd at node $(node)")
+	ylabel!("ΔE")
+	title!("ΔE total wrt Δd at node $(node)")
+end
+
+# ╔═╡ f5f2c2be-b9ff-4b3f-bf3e-65ece46931fa
+let
+	bins = -1000:100:3000
+	alpha=0.4
+	histogram(
+		true_mefs_g1, 
+		bins=bins, alpha=alpha, label="True")
+	histogram!(mefs_g1, bins=bins, alpha=alpha, label="Reg")
+	xlabel!("MEF")
+	ylabel!("Counts")
+	title!("Average values over Group 1")
+end
+
+# ╔═╡ efaee005-a8f5-48fd-9db6-1169ba2e1aa0
+let
+	bins = -1000:100:3000
+	alpha=0.4
+	histogram(
+		true_mefs_g2, 
+		bins=bins, alpha=alpha, label="True")
+	histogram!(mefs_g2, bins=bins, alpha=alpha, label="Reg")
+	xlabel!("MEF")
+	ylabel!("Counts")
+	title!("Average values over Group 2")
+end
 
 # ╔═╡ bed124c1-b6ea-4eb6-9d18-da41651d932d
 md"""
@@ -360,41 +439,6 @@ begin
 	ylabel!("ΔE at given hour")
 	xlabel!("Δx at given hour")
 end
-
-# ╔═╡ 667d9d4a-88d9-48e2-86bc-63f2a587f1f5
-# linear regression on all nodes at once
-begin
-	X_hr = transpose(Δd_hr); # matrix has many nodes with zero demand; therefore columns have to be filtered so as to use only the nodes with actual mef
-	X_hr = X_hr[:, demand_nodes]
-	rank_hr = rank(X_hr)
-	@assert rank_hr == size(X_hr)[2]
-	mef_hr_opt = inv(X_hr'*X_hr + μ*I(rank_hr))*X_hr'*ΔE
-	mefs_hr_reg = zeros(n_nodes)
-	mefs_hr_reg[demand_nodes] .= mef_hr_opt
-end;
-
-
-# ╔═╡ 49c340c0-64e1-4d82-a24a-f7b83c108c64
-rank_hr
-
-# ╔═╡ dc0bd18b-2276-4a05-a7b1-f43acaf21b85
-size(X_hr)
-
-# ╔═╡ 56bd49af-7c69-4778-be5b-c47e906b69ed
-rank_hr
-
-# ╔═╡ f8f3ae28-e46b-43fb-bc06-a799ea0f6cdf
-Δd_hr
-
-# ╔═╡ be2f82a2-5c22-41a3-abe4-5a6f9de4e6d7
-md"""
-We want to compute, at a given hour, the changes in emissions and related them to changes in demand at a given node.
-"""
-
-# ╔═╡ 5ba56789-c1bb-4c1b-95cc-4943561434f4
-md"""
-Plotting all the generator data. 
-"""
 
 # ╔═╡ Cell order:
 # ╠═0ae79723-a5cf-4508-b41d-9622948185a9
@@ -435,7 +479,7 @@ Plotting all the generator data.
 # ╟─b7a82318-2999-42c0-975f-079b28104684
 # ╠═0fdee674-965a-4f9b-9f52-aff2efe935f8
 # ╠═8d206091-89b8-49c3-af53-95a262298426
-# ╟─7bbd7076-5a16-4914-8118-0d9238f75569
+# ╠═7bbd7076-5a16-4914-8118-0d9238f75569
 # ╟─e8fee23c-dc1a-430a-b896-31f09c4c503e
 # ╟─1bed3bbb-7411-441c-8028-f4dc91b0f1aa
 # ╠═a1da5ecd-219d-4e4e-b39d-1addddc89f13
@@ -445,20 +489,27 @@ Plotting all the generator data.
 # ╠═9b4e015d-a0b6-4046-b9c7-9f12b93d84fa
 # ╠═98e1f152-67c7-43d2-b3b5-68bbc322478d
 # ╟─a003c654-7072-4e3f-9aa8-154c0efa565c
-# ╠═c3741c04-abf3-4004-af8f-7b9433bc0bc1
 # ╠═fb6a6791-c704-43f1-9784-1cd17dfa7858
-# ╠═a7d00e5c-6ba3-4ac2-b1d8-a64b1f6168c9
+# ╠═01805ad9-0d4c-4d8e-8f79-69da710a3d2f
 # ╠═07c3faea-d89b-4e88-98f6-21423aa8d202
-# ╠═fd198417-f955-443f-b7bd-40b5106356eb
-# ╠═09b71d83-53ad-4b7b-ba70-b51ea90aa37e
-# ╟─7db52f69-03f7-4c9d-b746-4312b9c038b2
 # ╠═ec0278e1-0300-4842-80f0-857b414867a9
 # ╠═66ecb9fd-b976-432a-9df3-7a6a8618bc2e
-# ╟─364f3ff0-75b7-4ba2-a82a-08e92171daa2
 # ╠═3dc3b990-1e8b-43b7-856a-17667c6be634
 # ╟─ad960911-9354-4a31-bcbc-f1f0a95482ae
-# ╠═7833642f-5b87-4d1d-b311-72901851a58f
-# ╠═e42f39c5-9f4e-4e1c-bfdc-f7bc9cd29623
+# ╟─7833642f-5b87-4d1d-b311-72901851a58f
+# ╟─dede3a80-c551-4673-97d4-66640ac0023b
+# ╠═fd198417-f955-443f-b7bd-40b5106356eb
+# ╠═09b71d83-53ad-4b7b-ba70-b51ea90aa37e
+# ╠═e3c716f3-0460-4b6b-a49a-f783a23950b8
+# ╠═7991857c-eef0-4536-89df-600131e188d6
+# ╠═7d4a7daf-778e-4040-997a-be1cc95c75c0
+# ╟─dc7ebc3f-38bb-4416-a488-7035ad34d1e8
+# ╟─6166cad7-1b60-4df2-95d3-1974d297dce0
+# ╠═a757ff7e-402d-4ba3-9ecd-f2e1cd539a6e
+# ╟─7ee50896-add5-4e32-a72c-5470ce6c7849
+# ╟─984d0af5-0afc-4146-b570-0d6a0547f3b8
+# ╟─f5f2c2be-b9ff-4b3f-bf3e-65ece46931fa
+# ╟─efaee005-a8f5-48fd-9db6-1169ba2e1aa0
 # ╟─bed124c1-b6ea-4eb6-9d18-da41651d932d
 # ╟─0defd4c1-dbb9-4b66-bca0-3c4605c252bb
 # ╠═620e86a8-60ab-4aa3-b313-29ab83ef5f4e
@@ -467,10 +518,3 @@ Plotting all the generator data.
 # ╠═f8ebd537-bacc-4e1a-af8f-12f1196536ff
 # ╠═827932a6-68b6-4b37-8f02-fdfa819fee2c
 # ╠═1790b9e8-dc3c-4e47-8d8e-0a0cdea118fd
-# ╠═49c340c0-64e1-4d82-a24a-f7b83c108c64
-# ╠═dc0bd18b-2276-4a05-a7b1-f43acaf21b85
-# ╠═56bd49af-7c69-4778-be5b-c47e906b69ed
-# ╠═667d9d4a-88d9-48e2-86bc-63f2a587f1f5
-# ╠═f8f3ae28-e46b-43fb-bc06-a799ea0f6cdf
-# ╟─be2f82a2-5c22-41a3-abe4-5a6f9de4e6d7
-# ╟─5ba56789-c1bb-4c1b-95cc-4943561434f4
