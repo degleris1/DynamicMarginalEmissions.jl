@@ -46,6 +46,10 @@ using Plots
 # ╔═╡ a4577627-0a2b-403d-8558-4ccbf0622749
 using LinearAlgebra
 
+# ╔═╡ 8876dc66-7d6d-48ac-94d5-5dd489e81b87
+using LaTeXStrings
+
+
 # ╔═╡ 620e86a8-60ab-4aa3-b313-29ab83ef5f4e
 using PlutoUI
 
@@ -236,8 +240,31 @@ end
 # ╔═╡ fb6a6791-c704-43f1-9784-1cd17dfa7858
 ΔE = diff(E, dims=1);
 
+# ╔═╡ 9323dbf3-6a22-476a-8186-766fe1515c18
+function get_R2(preds, y)
+	res = preds - y 
+	R2 = 1 - res'*res/sum((y .- mean(y)).^2)
+	return R2
+end;
+
+# ╔═╡ 26d698fe-c2da-4a34-b446-4dd4dfacf861
+function plot_preds(preds, y)
+	p = scatter(preds, y, legend=false, alpha=.2)
+	plot!(
+		LinRange(minimum(y), maximum(y), 10), 
+		LinRange(minimum(y), maximum(y), 10), 
+		ls=:dash, lw = 3
+	)
+	ylabel!("ΔE real")
+	xlabel!("ΔE predicted")
+	return p
+end;
+
 # ╔═╡ 01805ad9-0d4c-4d8e-8f79-69da710a3d2f
 scatter_alpha=.2
+
+# ╔═╡ cab3f6a6-f982-459f-9fa0-8cc7290cd29e
+node_filt = [k for k in 1:n_nodes if k!= node]
 
 # ╔═╡ ec0278e1-0300-4842-80f0-857b414867a9
 μ = 1e-4
@@ -264,29 +291,45 @@ end
 # linear regression on all nodes at once, over all timesteps lumped together
 begin
 	X = transpose(Δd); # matrix has many nodes with zero demand; therefore columns have to be filtered so as to use only the nodes with actual mef
-	
-	# colin_node = 64 # node that is a lin comb of others
-	# demand_nodes = demand_nodes[demand_nodes .!= colin_node]
 	idx_valid = vec(sum(X .=== missing, dims=2).== 0)
 	X_demand = X[idx_valid, :]
 	demand_nodes = findall(vec(sum(abs.(X_demand), dims=1)).!==0.0)
 	X_demand = X_demand[:, demand_nodes]
 	rank_ = rank(X_demand)
-	# @assert rank_ == size(X_demand)[2]
 	mef_opt = get_reg_mefs(X_demand, ΔE[idx_valid], μ)
 	mefs_reg = zeros(n_nodes)
 	mefs_reg[demand_nodes] .= mef_opt
 end;
 
+# ╔═╡ 2e59c950-93e7-48d4-840c-c40f7296614d
+begin
+	# compute R2 for this regression
+	preds = X_demand*mef_opt
+	R2 = get_R2(preds, ΔE[idx_valid])
+end;
+
+# ╔═╡ 05305b47-b71a-4452-96ca-ef809924d5c2
+md"""
+The regression has predictive power: R^2 = $(round(R2 * 100)) %
+"""
+
+# ╔═╡ 4afd6719-cff9-4891-87a1-82405b07c084
+let
+	plot_preds(preds, ΔE[idx_valid])
+end
+
+# ╔═╡ ded35429-73ce-461c-9144-84741cabb512
+res_pred = transpose(Δd)[:, node_filt] * mefs_reg[node_filt];
+
 # ╔═╡ 07c3faea-d89b-4e88-98f6-21423aa8d202
 let
 	lw = 4
-	p = scatter(Δd[node, :], ΔE, label=false, alpha=scatter_alpha)
+	p = scatter(Δd[node, :], ΔE-res_pred, label=false, alpha=scatter_alpha)
 	xx = LinRange(minimum(skipmissing(Δd[node, :])), maximum(skipmissing(Δd[node, :])), 10)
 	plot!(xx, mefs_reg[node]*xx, lw=lw, label="Reg MEF=$(round(mefs_reg[node]))")
 	plot!(xx, mean(mefs[node, :])*xx, ls=:dash, lw=lw, label="Mean True MEF=$(round( mean(mefs[node, :])))")
 	xlabel!("Δd at node $(node)")
-	ylabel!("ΔE")
+	ylabel!(L"$\Delta E -\sum_{j\neq i} \Delta d_j \beta_j$")
 	title!("ΔE total wrt Δd at node $(node)")
 	p
 end
@@ -326,6 +369,32 @@ begin
 	mefs_g1[demand_nodes] = get_reg_mefs(X_demand_g1, ΔE[idx_valid][hour_filt1[idx_valid]], μ)
 	mefs_g2[demand_nodes] = get_reg_mefs(X_demand_g2, ΔE[idx_valid][.!hour_filt1[idx_valid]], μ)
 end;
+
+# ╔═╡ 581b23b6-4850-4617-97b9-9775c2cad229
+begin
+	# get R2 for both subgroups
+	preds_g1 = X_demand_g1 * mefs_g1[demand_nodes]
+	R2_g1 = get_R2(preds_g1, ΔE[idx_valid][hour_filt1[idx_valid]])
+
+	preds_g2 = X_demand_g2 * mefs_g2[demand_nodes]
+	R2_g2 = get_R2(preds_g2, ΔE[idx_valid][.!hour_filt1[idx_valid]])
+
+end;
+
+# ╔═╡ 2e65831e-97e0-4b13-8e00-a8bc7741e026
+md"""
+The prediction power for both subgroups are: 
+- Group 1: R2 = $(round(R2_g1*100)) %
+- Group 2: R2 = $(round(R2_g2*100)) %
+"""
+
+# ╔═╡ 9d314690-0f1d-46c8-92e8-72de962a580a
+# visualizing the prediction power
+let
+p1 = plot_preds(preds_g1, ΔE[idx_valid][hour_filt1[idx_valid]])
+p2 = plot_preds(preds_g2, ΔE[idx_valid][.!hour_filt1[idx_valid]])
+plot(p1, p2)
+end
 
 # ╔═╡ 7d4a7daf-778e-4040-997a-be1cc95c75c0
 # histogram
@@ -372,8 +441,8 @@ let
 	c2 = :firebrick
 	lw = 4
 	
-	scatter(Δd[node, hour_filt1], ΔE[hour_filt1], alpha=scatter_alpha, label="10-20", color=c1)
-	scatter!(Δd[node, .!hour_filt1], ΔE[.!hour_filt1], alpha=scatter_alpha, label="20-10", color=c2)
+	scatter(Δd[node, hour_filt1], (ΔE-res_pred)[hour_filt1], alpha=scatter_alpha, label="10-20", color=c1)
+	scatter!(Δd[node, .!hour_filt1], (ΔE-res_pred)[.!hour_filt1], alpha=scatter_alpha, label="20-10", color=c2)
 	xx = LinRange(minimum(skipmissing(Δd[node, :])), maximum(skipmissing(Δd[node, :])), 10)
 	plot!(xx, mefs_g1[node]*xx, lw=4, label="MEF=$(round(mefs_g1[node]))", color=c1)
 	plot!(xx, mefs_g2[node]*xx, lw=4, label="MEF=$(round(mefs_g2[node]))", color=c2)
@@ -411,11 +480,6 @@ let
 	title!("Average values over Group 2")
 end
 
-# ╔═╡ bed124c1-b6ea-4eb6-9d18-da41651d932d
-md"""
-### Estimate the prediction power of this regression. 
-"""
-
 # ╔═╡ 0defd4c1-dbb9-4b66-bca0-3c4605c252bb
 md"""
 ### Compute regression-based mefs at a given hour
@@ -451,6 +515,7 @@ end
 # ╠═4d52befa-c24c-4ad0-b975-376b8c8af3d2
 # ╠═92a7dddf-a46e-4d42-9ca2-4d8b2e891b50
 # ╠═a4577627-0a2b-403d-8558-4ccbf0622749
+# ╠═8876dc66-7d6d-48ac-94d5-5dd489e81b87
 # ╟─cab761be-ee1b-4002-a187-df72c29d9771
 # ╠═113b99d8-0708-4da8-a8d6-7c60734e4a31
 # ╠═f354a0e5-5e4f-40ab-807d-f9f19e74d378
@@ -490,17 +555,27 @@ end
 # ╠═98e1f152-67c7-43d2-b3b5-68bbc322478d
 # ╟─a003c654-7072-4e3f-9aa8-154c0efa565c
 # ╠═fb6a6791-c704-43f1-9784-1cd17dfa7858
+# ╠═66ecb9fd-b976-432a-9df3-7a6a8618bc2e
+# ╠═9323dbf3-6a22-476a-8186-766fe1515c18
+# ╠═2e59c950-93e7-48d4-840c-c40f7296614d
+# ╟─05305b47-b71a-4452-96ca-ef809924d5c2
+# ╠═26d698fe-c2da-4a34-b446-4dd4dfacf861
+# ╟─4afd6719-cff9-4891-87a1-82405b07c084
 # ╠═01805ad9-0d4c-4d8e-8f79-69da710a3d2f
+# ╠═cab3f6a6-f982-459f-9fa0-8cc7290cd29e
+# ╠═ded35429-73ce-461c-9144-84741cabb512
 # ╠═07c3faea-d89b-4e88-98f6-21423aa8d202
 # ╠═ec0278e1-0300-4842-80f0-857b414867a9
-# ╠═66ecb9fd-b976-432a-9df3-7a6a8618bc2e
 # ╠═3dc3b990-1e8b-43b7-856a-17667c6be634
 # ╟─ad960911-9354-4a31-bcbc-f1f0a95482ae
 # ╟─7833642f-5b87-4d1d-b311-72901851a58f
 # ╟─dede3a80-c551-4673-97d4-66640ac0023b
 # ╠═fd198417-f955-443f-b7bd-40b5106356eb
-# ╠═09b71d83-53ad-4b7b-ba70-b51ea90aa37e
 # ╠═e3c716f3-0460-4b6b-a49a-f783a23950b8
+# ╠═581b23b6-4850-4617-97b9-9775c2cad229
+# ╟─2e65831e-97e0-4b13-8e00-a8bc7741e026
+# ╟─9d314690-0f1d-46c8-92e8-72de962a580a
+# ╠═09b71d83-53ad-4b7b-ba70-b51ea90aa37e
 # ╠═7991857c-eef0-4536-89df-600131e188d6
 # ╠═7d4a7daf-778e-4040-997a-be1cc95c75c0
 # ╟─dc7ebc3f-38bb-4416-a488-7035ad34d1e8
@@ -510,7 +585,6 @@ end
 # ╟─984d0af5-0afc-4146-b570-0d6a0547f3b8
 # ╟─f5f2c2be-b9ff-4b3f-bf3e-65ece46931fa
 # ╟─efaee005-a8f5-48fd-9db6-1169ba2e1aa0
-# ╟─bed124c1-b6ea-4eb6-9d18-da41651d932d
 # ╟─0defd4c1-dbb9-4b66-bca0-3c4605c252bb
 # ╠═620e86a8-60ab-4aa3-b313-29ab83ef5f4e
 # ╟─e8c4a66c-94b7-4b0e-9b43-fcaa0f235733
