@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.18.1
+# v0.19.4
 
 using Markdown
 using InteractiveUtils
@@ -48,7 +48,6 @@ using LinearAlgebra
 
 # ╔═╡ 8876dc66-7d6d-48ac-94d5-5dd489e81b87
 using LaTeXStrings
-
 
 # ╔═╡ 620e86a8-60ab-4aa3-b313-29ab83ef5f4e
 using PlutoUI
@@ -173,7 +172,7 @@ md"""
 """
 
 # ╔═╡ 0fdee674-965a-4f9b-9f52-aff2efe935f8
-node = 65
+node = 200
 
 # ╔═╡ 8d206091-89b8-49c3-af53-95a262298426
 begin
@@ -267,7 +266,7 @@ scatter_alpha=.2
 node_filt = [k for k in 1:n_nodes if k!= node]
 
 # ╔═╡ ec0278e1-0300-4842-80f0-857b414867a9
-μ = 1e-4
+μ = 1
 
 # ╔═╡ ad960911-9354-4a31-bcbc-f1f0a95482ae
 md"""
@@ -410,6 +409,105 @@ let
 	ylabel!("Counts")
 end
 
+# ╔═╡ 621c8dc3-fd4f-48da-9d49-cdad33941975
+md"""
+# Extracting regression mef from a subset of node
+"""
+
+# ╔═╡ 5b287f18-ab7a-4588-b231-b1b6f1315ddd
+th_cor = .99
+
+# ╔═╡ a46a11ed-7433-4b36-baca-11f899755eca
+conn_nodes, XX = analysis.get_connected_clusters(X_demand, th_cor);
+
+# ╔═╡ bef12ca3-b2f1-4a41-a343-0ac98b9155e7
+let
+	heatmap(XX.>=th_cor)
+	xlabel!("Node id")
+	ylabel!("Node id")
+end
+
+# ╔═╡ 45335ae0-b302-4dfb-966f-b6cc0adb5dc7
+md"""
+we see we have $(length(conn_nodes)) clusters of connected nodes. We are expecting that these nodes have demands that vary nearly equally. 
+
+For instance, let us visualize the demand patterns of a given group
+"""
+
+# ╔═╡ 4b34e966-42b8-4d87-9e79-da678ab51b29
+plot([length(g) for g in conn_nodes])
+
+# ╔═╡ 7af9c674-ad8b-48e7-b228-42814129ece5
+md"""
+We see that for all groups, all curves actually collapse on one another. 
+"""
+
+# ╔═╡ c0869e4f-5960-40f7-8cf2-043fb7a95a84
+md"""
+Now, we can summarize each group by a single demand vector, the total demand across this group!
+"""
+
+# ╔═╡ 4042ad0a-0fe2-4c50-a5ef-692b24c9eae3
+# contains total Δd for each group
+X_demand_gp = hcat([sum(X_demand[:, nodes_gp], dims=2) for nodes_gp in conn_nodes]...);
+
+# ╔═╡ 265a5b81-f2a2-43d2-b1d0-007c6c39d104
+# linear regression on all nodes at once, over all timesteps lumped together
+begin
+
+	mef_gp = get_reg_mefs(X_demand_gp, ΔE[idx_valid], μ)
+	# mefs_reg = zeros(n_nodes)
+	# mefs_reg[demand_nodes] .= mef_opt
+end;
+
+# ╔═╡ dbbc2ca0-9121-40aa-8394-2af3b84bacc0
+md"""
+The MEF should represent, on average over this cluster, how much emissions change wrt a change in demand. Therefore it should be equal to the average mef in the group? (Maybe weighted average)?
+"""
+
+# ╔═╡ db3cf5fa-c088-40ab-bec0-0417ee4c9ba6
+@bind gp_id Slider(1:length(conn_nodes))
+
+# ╔═╡ a4179927-2b3a-46bb-9ca1-327dbbc3b44c
+idx_valid_demand = vec(sum(demand.===missing, dims=1) .==0);
+
+# ╔═╡ 0a1f8447-6c8b-45ff-875f-74748980d5f4
+d_gp = demand[demand_nodes, idx_valid_demand][conn_nodes[gp_id], :];
+
+# ╔═╡ ecec3381-2d36-4e2c-bb07-ee24681eb391
+begin
+	p = plot()
+	for k in 1:size(d_gp, 1)
+		plot!(d_gp[k, :]/d_gp[k, 1], alpha=.4, ls=:dash, legend=false)
+	end
+	xlims!(4000, 4100)
+	title!("Group $(gp_id), with $(size(d_gp,1)) nodes.")
+	p
+end
+
+# ╔═╡ 39c546d6-c267-4b45-86fc-79426ae0d39e
+# factor in the weighted average
+ω = mean(d_gp./sum(d_gp, dims=1), dims=2)
+
+# ╔═╡ 624f9b72-7792-4b6f-b138-669751a749b3
+# weighted average mefs over the region
+weighted_mef_gp = ω'*mefs[conn_nodes[gp_id], :]
+
+# ╔═╡ 515c9225-87b4-424e-845c-cd6da662e25a
+let
+	histogram(vec(weighted_mef_gp), label="Weighted avg MEF")
+	plot!([mef_gp[gp_id]], seriestype="vline", label="Regression group", lw=3)
+	plot!([median(mefs_reg[demand_nodes][conn_nodes[gp_id]])], seriestype="vline", label="Reg node, median in group", lw=3)
+	xlabel!("MEF")
+	ylabel!("Counts")
+end
+
+# ╔═╡ 8d333cbb-35ba-409e-aa0c-9791ceec722f
+let
+	histogram(mef_gp, alpha=.4)
+	histogram!(mefs_reg[demand_nodes], alpha=.4)
+end
+
 # ╔═╡ dc7ebc3f-38bb-4416-a488-7035ad34d1e8
 md"""
 ## Orders of magnitude of estimated MEFS with these methods
@@ -504,6 +602,9 @@ begin
 	xlabel!("Δx at given hour")
 end
 
+# ╔═╡ 665867f1-3adc-4de8-8fd1-bfafa3a56ae9
+[median(mef_reg[demand_nodes][gp_id])]
+
 # ╔═╡ Cell order:
 # ╠═0ae79723-a5cf-4508-b41d-9622948185a9
 # ╠═5303b439-2bbb-4a04-b17e-7df6f2983493
@@ -543,8 +644,8 @@ end
 # ╟─f5e407e6-fa2c-4825-a7fe-6690bf6ad06c
 # ╟─b7a82318-2999-42c0-975f-079b28104684
 # ╠═0fdee674-965a-4f9b-9f52-aff2efe935f8
-# ╠═8d206091-89b8-49c3-af53-95a262298426
-# ╠═7bbd7076-5a16-4914-8118-0d9238f75569
+# ╟─8d206091-89b8-49c3-af53-95a262298426
+# ╟─7bbd7076-5a16-4914-8118-0d9238f75569
 # ╟─e8fee23c-dc1a-430a-b896-31f09c4c503e
 # ╟─1bed3bbb-7411-441c-8028-f4dc91b0f1aa
 # ╠═a1da5ecd-219d-4e4e-b39d-1addddc89f13
@@ -564,20 +665,39 @@ end
 # ╠═01805ad9-0d4c-4d8e-8f79-69da710a3d2f
 # ╠═cab3f6a6-f982-459f-9fa0-8cc7290cd29e
 # ╠═ded35429-73ce-461c-9144-84741cabb512
-# ╠═07c3faea-d89b-4e88-98f6-21423aa8d202
+# ╟─07c3faea-d89b-4e88-98f6-21423aa8d202
 # ╠═ec0278e1-0300-4842-80f0-857b414867a9
 # ╠═3dc3b990-1e8b-43b7-856a-17667c6be634
 # ╟─ad960911-9354-4a31-bcbc-f1f0a95482ae
-# ╟─7833642f-5b87-4d1d-b311-72901851a58f
+# ╠═7833642f-5b87-4d1d-b311-72901851a58f
 # ╟─dede3a80-c551-4673-97d4-66640ac0023b
 # ╠═fd198417-f955-443f-b7bd-40b5106356eb
 # ╠═e3c716f3-0460-4b6b-a49a-f783a23950b8
 # ╠═581b23b6-4850-4617-97b9-9775c2cad229
 # ╟─2e65831e-97e0-4b13-8e00-a8bc7741e026
 # ╟─9d314690-0f1d-46c8-92e8-72de962a580a
-# ╠═09b71d83-53ad-4b7b-ba70-b51ea90aa37e
+# ╟─09b71d83-53ad-4b7b-ba70-b51ea90aa37e
 # ╠═7991857c-eef0-4536-89df-600131e188d6
 # ╠═7d4a7daf-778e-4040-997a-be1cc95c75c0
+# ╟─621c8dc3-fd4f-48da-9d49-cdad33941975
+# ╠═5b287f18-ab7a-4588-b231-b1b6f1315ddd
+# ╠═a46a11ed-7433-4b36-baca-11f899755eca
+# ╠═bef12ca3-b2f1-4a41-a343-0ac98b9155e7
+# ╟─45335ae0-b302-4dfb-966f-b6cc0adb5dc7
+# ╠═4b34e966-42b8-4d87-9e79-da678ab51b29
+# ╠═0a1f8447-6c8b-45ff-875f-74748980d5f4
+# ╟─ecec3381-2d36-4e2c-bb07-ee24681eb391
+# ╟─7af9c674-ad8b-48e7-b228-42814129ece5
+# ╟─c0869e4f-5960-40f7-8cf2-043fb7a95a84
+# ╠═4042ad0a-0fe2-4c50-a5ef-692b24c9eae3
+# ╠═265a5b81-f2a2-43d2-b1d0-007c6c39d104
+# ╟─dbbc2ca0-9121-40aa-8394-2af3b84bacc0
+# ╠═db3cf5fa-c088-40ab-bec0-0417ee4c9ba6
+# ╠═a4179927-2b3a-46bb-9ca1-327dbbc3b44c
+# ╠═39c546d6-c267-4b45-86fc-79426ae0d39e
+# ╠═624f9b72-7792-4b6f-b138-669751a749b3
+# ╠═515c9225-87b4-424e-845c-cd6da662e25a
+# ╠═8d333cbb-35ba-409e-aa0c-9791ceec722f
 # ╟─dc7ebc3f-38bb-4416-a488-7035ad34d1e8
 # ╟─6166cad7-1b60-4df2-95d3-1974d297dce0
 # ╠═a757ff7e-402d-4ba3-9ecd-f2e1cd539a6e
@@ -592,3 +712,4 @@ end
 # ╠═f8ebd537-bacc-4e1a-af8f-12f1196536ff
 # ╠═827932a6-68b6-4b37-8f02-fdfa819fee2c
 # ╠═1790b9e8-dc3c-4e47-8d8e-0a0cdea118fd
+# ╠═665867f1-3adc-4de8-8fd1-bfafa3a56ae9
