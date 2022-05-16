@@ -269,6 +269,7 @@ function _make_static_case2018(date)
     gmax = params.gt
 
     fl = cost
+    fl[fuel .== "Steam"] .+= HEAT_RATE_COAL * FUEL_COSTS_18['C']
 
     # To get the CO2 rate, divide the cost by the fuel cost to get the heat rate
     # Then multiple by the emissions rate
@@ -356,15 +357,17 @@ function _make_dynamic_case2018(date, T, δ=1e-4)
     gmax = [p.gt for p in params]
     ramp = [p.gen.ramp for p in params]
     
-    fl = [cost for _ in 1:T]
-
+    fl = [deepcopy(cost) for _ in 1:T]
+    for t in 1:T
+        fl[t][fuel .== "Steam"] .+= HEAT_RATE_COAL * FUEL_COSTS_18['C']
+    end
 
     # To get the CO2 rate, divide the cost by the fuel cost to get the heat rate
     # Then multiple by the emissions rate
     _fuel = [get(NREL_FUEL_MAP, f, 'R') for f in fuel]
     fuel_cost = [FUEL_COSTS_18[f] for f in _fuel]
     fuel_emissions_rates = [FUEL_EMISSIONS[f] for f in _fuel]
-    co2_rates = (cost ./ fuel_cost) .* fuel_emissions_rates
+    co2_rates = (fl[1] ./ fuel_cost) .* fuel_emissions_rates
 
     case = (
         A=A, β=β, fmax=fmax, 
