@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.18.1
+# v0.19.4
 
 using Markdown
 using InteractiveUtils
@@ -69,6 +69,9 @@ util = ingredients("util.jl")
 
 # ╔═╡ f13e5dea-33b9-45c0-876e-42654fe6a8c7
 util.FUEL_EMISSIONS
+
+# ╔═╡ 48868281-53e4-47bb-b9be-98bc7806b440
+analysis = ingredients("analysis_utils.jl")
 
 # ╔═╡ 6db70f24-e8ba-461e-8d86-00e9a37b44d3
 md"""
@@ -343,10 +346,6 @@ md"""
 Here we want to estimate the MEF from each node. The problem is that demand is proportionally divided, therefore a regression analysis would probably have mefs lie on an affine set and easily attribute negative MEFs.
 """
 
-# ╔═╡ 13478bcb-c4fc-4532-a1ef-4513b15e3295
-# changes in emissions
-ΔE = [(E_tot[d][hour] - E_tot[d][hour-1]) for d in 1:365];
-
 # ╔═╡ 70723775-1912-48ed-9ae5-d4663d0f81d3
 # gather all the demand changes, at every node
 Δd = hcat([
@@ -361,6 +360,10 @@ xx(node) = Δd[:, node]
 xx1 = xx(node1)
 xx2 = xx(node2)
 end;
+
+# ╔═╡ 13478bcb-c4fc-4532-a1ef-4513b15e3295
+# changes in emissions
+ΔE = [(E_tot[d][hour] - E_tot[d][hour-1]) for d in 1:365];
 
 # ╔═╡ 0df59933-2c53-46ae-88fe-a7fbd1b4b339
 lr_E = linregress(Δd, ΔE)
@@ -451,6 +454,10 @@ end
 # ╔═╡ 34cd82e7-b58f-469e-be91-a1391903d661
 md"""
 ## NOTE: the linear regression really does not work... to inquire. 
+
+After doing it on the 2018 dataset, I think the reason is probably within the following: 
+- rank problem
+- not regularized properly (need to do a least norm problem)
 """
 
 # ╔═╡ 90aa489d-3c50-4c4a-ac19-351de901fbe4
@@ -621,6 +628,30 @@ end
 # ╔═╡ 58af890e-c198-4766-a7e3-3024dafe3190
 p2=scatter(xx2, ΔE)
 
+# ╔═╡ fb149ba7-43a6-4edc-abfb-75e2a2b61ded
+md"""
+## Check correlations between the nodes, see if clusters emerge
+"""
+
+# ╔═╡ b96551e7-b2f2-4afb-b368-b310fe5e1c63
+d = hcat([
+	results_dyn[d].d[hr] for d in 1:365 for hr in 1:24 
+]...)
+
+# ╔═╡ 01a120e6-91ab-4519-af7b-ffa4a6e95afa
+idx_nonzero = findall(vec(sum(abs.(d), dims=2).>0))
+
+# ╔═╡ 0667a06a-b9cb-47f2-aed0-9988a5648316
+d_ = d[idx_nonzero, :];
+
+# ╔═╡ e960f3f7-bea5-447d-8542-37f1c992cdbb
+conn_nodes, XX = analysis.get_connected_clusters(d_', 1.);
+
+# ╔═╡ 08b179be-581d-45a1-b01a-53d8a93e1618
+md"""
+Something to do potentially would be to compare with the demand maps that we get already from the dataset directly. 
+"""
+
 # ╔═╡ Cell order:
 # ╠═0ae79723-a5cf-4508-b41d-9622948185a9
 # ╠═5303b439-2bbb-4a04-b17e-7df6f2983493
@@ -630,8 +661,9 @@ p2=scatter(xx2, ΔE)
 # ╠═e19f3dbe-b54a-45c3-b496-cf762f821ed5
 # ╠═31aedaa9-2d5c-4ddf-acfa-8b836a252f70
 # ╟─cab761be-ee1b-4002-a187-df72c29d9771
-# ╟─113b99d8-0708-4da8-a8d6-7c60734e4a31
+# ╠═113b99d8-0708-4da8-a8d6-7c60734e4a31
 # ╟─f13e5dea-33b9-45c0-876e-42654fe6a8c7
+# ╠═48868281-53e4-47bb-b9be-98bc7806b440
 # ╟─6db70f24-e8ba-461e-8d86-00e9a37b44d3
 # ╠═f9fab4fe-baec-4bfd-9d84-ef9caac85f5f
 # ╠═d7598abb-2be7-4e3b-af9e-14827ef5a3b0
@@ -690,9 +722,9 @@ p2=scatter(xx2, ΔE)
 # ╟─91b474ba-e955-416c-8bc7-aa2d9b88995f
 # ╟─e1b5c93e-9241-442b-a8ce-5c7d91809efc
 # ╟─847333af-8145-433a-b24c-554af2468da4
+# ╠═70723775-1912-48ed-9ae5-d4663d0f81d3
 # ╠═1fba9a4a-8090-4fc5-a373-670ed04dfb4e
 # ╠═13478bcb-c4fc-4532-a1ef-4513b15e3295
-# ╠═70723775-1912-48ed-9ae5-d4663d0f81d3
 # ╠═0df59933-2c53-46ae-88fe-a7fbd1b4b339
 # ╠═50acbd4b-1a02-4c55-b605-caf07f12bd74
 # ╠═749ef6df-5909-4f40-a5ff-0ed7877de9ab
@@ -728,3 +760,9 @@ p2=scatter(xx2, ΔE)
 # ╠═08c75daa-fe09-4839-9390-cd5034eb8125
 # ╠═f9153c23-f969-4854-8c92-2437efd5b8ce
 # ╠═58af890e-c198-4766-a7e3-3024dafe3190
+# ╟─fb149ba7-43a6-4edc-abfb-75e2a2b61ded
+# ╠═b96551e7-b2f2-4afb-b368-b310fe5e1c63
+# ╠═01a120e6-91ab-4519-af7b-ffa4a6e95afa
+# ╠═0667a06a-b9cb-47f2-aed0-9988a5648316
+# ╠═e960f3f7-bea5-447d-8542-37f1c992cdbb
+# ╠═08b179be-581d-45a1-b01a-53d8a93e1618

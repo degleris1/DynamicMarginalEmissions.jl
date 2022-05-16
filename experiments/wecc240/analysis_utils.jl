@@ -2,6 +2,9 @@ using Dates
 using BSON
 using StatsBase: mean
 using LinearAlgebra
+using LightGraphs
+using Statistics
+
 
 """
 """
@@ -80,12 +83,12 @@ end
 
 Returns a matrix of demand of size n_nodes x n_timesteps
 """
-function get_demand(r)
+function get_demand(r; n_nodes=243, n_timesteps=24)
 
 	dates = sort(collect(keys(r)))
 	is_valid = [r[d][:status] for d in dates] .== "OPTIMAL"
 
-	demand = hcat([v ? hcat(r[d][:d]...) : missing for (d,v) in zip(dates, is_valid)]...)
+	demand = hcat([v ? hcat(r[d][:d]...) : Array{Union{Missing, String}}(missing, n_nodes, n_timesteps) for (d,v) in zip(dates, is_valid)]...)
 
 	
 	return demand
@@ -93,14 +96,14 @@ end
 
 """
 """
-function get_total_emissions(r, co2_rates)
+function get_total_emissions(r, co2_rates; n_gens=309, n_timesteps=24)
     dates = sort(collect(keys(r)))
 	is_valid = [r[d][:status] for d in dates] .== "OPTIMAL"
 
-	g_opt = hcat([ v ? hcat(r[d][:g]...) : missing for (d, v) in zip(dates, is_valid)]...)
+	g_opt = reduce(hcat, [ v ? hcat(r[d][:g]...) : Array{Union{Missing, String}}(missing, n_gens, n_timesteps)  for (d, v) in zip(dates, is_valid)])
     E = co2_rates * g_opt
 
-	return E
+	return vec(E)
 end
 
 function get_deviations(metric, r1, r2)
@@ -111,4 +114,35 @@ function get_deviations(metric, r1, r2)
     mef = (ri, dt) -> get_nodal_mefs(ri.data, d -> d == dt, hybrid_mode=ri.hm)[:]
 
     return [metric(mef(r1, dt), mef(r2, dt)) for dt in dts]
+end
+
+
+"""
+    function get_connected_clusters(x, cor_th)
+
+Returns sets of features that are highly correlated with each other in a given
+input matrix. 
+
+`x` is a nxm matrix where n are observations and m are features. 
+`cor_th` is the threshold for the correlation coefficient.
+"""
+function get_connected_clusters(x, cor_th)
+
+    # XX is the correlation matrix
+    n = size(x, 2) 
+    XX = zeros(n, n)
+    for i in 1:n, j in 1:n
+        XX[i,j] = cor(x[:,i], x[:,j])
+    end
+
+    # construct a graph
+    g = SimpleGraph(n);
+	for i in 1:n, j in 1:n
+        if XX[i,j]>=cor_th
+            add_edge!(g, i, j);
+        end
+	end
+
+    # extract the connected components
+    return connected_components(g), XX
 end

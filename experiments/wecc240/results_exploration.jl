@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.18.1
+# v0.19.4
 
 using Markdown
 using InteractiveUtils
@@ -46,11 +46,11 @@ using Plots
 # ╔═╡ a4577627-0a2b-403d-8558-4ccbf0622749
 using LinearAlgebra
 
+# ╔═╡ 8876dc66-7d6d-48ac-94d5-5dd489e81b87
+using LaTeXStrings
+
 # ╔═╡ 620e86a8-60ab-4aa3-b313-29ab83ef5f4e
 using PlutoUI
-
-# ╔═╡ d1eef849-92ea-49ed-b05e-c4e055a85c2c
-using LinearRegression
 
 # ╔═╡ cab761be-ee1b-4002-a187-df72c29d9771
 # equivalent to include that will replace it
@@ -93,7 +93,7 @@ DATA_DIR = config["data"]["GOOGLE_DRIVE"]
 RESULTS_DIR = config["data"]["SAVE_DIR"]
 
 # ╔═╡ efc7f458-1bbd-45e9-b05a-a076eee7a90c
-run_names = ["july18_static", "july18_dynamic"]
+run_names = ["july18_static", "july18_dynamic", "year18_dynamic"]
 
 # ╔═╡ 00c39925-e3a4-4d5e-9a00-e950c711648e
 paths = [joinpath(DATA_DIR, "results240", name) for name in run_names]
@@ -104,8 +104,19 @@ cases = [BSON.load(joinpath(p, "case.bson"), @__MODULE__) for p in paths];
 # ╔═╡ ede8ffc2-2a2a-4a09-b702-610270f24491
 results = map(analysis.load_results, paths);
 
+# ╔═╡ 11aef0e7-372d-4b3b-845d-e63bc620b5f9
+idx = 3
+
 # ╔═╡ f2197b5f-562a-435a-88a4-fc26415e77a9
-n_nodes, _ = size(cases[1][:A]);
+n_nodes = size(cases[idx][:A], 1);
+
+# ╔═╡ 6b3a9e01-e14c-488d-bde5-7eae4e8e87e0
+n_gens = size(cases[idx][:B], 2)
+
+# ╔═╡ ae72be0b-b54f-47bd-9888-ad297463bb38
+md"""
+We are analyzing the dataset: $(run_names[idx])
+"""
 
 # ╔═╡ 24a57eb1-8761-4e03-9f36-3f5823ca703d
 md"""
@@ -123,17 +134,17 @@ md"""
 alldates = d -> true
 
 # ╔═╡ f0999280-9383-41ba-803b-840dcca60de5
-dates = sort(collect(keys(results[2])))
+dates = sort(collect(keys(results[idx])))
 
 # ╔═╡ 81898fc0-be77-4941-848e-581fb8cfb1ed
 # collect total mefs
-mefs = analysis.get_nodal_mefs(results[2], alldates; hybrid_mode=false);
+mefs = analysis.get_nodal_mefs(results[idx], alldates; hybrid_mode=false);
 
 # ╔═╡ 38c99b5d-a25a-4c0e-8908-961247d7e722
-mefs_obs = analysis.get_nodal_mefs(results[2], alldates; hybrid_mode=false, observed=true);
+mefs_obs = analysis.get_nodal_mefs(results[idx], alldates; hybrid_mode=false, observed=true);
 
 # ╔═╡ dfbf46a2-8a02-4c77-b757-6a7546a36f1f
-hours = [mod(k, 24) for k in 1:size(mefs)[2]];
+hours = [h for _ in 1:length(dates) for h in 1:24];
 
 # ╔═╡ c8c8d968-7e5b-4edf-8fec-2a7625b119a3
 # representing total mefs
@@ -161,7 +172,7 @@ md"""
 """
 
 # ╔═╡ 0fdee674-965a-4f9b-9f52-aff2efe935f8
-node = 65
+node = 200
 
 # ╔═╡ 8d206091-89b8-49c3-af53-95a262298426
 begin
@@ -175,14 +186,11 @@ begin
 	p_
 end
 
-# ╔═╡ 7f1ebbfc-4091-4efc-bc56-151e91991bc2
-size(mefs[node, :])
-
 # ╔═╡ 7bbd7076-5a16-4914-8118-0d9238f75569
 begin
-	mefs_node_days = reshape(mefs[node, :], (24, Int(length(mefs[node, :])/24)))
-	mean_ = mean(mefs_node_days, dims=2)
-	std_ = std(mefs_node_days, dims=2);
+	mefs_nodes_days = [reshape(mefs[n, :], (24, Int(length(mefs[n, :])/24))) for n in 1:n_nodes]
+	mean_ = mean(mefs_nodes_days[node], dims=2)
+	std_ = std(mefs_nodes_days[node], dims=2);
 	plot(mean_ - std_, fillrange=mean_ .+ std_, fillalpha = .3, label="std range")
 	plot!(mean_, label="mean", lw=2)
 	xlabel!("Hour of day")
@@ -204,95 +212,139 @@ Can you extract and analyze both of them?
 """
 
 # ╔═╡ a1da5ecd-219d-4e4e-b39d-1addddc89f13
-demand = analysis.get_demand(results[2]);
+demand = analysis.get_demand(results[idx]);
 
-# ╔═╡ 38b8e954-6e93-4f2d-9a87-2ebbab8a4071
-Δd = hcat([demand[:, i] - demand[:, i-1] for i in 2:size(demand)[2]]...);
+# ╔═╡ 66caf393-88ce-4e6c-9a4a-afdfa7b24304
+Δd = diff(demand, dims=2);
 
 # ╔═╡ 576e6a18-eb15-4578-9bda-569c1397a8d3
 co2_rates = cases[2][:co2_rates];
 
 # ╔═╡ 112eb399-f273-42a0-a6b6-52ce543bc696
-E = analysis.get_total_emissions(results[2], transpose(co2_rates));
+E = analysis.get_total_emissions(results[idx], transpose(co2_rates));
+
+# ╔═╡ 9b4e015d-a0b6-4046-b9c7-9f12b93d84fa
+length(sort(collect(keys(results[idx]))))
+
+# ╔═╡ 98e1f152-67c7-43d2-b3b5-68bbc322478d
+plot([sum(demand[:, i]) for i in 1:size(demand, 2)], label=false, xlabel="Time", ylabel="Demand")
 
 # ╔═╡ a003c654-7072-4e3f-9aa8-154c0efa565c
 begin
-	plot(transpose(E), legend=false)
+	plot(E, legend=false)
 	xlabel!("Time")
 	ylabel!("Total emissions across the network")
 end
 
 # ╔═╡ fb6a6791-c704-43f1-9784-1cd17dfa7858
-ΔE = [E[i]-E[i-1] for i in 2:length(E)];
+ΔE = diff(E, dims=1);
 
-# ╔═╡ fd198417-f955-443f-b7bd-40b5106356eb
-hour_filt1 = 10 .<= hours[2:end] .<= 20;
-
-# ╔═╡ eece6a95-ee8a-466f-886b-ac3a42d3f91a
-.!hour_filt1
-
-# ╔═╡ 09b71d83-53ad-4b7b-ba70-b51ea90aa37e
-begin
-	scatter(Δd[node, hour_filt1], ΔE[hour_filt1], legend=false)
-	scatter!(Δd[node, .!hour_filt1], ΔE[.!hour_filt1], legend=false)
-	# mef_node = mefs_reg[node]
-	# xx = LinRange(minimum(Δd[node, :]), maximum(Δd[node, :]), 10)
-	# plot!(xx, mef_single_node*xx, lw=3)
-	
-	xlabel!("Δd at node $(node)")
-	ylabel!("ΔE")
-	title!("ΔE total wrt Δd at node $(node)")
-end
-
-# ╔═╡ ec0278e1-0300-4842-80f0-857b414867a9
-μ = 1e-4
-
-# ╔═╡ 66ecb9fd-b976-432a-9df3-7a6a8618bc2e
-# linear regression on all nodes at once
-begin
-	X = transpose(Δd); # matrix has many nodes with zero demand; therefore columns have to be filtered so as to use only the nodes with actual mef
-	demand_nodes = findall(vec(sum(abs.(X), dims=1)).!==0.0)
-	colin_node = 64 # node that is a lin comb of others
-	demand_nodes = demand_nodes[demand_nodes .!= colin_node]
-	X_demand = X[:, demand_nodes]
-	rank_ = rank(X_demand)
-	@assert rank_ == size(X_demand)[2]
-	mef_opt = inv(X_demand'*X_demand + μ*I(rank_))*X_demand'*ΔE
-	mefs_reg = zeros(n_nodes)
-	mefs_reg[demand_nodes] .= mef_opt
+# ╔═╡ 9323dbf3-6a22-476a-8186-766fe1515c18
+function get_R2(preds, y)
+	res = preds - y 
+	R2 = 1 - res'*res/sum((y .- mean(y)).^2)
+	return R2
 end;
 
-# ╔═╡ 364f3ff0-75b7-4ba2-a82a-08e92171daa2
-# linear regression on a single node
-begin
-	XX = transpose(Δd)[:, node]; # matrix has many nodes with zero demand; therefore columns have to be filtered so as to use only the nodes with actual mef
-	mef_single_node = inv(transpose(XX)*XX)*transpose(XX)*ΔE
-end
+# ╔═╡ 26d698fe-c2da-4a34-b446-4dd4dfacf861
+function plot_preds(preds, y)
+	p = scatter(preds, y, legend=false, alpha=.2)
+	plot!(
+		LinRange(minimum(y), maximum(y), 10), 
+		LinRange(minimum(y), maximum(y), 10), 
+		ls=:dash, lw = 3
+	)
+	ylabel!("ΔE real")
+	xlabel!("ΔE predicted")
+	return p
+end;
 
-# ╔═╡ 7db52f69-03f7-4c9d-b746-4312b9c038b2
-md"""
-The MEF computed by linear regression at node $(node) is $(mefs_reg[node]). 
+# ╔═╡ 01805ad9-0d4c-4d8e-8f79-69da710a3d2f
+scatter_alpha=.2
 
-The MEF if computed on a single node at the same node is $(mef_single_node)
-"""
+# ╔═╡ cab3f6a6-f982-459f-9fa0-8cc7290cd29e
+node_filt = [k for k in 1:n_nodes if k!= node]
 
-# ╔═╡ 3dc3b990-1e8b-43b7-856a-17667c6be634
-# histogram
-begin
-	bins = -1000:100:3000
-	histogram(mefs[node, :], bins=bins, alpha=0.4, label="True")
-	histogram!(mefs_obs[node, :], bins=bins, alpha=0.4, label="Observed")
-	plot!([mefs_reg[node]], seriestype="vline", label="Regression", lw=3)
-	plot!([mean(mefs[node, :])], seriestype="vline", label="Mean True", lw=3)
-	plot!([mean(mefs_obs[node, :])], seriestype="vline", label="Mean Observed", lw=3)
-	xlabel!("MEF")
-	ylabel!("Counts")
-end
+# ╔═╡ ec0278e1-0300-4842-80f0-857b414867a9
+μ = 1
 
 # ╔═╡ ad960911-9354-4a31-bcbc-f1f0a95482ae
 md"""
 ### Analysis of regression-based mefs estimation
 """
+
+# ╔═╡ dede3a80-c551-4673-97d4-66640ac0023b
+md"""
+## Same analysis, but with two groups
+"""
+
+# ╔═╡ fd198417-f955-443f-b7bd-40b5106356eb
+hour_filt1 = 10 .<= hours[2:end] .<= 20;
+
+# ╔═╡ 7991857c-eef0-4536-89df-600131e188d6
+function get_reg_mefs(X, y, μ)
+	return inv(X'*X + μ*I(size(X, 2)))*X'*y
+end
+
+# ╔═╡ 66ecb9fd-b976-432a-9df3-7a6a8618bc2e
+# linear regression on all nodes at once, over all timesteps lumped together
+begin
+	X = transpose(Δd); # matrix has many nodes with zero demand; therefore columns have to be filtered so as to use only the nodes with actual mef
+	idx_valid = vec(sum(X .=== missing, dims=2).== 0)
+	X_demand = X[idx_valid, :]
+	demand_nodes = findall(vec(sum(abs.(X_demand), dims=1)).!==0.0)
+	X_demand = X_demand[:, demand_nodes]
+	rank_ = rank(X_demand)
+	mef_opt = get_reg_mefs(X_demand, ΔE[idx_valid], μ)
+	mefs_reg = zeros(n_nodes)
+	mefs_reg[demand_nodes] .= mef_opt
+end;
+
+# ╔═╡ 2e59c950-93e7-48d4-840c-c40f7296614d
+begin
+	# compute R2 for this regression
+	preds = X_demand*mef_opt
+	R2 = get_R2(preds, ΔE[idx_valid])
+end;
+
+# ╔═╡ 05305b47-b71a-4452-96ca-ef809924d5c2
+md"""
+The regression has predictive power: R^2 = $(round(R2 * 100)) %
+"""
+
+# ╔═╡ 4afd6719-cff9-4891-87a1-82405b07c084
+let
+	plot_preds(preds, ΔE[idx_valid])
+end
+
+# ╔═╡ ded35429-73ce-461c-9144-84741cabb512
+res_pred = transpose(Δd)[:, node_filt] * mefs_reg[node_filt];
+
+# ╔═╡ 07c3faea-d89b-4e88-98f6-21423aa8d202
+let
+	lw = 4
+	p = scatter(Δd[node, :], ΔE-res_pred, label=false, alpha=scatter_alpha)
+	xx = LinRange(minimum(skipmissing(Δd[node, :])), maximum(skipmissing(Δd[node, :])), 10)
+	plot!(xx, mefs_reg[node]*xx, lw=lw, label="Reg MEF=$(round(mefs_reg[node]))")
+	plot!(xx, mean(mefs[node, :])*xx, ls=:dash, lw=lw, label="Mean True MEF=$(round( mean(mefs[node, :])))")
+	xlabel!("Δd at node $(node)")
+	ylabel!(L"$\Delta E -\sum_{j\neq i} \Delta d_j \beta_j$")
+	title!("ΔE total wrt Δd at node $(node)")
+	p
+end
+
+# ╔═╡ 3dc3b990-1e8b-43b7-856a-17667c6be634
+# histogram
+let
+	bins = -1000:100:3000
+	histogram(mefs[node, :], bins=bins, alpha=0.4, label="True")
+	histogram!(mefs_obs[node, :], bins=bins, alpha=0.4, label="Observed")
+	plot!([mefs_reg[node]], seriestype="vline", label="Regression", lw=3)
+	plot!([median(mefs[node, :])], seriestype="vline", label="Median True", lw=3)
+	plot!([median(mefs_obs[node, :])], seriestype="vline", label="Median Observed", lw=3, color="firebrick")
+	xlabel!("MEF")
+	ylabel!("Counts")
+end
 
 # ╔═╡ 7833642f-5b87-4d1d-b311-72901851a58f
 let
@@ -307,13 +359,224 @@ let
 	title!("MEFs of nodes, sorted according to true")
 end
 
-# ╔═╡ e42f39c5-9f4e-4e1c-bfdc-f7bc9cd29623
-demand_nodes[35]
+# ╔═╡ e3c716f3-0460-4b6b-a49a-f783a23950b8
+# linear regression on all nodes at once, over all timesteps lumped together
+begin
+	X_demand_g1 = X_demand[hour_filt1[idx_valid], :]
+	X_demand_g2 = X_demand[.!hour_filt1[idx_valid], :]
+	mefs_g1, mefs_g2 = zeros(n_nodes), zeros(n_nodes)
+	mefs_g1[demand_nodes] = get_reg_mefs(X_demand_g1, ΔE[idx_valid][hour_filt1[idx_valid]], μ)
+	mefs_g2[demand_nodes] = get_reg_mefs(X_demand_g2, ΔE[idx_valid][.!hour_filt1[idx_valid]], μ)
+end;
 
-# ╔═╡ bed124c1-b6ea-4eb6-9d18-da41651d932d
+# ╔═╡ 581b23b6-4850-4617-97b9-9775c2cad229
+begin
+	# get R2 for both subgroups
+	preds_g1 = X_demand_g1 * mefs_g1[demand_nodes]
+	R2_g1 = get_R2(preds_g1, ΔE[idx_valid][hour_filt1[idx_valid]])
+
+	preds_g2 = X_demand_g2 * mefs_g2[demand_nodes]
+	R2_g2 = get_R2(preds_g2, ΔE[idx_valid][.!hour_filt1[idx_valid]])
+
+end;
+
+# ╔═╡ 2e65831e-97e0-4b13-8e00-a8bc7741e026
 md"""
-### Estimate the prediction power of this regression. 
+The prediction power for both subgroups are: 
+- Group 1: R2 = $(round(R2_g1*100)) %
+- Group 2: R2 = $(round(R2_g2*100)) %
 """
+
+# ╔═╡ 9d314690-0f1d-46c8-92e8-72de962a580a
+# visualizing the prediction power
+let
+p1 = plot_preds(preds_g1, ΔE[idx_valid][hour_filt1[idx_valid]])
+p2 = plot_preds(preds_g2, ΔE[idx_valid][.!hour_filt1[idx_valid]])
+plot(p1, p2)
+end
+
+# ╔═╡ 7d4a7daf-778e-4040-997a-be1cc95c75c0
+# histogram
+let
+	bins = -1000:100:3000
+	histogram(mefs[node, :], bins=bins, alpha=0.4, label="True")
+	# histogram!(mefs_obs[node, :], bins=bins, alpha=0.4, label="Observed")
+	plot!([mefs_g1[node]], seriestype="vline", label="Regression 1", lw=3)
+	plot!([mefs_g2[node]], seriestype="vline", label="Regression 2", lw=3)
+	# plot!([median(mefs[node, :])], seriestype="vline", label="Median True", lw=3)
+	# plot!([median(mefs_obs[node, :])], seriestype="vline", label="Median Observed", lw=3, color="firebrick")
+	xlabel!("MEF")
+	ylabel!("Counts")
+end
+
+# ╔═╡ 621c8dc3-fd4f-48da-9d49-cdad33941975
+md"""
+# Extracting regression mef from a subset of node
+"""
+
+# ╔═╡ 5b287f18-ab7a-4588-b231-b1b6f1315ddd
+th_cor = .99
+
+# ╔═╡ a46a11ed-7433-4b36-baca-11f899755eca
+conn_nodes, XX = analysis.get_connected_clusters(X_demand, th_cor);
+
+# ╔═╡ bef12ca3-b2f1-4a41-a343-0ac98b9155e7
+let
+	heatmap(XX.>=th_cor)
+	xlabel!("Node id")
+	ylabel!("Node id")
+end
+
+# ╔═╡ 45335ae0-b302-4dfb-966f-b6cc0adb5dc7
+md"""
+we see we have $(length(conn_nodes)) clusters of connected nodes. We are expecting that these nodes have demands that vary nearly equally. 
+
+For instance, let us visualize the demand patterns of a given group
+"""
+
+# ╔═╡ 4b34e966-42b8-4d87-9e79-da678ab51b29
+plot([length(g) for g in conn_nodes])
+
+# ╔═╡ 7af9c674-ad8b-48e7-b228-42814129ece5
+md"""
+We see that for all groups, all curves actually collapse on one another. 
+"""
+
+# ╔═╡ c0869e4f-5960-40f7-8cf2-043fb7a95a84
+md"""
+Now, we can summarize each group by a single demand vector, the total demand across this group!
+"""
+
+# ╔═╡ 4042ad0a-0fe2-4c50-a5ef-692b24c9eae3
+# contains total Δd for each group
+X_demand_gp = hcat([sum(X_demand[:, nodes_gp], dims=2) for nodes_gp in conn_nodes]...);
+
+# ╔═╡ 265a5b81-f2a2-43d2-b1d0-007c6c39d104
+# linear regression on all nodes at once, over all timesteps lumped together
+begin
+
+	mef_gp = get_reg_mefs(X_demand_gp, ΔE[idx_valid], μ)
+	# mefs_reg = zeros(n_nodes)
+	# mefs_reg[demand_nodes] .= mef_opt
+end;
+
+# ╔═╡ dbbc2ca0-9121-40aa-8394-2af3b84bacc0
+md"""
+The MEF should represent, on average over this cluster, how much emissions change wrt a change in demand. Therefore it should be equal to the average mef in the group? (Maybe weighted average)?
+"""
+
+# ╔═╡ db3cf5fa-c088-40ab-bec0-0417ee4c9ba6
+@bind gp_id Slider(1:length(conn_nodes))
+
+# ╔═╡ a4179927-2b3a-46bb-9ca1-327dbbc3b44c
+idx_valid_demand = vec(sum(demand.===missing, dims=1) .==0);
+
+# ╔═╡ 0a1f8447-6c8b-45ff-875f-74748980d5f4
+d_gp = demand[demand_nodes, idx_valid_demand][conn_nodes[gp_id], :];
+
+# ╔═╡ ecec3381-2d36-4e2c-bb07-ee24681eb391
+begin
+	p = plot()
+	for k in 1:size(d_gp, 1)
+		plot!(d_gp[k, :]/d_gp[k, 1], alpha=.4, ls=:dash, legend=false)
+	end
+	xlims!(4000, 4100)
+	title!("Group $(gp_id), with $(size(d_gp,1)) nodes.")
+	p
+end
+
+# ╔═╡ 39c546d6-c267-4b45-86fc-79426ae0d39e
+# factor in the weighted average
+ω = mean(d_gp./sum(d_gp, dims=1), dims=2)
+
+# ╔═╡ 624f9b72-7792-4b6f-b138-669751a749b3
+# weighted average mefs over the region
+weighted_mef_gp = ω'*mefs[conn_nodes[gp_id], :]
+
+# ╔═╡ 515c9225-87b4-424e-845c-cd6da662e25a
+let
+	histogram(vec(weighted_mef_gp), label="Weighted avg MEF")
+	plot!([mef_gp[gp_id]], seriestype="vline", label="Regression group", lw=3)
+	plot!([median(mefs_reg[demand_nodes][conn_nodes[gp_id]])], seriestype="vline", label="Reg node, median in group", lw=3)
+	xlabel!("MEF")
+	ylabel!("Counts")
+end
+
+# ╔═╡ 8d333cbb-35ba-409e-aa0c-9791ceec722f
+let
+	histogram(mef_gp, alpha=.4)
+	histogram!(mefs_reg[demand_nodes], alpha=.4)
+end
+
+# ╔═╡ dc7ebc3f-38bb-4416-a488-7035ad34d1e8
+md"""
+## Orders of magnitude of estimated MEFS with these methods
+"""
+
+# ╔═╡ 6166cad7-1b60-4df2-95d3-1974d297dce0
+let
+	bins = -1000:100:3000
+	alpha=0.4
+	histogram(mean(mefs, dims=2), bins=bins, alpha=alpha, label="True")
+	histogram!(mefs_reg, bins=bins, alpha=alpha, label="Reg")
+	xlabel!("MEF")
+	ylabel!("Counts")
+	title!("Average values over all timesteps")
+end
+
+# ╔═╡ a757ff7e-402d-4ba3-9ecd-f2e1cd539a6e
+hours_filt_day = 10 .< (1:24) .< 20
+
+# ╔═╡ 7ee50896-add5-4e32-a72c-5470ce6c7849
+true_mefs_g1 = [mean(mean(mefs_[hours_filt_day, :], dims=2)) for mefs_ in mefs_nodes_days]
+
+# ╔═╡ 984d0af5-0afc-4146-b570-0d6a0547f3b8
+true_mefs_g2 = [mean(mean(mefs_[.!hours_filt_day, :], dims=2)) for mefs_ in mefs_nodes_days]
+
+# ╔═╡ 09b71d83-53ad-4b7b-ba70-b51ea90aa37e
+let
+	c1 = :skyblue2 
+	c2 = :firebrick
+	lw = 4
+	
+	scatter(Δd[node, hour_filt1], (ΔE-res_pred)[hour_filt1], alpha=scatter_alpha, label="10-20", color=c1)
+	scatter!(Δd[node, .!hour_filt1], (ΔE-res_pred)[.!hour_filt1], alpha=scatter_alpha, label="20-10", color=c2)
+	xx = LinRange(minimum(skipmissing(Δd[node, :])), maximum(skipmissing(Δd[node, :])), 10)
+	plot!(xx, mefs_g1[node]*xx, lw=4, label="MEF=$(round(mefs_g1[node]))", color=c1)
+	plot!(xx, mefs_g2[node]*xx, lw=4, label="MEF=$(round(mefs_g2[node]))", color=c2)
+	plot!(xx, true_mefs_g1[node]*xx, lw=4, label="MEF=$(round(mefs_g1[node]))", color=c1, ls=:dash)
+	plot!(xx, true_mefs_g2[node]*xx, lw=4, ls=:dash, label="MEF=$(round(mefs_g2[node]))", color=c2)
+	
+	xlabel!("Δd at node $(node)")
+	ylabel!("ΔE")
+	title!("ΔE total wrt Δd at node $(node)")
+end
+
+# ╔═╡ f5f2c2be-b9ff-4b3f-bf3e-65ece46931fa
+let
+	bins = -1000:100:3000
+	alpha=0.4
+	histogram(
+		true_mefs_g1, 
+		bins=bins, alpha=alpha, label="True")
+	histogram!(mefs_g1, bins=bins, alpha=alpha, label="Reg")
+	xlabel!("MEF")
+	ylabel!("Counts")
+	title!("Average values over Group 1")
+end
+
+# ╔═╡ efaee005-a8f5-48fd-9db6-1169ba2e1aa0
+let
+	bins = -1000:100:3000
+	alpha=0.4
+	histogram(
+		true_mefs_g2, 
+		bins=bins, alpha=alpha, label="True")
+	histogram!(mefs_g2, bins=bins, alpha=alpha, label="Reg")
+	xlabel!("MEF")
+	ylabel!("Counts")
+	title!("Average values over Group 2")
+end
 
 # ╔═╡ 0defd4c1-dbb9-4b66-bca0-3c4605c252bb
 md"""
@@ -327,10 +590,10 @@ md"""
 hr
 
 # ╔═╡ f8ebd537-bacc-4e1a-af8f-12f1196536ff
-ΔE_hr = [ΔE[hr + k*24] for k in 0:length(results[2])-1];
+ΔE_hr = [ΔE[hr + k*24] for k in 0:length(results[idx])-1];
 
 # ╔═╡ 827932a6-68b6-4b37-8f02-fdfa819fee2c
-Δd_hr = hcat([Δd[:, hr + k*24] for k in 0:length(results[2])-1]...);
+Δd_hr = hcat([Δd[:, hr + k*24] for k in 0:length(results[idx])-1]...);
 
 # ╔═╡ 1790b9e8-dc3c-4e47-8d8e-0a0cdea118fd
 begin
@@ -339,436 +602,8 @@ begin
 	xlabel!("Δx at given hour")
 end
 
-# ╔═╡ 667d9d4a-88d9-48e2-86bc-63f2a587f1f5
-# linear regression on all nodes at once
-begin
-	X_hr = transpose(Δd_hr); # matrix has many nodes with zero demand; therefore columns have to be filtered so as to use only the nodes with actual mef
-	X_hr = X_hr[:, demand_nodes]
-	rank_hr = rank(X_hr)
-	@assert rank_hr == size(X_hr)[2]
-	mef_hr_opt = inv(X_hr'*X_hr + μ*I(rank_hr))*X_hr'*ΔE
-	mefs_hr_reg = zeros(n_nodes)
-	mefs_hr_reg[demand_nodes] .= mef_hr_opt
-end;
-
-# ╔═╡ 49c340c0-64e1-4d82-a24a-f7b83c108c64
-rank_hr
-
-# ╔═╡ dc0bd18b-2276-4a05-a7b1-f43acaf21b85
-size(X_hr)
-
-# ╔═╡ 56bd49af-7c69-4778-be5b-c47e906b69ed
-rank_hr
-
-# ╔═╡ f8f3ae28-e46b-43fb-bc06-a799ea0f6cdf
-Δd_hr
-
-# ╔═╡ 305bdb8a-e186-4c5a-b927-b7a406ac260a
-md"""
-### Compare regression-based MEF vs exact differentiation-based MEFs
-"""
-
-# ╔═╡ 701285fc-887d-425c-98a3-1ee09235066f
-md"""
-Todo: 
-- demand map: estimate mef bsed on region-level demand and then map to nodal, compare with results from comptuations
-"""
-
-# ╔═╡ 1d5d1c1c-050a-434e-a977-b8d2aea69b26
-# get the co2 costs if they were not saved
-co2_costs = util.get_costs(data[:case].heat, data[:case].fuel, util.FUEL_EMISSIONS);
-
-# ╔═╡ a34e32d8-3e18-4c22-87e2-032360661498
-g_opt = [[results_dyn[d].g[k].value for k in 1:24] for d in 1:365];
-
-# ╔═╡ fa51de9f-6f7a-4173-96d4-18f5f225aa1a
-E_tot = [[dot(co2_costs,g_opt[d][k]) for k in 1:24] for d in 1:365];
-
-# ╔═╡ be2f82a2-5c22-41a3-abe4-5a6f9de4e6d7
-md"""
-We want to compute, at a given hour, the changes in emissions and related them to changes in demand at a given node.
-"""
-
-# ╔═╡ 82ad33b1-3719-4aeb-9c82-1f8f1812ed61
-node1, node2
-
-# ╔═╡ 7213814b-3dd9-4c8d-9f85-947a33d96e44
-# recontsruct the flows over the network
-function get_ps(case, results)
-
-	F = CarbonNetworks.make_pfdf_matrix(case.A, case.β)
-
-	ps = []
-
-	for k in 1:length(results)
-		p_crt = []
-		for j in 1:length(results[k].g)
-			g_crt = results[k].g[j]
-			d_crt = results[k].d[j]
-			p = CarbonNetworks.evaluate(F*(d_crt - case.B*g_crt))
-			push!(p_crt, p)
-		end
-		push!(ps, p_crt)
-	end
-
-	return ps
-end
-
-# ╔═╡ ff851aef-904f-444a-afb4-f7ef7d7766c4
-ps_dyn = get_ps(data_dyn[:case], results_dyn);
-
-# ╔═╡ d9f9dda4-b559-44a4-9677-fbe967322b2b
-# get pmax - HARDCODED for now
-begin
-line_weight = 2.0
-line_max = 100.0
-Z = 1e3
-pmax = line_weight * min.(data_dyn[:case].fmax / Z, line_max);
-end;
-
-# ╔═╡ 2ac72e25-e6f8-4468-be71-f64b3797a96c
-# gets the number of congested lines at each timestep
-congested = [[sum(abs.(ps_dyn[d][h]./pmax) .> .99) for h in 1:24] for d in 1:365];
-
-# ╔═╡ df45b862-8d94-4b71-951c-5d84a7d16af2
-# demand at the given hour over the year
-d_h = hcat([results_dyn[d].d[hour] for d in 1:365]...);
-
-# ╔═╡ 087a3ba0-14f4-4373-99f1-3dd2ccdb71b9
-gmax = hcat([results_dyn[d].gmax[k] for k in 1:24 for d in 1:365]...)
-
-# ╔═╡ 5ba56789-c1bb-4c1b-95cc-4943561434f4
-md"""
-Plotting all the generator data. 
-"""
-
-# ╔═╡ 44674366-5546-44b7-b6cc-b2476e3c8fc6
-begin
-	f = Figure()
-	ax = Axis(f[1,1], xlabel="time", ylabel="gmax/gmax(t=0)")
-	ng, _ = size(gmax)
-	for gid in 1:ng
-		lines!(gmax[gid, :]./gmax[gid, 1], color="gray")
-	end
-	f
-end
-
-
-# ╔═╡ 7ae73ea6-8878-43cc-9207-fda58fa41d9c
-df = util.load_wecc_240_dataset();
-
-# ╔═╡ 812a305a-c9bb-4b57-9621-cadf4b70984c
-# what we would expect for the month of jan
-
-let
-gmax_ = []
-for hour in 1:24
-	for day in 1:1
-		for month in 1:1
-demand_map = util.get_demand_map(hour, day, month, 2004, df.demand)
-node_names, node_ids = util.get_node_info(df.branch)
-
-B, gmin, gmax, ramp, heat, fuel = util.get_generator_data(demand_map, node_ids, df.gen, df.heat)
-
-push!(gmax_, gmax)
-end
-end
-end
-	
-gmax_ = hcat(gmax_...)
-	
-f = Figure()
-ax = Axis(f[1,1], xlabel="time", ylabel="gmax/gmax(t=0)")
-ng, _ = size(gmax_)
-for gid in 1:ng
-lines!(gmax_[gid, :]./gmax_[gid, 1], color="gray")
-end
-f
-
-end
-
-# ╔═╡ 91b474ba-e955-416c-8bc7-aa2d9b88995f
-md"""
-
-## regression-based mef estimation
-"""
-
-# ╔═╡ e1b5c93e-9241-442b-a8ce-5c7d91809efc
-md"""
-### Regressing over each node
-"""
-
-# ╔═╡ 847333af-8145-433a-b24c-554af2468da4
-md"""
-Here we want to estimate the MEF from each node. The problem is that demand is proportionally divided, therefore a regression analysis would probably have mefs lie on an affine set and easily attribute negative MEFs.
-"""
-
-# ╔═╡ 13478bcb-c4fc-4532-a1ef-4513b15e3295
-# # changes in emissions
-# ΔE = [(E_tot[d][hour] - E_tot[d][hour-1]) for d in 1:365];
-
-# ╔═╡ 70723775-1912-48ed-9ae5-d4663d0f81d3
-# gather all the demand changes, at every node
-# Δd = hcat([
-# 	[results_dyn[d].d[hour][n] - results_dyn[d].d[hour-1][n] for d in 1:365] 
-# 	for n in 1:length(nodes)
-# ]...);
-
-# ╔═╡ 50acbd4b-1a02-4c55-b605-caf07f12bd74
-MEFs_reg = LinearRegression.slope(lr_E)
-
-# ╔═╡ 749ef6df-5909-4f40-a5ff-0ed7877de9ab
-lines(MEFs_reg)
-
-# ╔═╡ eb4e9485-5365-4c39-b791-3a2137679280
-md"""
-we see that many nodes have a negative average MEF, which does not make sense from scatter plots
-"""
-
-# ╔═╡ 5e77a674-9ece-415e-abd5-2b244e47beb9
-md"""
-Regressing over demand regions.
-"""
-
-# ╔═╡ 870d811d-ece6-4513-8f9a-558585d0d70a
-df.demand
-
-# ╔═╡ 18941712-b800-48c3-ad09-b16a0e5a8f9b
-demand_map = util.get_demand_map(1, 1, 1, 2004, df.demand)
-
-# ╔═╡ 8d7c5fd9-5325-481a-a572-ca4e8dcc8655
-regions = unique(Array(df.participation[:, "Region"]))
-
-# ╔═╡ 2238db2f-3860-4abb-938a-8b771b0ee6d8
-# we want to create a vector of demands for all the regions only
-begin
-
-	demands_regions = []
-
-	for k in 1:size(df.demand)[1]
-		yr = df.demand[k, "Year"]
-		month = df.demand[k, "Month"]
-		day = df.demand[k, "Day"]
-		hr = df.demand[k, "Period"]
-
-		demand_map = util.get_demand_map(hr, day, month, yr, df.demand)
-
-		d_regions = [demand_map[rr] for rr in regions]
-
-		push!(demands_regions, d_regions)
-		
-	end
-	demands_regions = hcat(demands_regions...)
-end;
-
-# ╔═╡ 4a1b69b6-1567-4199-9a32-b2019e88366c
-begin
-	_, nts = size(demands_regions)
-	ndays = Int(nts/24)
-	idx_hr = [hour+k*24 for k in 0:ndays-1]
-end
-
-# ╔═╡ 6f68dfa5-7f43-4ed0-baf0-683b8c14cc5b
-begin
-	Δd_regions = transpose(hcat([demands_regions[:, idx] - demands_regions[:, idx-1] for idx in idx_hr]...));
-	Δd_regions = Δd_regions[1:end-1, :]; # we remove the last day as we assume we did not compute anything for it
-end
-
-# ╔═╡ 81a3439e-0a5c-41ab-b4fa-9bda14451282
-lr_regions = linregress(Δd_regions, ΔE);
-
-# ╔═╡ cb04852d-6ccf-46b2-94cb-e5faa3f4cb7a
-mefs_regions = LinearRegression.slope(lr_regions)
-
-# ╔═╡ c22d2cc0-8ea3-4a06-8283-9af4d13d78eb
-lines(mefs_regions)
-
-# ╔═╡ 5cce0ff7-b8ae-4288-84b4-20e2fc50b0b4
-region_id = 7
-
-# ╔═╡ 85a13faf-79ce-4e40-a69e-48f65dc2a7e9
-begin
-	
-	Δd_crt = Δd_regions[:, region_id]
-	x_crt = LinRange(1, maximum(Δd_crt), 100)
-	p=scatter(Δd_crt, ΔE)
-	slope_reg = mefs_regions[region_id]
-	lines!(x_crt, slope_reg*x_crt, color=:black)
-	p
-end
-
-# ╔═╡ 34cd82e7-b58f-469e-be91-a1391903d661
-md"""
-## NOTE: the linear regression really does not work... to inquire. 
-"""
-
-# ╔═╡ 90aa489d-3c50-4c4a-ac19-351de901fbe4
-md"""
-## add subtitle
-"""
-
-# ╔═╡ 28591eda-995f-4224-98b8-ca1eab27559e
-# only the diagonal terms in the mefs
-all_λs_obs_dyn = [[diag(results_dyn[d].λ[n, :, :]) for d in 1:365] for n in 1:length(nodes)];
-
-# ╔═╡ 8e1f0bef-459d-4598-a01a-e59e00f53247
-# collect the average observable mef from the dynamic model
-begin
-
-	λ_obs_1 = [all_λs_obs_dyn[node1][d][hour] for d in 1:365]
-	λ_obs_2 = [all_λs_obs_dyn[node2][d][hour] for d in 1:365]
-
-	λ_total_1 = all_λs_dyn[:, node1]
-	λ_total_2 = all_λs_dyn[:, node2]
-end;
-
-# ╔═╡ 34253cd5-3049-4651-a5f6-06807a2233bd
-let
-	f = Figure()
-	ax = Axis(f[1,1], xlabel="day", ylabel="number of congested lines")
-
-	lines!([congested[d][hour] for d in 1:365])
-	lines!(λ_total_1./1000)
-
-	ax = Axis(f[1,2], xlabel="total demand", ylabel="number congested lines")
-
-	scatter!(vec(sum(d_h, dims=1)), [congested[d][hour] for d in 1:365])
-	# ylims!(ax, -2000, 2000)
-
-	ax = Axis(f[2,2], xlabel="# congested lines", ylabel="λ true")
-
-	scatter!([congested[d][hour] for d in 1:365], λ_total_1)
-	ylims!(ax, -2000, 2000)
-
-
-	ax = Axis(f[2,1], xlabel="# congested lines", ylabel="observed mef")
-
-	scatter!([congested[d][hour] for d in 1:365], λ_obs_1)
-	ylims!(ax, -2000, 2000)
-	
-
-	
-	f
-
-end
-
-# ╔═╡ 6f2896ac-ecf6-4256-82e0-0a4070fa14af
-begin
-	f2 = Figure()
-	hist(f2[1, 1], λ_obs_1, bins = -1000:200:1000)
-	hist!(f2[1, 1], λ_total_1, bins = -1000:200:1000)
-	f2
-end
-
-# ╔═╡ 982d36b3-a7b6-4066-9441-9e02596423dd
-let
-f = Figure()
-
-ax = Axis(f[1, 1], xlabel = "x label", ylabel = "y label",
-    title = "Title")
-for n = 1:length(nodes)
-	lines!(all_λs_dyn[:, n], color=:gray)
-end
-ylims!(ax, -1000, 4000)
-ax.title="All total MEFs over time"
-ax.xlabel="Day"
-ax.ylabel="MEF"
-f
-end
-
-# ╔═╡ e834a7d2-5dd9-4995-b3c9-3c771673edaa
-let
-f = Figure()
-
-ax = Axis(f[1, 1], xlabel = "x label", ylabel = "y label",
-    title = "Title")
-
-lines!(λ_obs_1)
-lines!(λ_total_1, color=:red)
-ylims!(ax, -2000, 2000)
-f
-end
-
-# ╔═╡ b886963f-e1a9-4782-918c-f5009e57abc5
-let
-	f = Figure()
-	ax = Axis(f[1,1], xlabel="nodal demand", ylabel=" observed mef")
-
-	scatter!(d_h[node1, :], λ_obs_1)
-	ylims!(ax, -2000, 2000)
-
-	ax = Axis(f[1,2], xlabel="nodal demand", ylabel="true mef")
-
-	scatter!(d_h[node1, :], λ_total_1)
-	ylims!(ax, -2000, 2000)
-
-
-	ax = Axis(f[2,1], xlabel="total demand", ylabel="observed mef")
-
-	scatter!(vec(sum(d_h, dims=1)), λ_obs_1)
-	ylims!(ax, -2000, 2000)
-	
-	ax = Axis(f[2,2], xlabel="total demand", ylabel="true mef")
-
-	scatter!(vec(sum(d_h, dims=1)), λ_total_1)
-	ylims!(ax, -2000, 2000)
-	
-	f
-
-end
-
-# ╔═╡ bd656131-eb56-467d-8f98-5e8de88266c3
-md"""
-There clearly are two populations. Therefore you want to: 
-- classify the points wrt them being in group 1 or 2
-- run different linear regressions based on the group they're in
-- compare those different regressions.
-
-the very simple answer for now is to do: 
-- smaller than X in group 0
-- larger than X is group 1
-"""
-
-# ╔═╡ e91052d7-1ca0-4ff5-aae4-1b8ace8f93cf
-begin
-	cutoff1 = 500
-	assign_group(cutoff, x) = x > cutoff ? 1 : 0;
-
-	group1 = assign_group.(cutoff1, λ_obs_1)
-end
-
-# ╔═╡ 6377fd8f-7b2b-4720-bf3a-a542075bcedd
-lines(group1)
-
-# ╔═╡ 2dd6a4cb-42ab-4c82-be5e-529c763059c2
-Bool.(group1)
-
-# ╔═╡ 4d032e76-afe0-4b6b-bed2-bf1df1362dc5
-md"""
-Rolling window in julia? 
-"""
-
-# ╔═╡ 28664572-0078-434f-a4cb-d70eaafe8d4d
-begin
-lr1_group1 = linregress(xx1[Bool.(group1)], ΔE[Bool.(group1)])
-lr1_group0 = linregress(xx1[Bool.(1 .-group1)], ΔE[Bool.(1 .-group1)])
-end;
-
-# ╔═╡ 9ca0036b-e68f-40ab-abc7-32fa346c01da
-LinearRegression.slope(lr1_group1)
-
-# ╔═╡ 08c75daa-fe09-4839-9390-cd5034eb8125
-LinearRegression.slope(lr1_group0)
-
-# ╔═╡ f9153c23-f969-4854-8c92-2437efd5b8ce
-begin
-	s1 = scatter(xx1[Bool.(group1)], ΔE[Bool.(group1)])
-	scatter!(xx1[Bool.(1 .-group1)], ΔE[Bool.(1 .-group1)])
-	s1
-end
-
-# ╔═╡ 58af890e-c198-4766-a7e3-3024dafe3190
-p2=scatter(xx2, ΔE)
+# ╔═╡ 665867f1-3adc-4de8-8fd1-bfafa3a56ae9
+[median(mef_reg[demand_nodes][gp_id])]
 
 # ╔═╡ Cell order:
 # ╠═0ae79723-a5cf-4508-b41d-9622948185a9
@@ -781,6 +616,7 @@ p2=scatter(xx2, ΔE)
 # ╠═4d52befa-c24c-4ad0-b975-376b8c8af3d2
 # ╠═92a7dddf-a46e-4d42-9ca2-4d8b2e891b50
 # ╠═a4577627-0a2b-403d-8558-4ccbf0622749
+# ╠═8876dc66-7d6d-48ac-94d5-5dd489e81b87
 # ╟─cab761be-ee1b-4002-a187-df72c29d9771
 # ╠═113b99d8-0708-4da8-a8d6-7c60734e4a31
 # ╠═f354a0e5-5e4f-40ab-807d-f9f19e74d378
@@ -793,7 +629,10 @@ p2=scatter(xx2, ΔE)
 # ╠═00c39925-e3a4-4d5e-9a00-e950c711648e
 # ╠═e055e21b-166b-41f6-83d7-1ebf5e2626da
 # ╠═ede8ffc2-2a2a-4a09-b702-610270f24491
+# ╠═11aef0e7-372d-4b3b-845d-e63bc620b5f9
 # ╠═f2197b5f-562a-435a-88a4-fc26415e77a9
+# ╠═6b3a9e01-e14c-488d-bde5-7eae4e8e87e0
+# ╟─ae72be0b-b54f-47bd-9888-ad297463bb38
 # ╟─24a57eb1-8761-4e03-9f36-3f5823ca703d
 # ╟─2e5e38fc-2a85-4cdb-9f30-b5100503d10c
 # ╠═083f1edc-06cf-413e-b187-df6d23b51850
@@ -805,29 +644,67 @@ p2=scatter(xx2, ΔE)
 # ╟─f5e407e6-fa2c-4825-a7fe-6690bf6ad06c
 # ╟─b7a82318-2999-42c0-975f-079b28104684
 # ╠═0fdee674-965a-4f9b-9f52-aff2efe935f8
-# ╠═8d206091-89b8-49c3-af53-95a262298426
-# ╠═7f1ebbfc-4091-4efc-bc56-151e91991bc2
+# ╟─8d206091-89b8-49c3-af53-95a262298426
 # ╟─7bbd7076-5a16-4914-8118-0d9238f75569
 # ╟─e8fee23c-dc1a-430a-b896-31f09c4c503e
 # ╟─1bed3bbb-7411-441c-8028-f4dc91b0f1aa
 # ╠═a1da5ecd-219d-4e4e-b39d-1addddc89f13
-# ╠═38b8e954-6e93-4f2d-9a87-2ebbab8a4071
+# ╠═66caf393-88ce-4e6c-9a4a-afdfa7b24304
 # ╠═576e6a18-eb15-4578-9bda-569c1397a8d3
 # ╠═112eb399-f273-42a0-a6b6-52ce543bc696
+# ╠═9b4e015d-a0b6-4046-b9c7-9f12b93d84fa
+# ╠═98e1f152-67c7-43d2-b3b5-68bbc322478d
 # ╟─a003c654-7072-4e3f-9aa8-154c0efa565c
 # ╠═fb6a6791-c704-43f1-9784-1cd17dfa7858
-# ╠═fd198417-f955-443f-b7bd-40b5106356eb
-# ╠═eece6a95-ee8a-466f-886b-ac3a42d3f91a
-# ╠═09b71d83-53ad-4b7b-ba70-b51ea90aa37e
-# ╟─7db52f69-03f7-4c9d-b746-4312b9c038b2
-# ╠═ec0278e1-0300-4842-80f0-857b414867a9
 # ╠═66ecb9fd-b976-432a-9df3-7a6a8618bc2e
-# ╟─364f3ff0-75b7-4ba2-a82a-08e92171daa2
+# ╠═9323dbf3-6a22-476a-8186-766fe1515c18
+# ╠═2e59c950-93e7-48d4-840c-c40f7296614d
+# ╟─05305b47-b71a-4452-96ca-ef809924d5c2
+# ╠═26d698fe-c2da-4a34-b446-4dd4dfacf861
+# ╟─4afd6719-cff9-4891-87a1-82405b07c084
+# ╠═01805ad9-0d4c-4d8e-8f79-69da710a3d2f
+# ╠═cab3f6a6-f982-459f-9fa0-8cc7290cd29e
+# ╠═ded35429-73ce-461c-9144-84741cabb512
+# ╟─07c3faea-d89b-4e88-98f6-21423aa8d202
+# ╠═ec0278e1-0300-4842-80f0-857b414867a9
 # ╠═3dc3b990-1e8b-43b7-856a-17667c6be634
 # ╟─ad960911-9354-4a31-bcbc-f1f0a95482ae
 # ╠═7833642f-5b87-4d1d-b311-72901851a58f
-# ╠═e42f39c5-9f4e-4e1c-bfdc-f7bc9cd29623
-# ╟─bed124c1-b6ea-4eb6-9d18-da41651d932d
+# ╟─dede3a80-c551-4673-97d4-66640ac0023b
+# ╠═fd198417-f955-443f-b7bd-40b5106356eb
+# ╠═e3c716f3-0460-4b6b-a49a-f783a23950b8
+# ╠═581b23b6-4850-4617-97b9-9775c2cad229
+# ╟─2e65831e-97e0-4b13-8e00-a8bc7741e026
+# ╟─9d314690-0f1d-46c8-92e8-72de962a580a
+# ╟─09b71d83-53ad-4b7b-ba70-b51ea90aa37e
+# ╠═7991857c-eef0-4536-89df-600131e188d6
+# ╠═7d4a7daf-778e-4040-997a-be1cc95c75c0
+# ╟─621c8dc3-fd4f-48da-9d49-cdad33941975
+# ╠═5b287f18-ab7a-4588-b231-b1b6f1315ddd
+# ╠═a46a11ed-7433-4b36-baca-11f899755eca
+# ╠═bef12ca3-b2f1-4a41-a343-0ac98b9155e7
+# ╟─45335ae0-b302-4dfb-966f-b6cc0adb5dc7
+# ╠═4b34e966-42b8-4d87-9e79-da678ab51b29
+# ╠═0a1f8447-6c8b-45ff-875f-74748980d5f4
+# ╟─ecec3381-2d36-4e2c-bb07-ee24681eb391
+# ╟─7af9c674-ad8b-48e7-b228-42814129ece5
+# ╟─c0869e4f-5960-40f7-8cf2-043fb7a95a84
+# ╠═4042ad0a-0fe2-4c50-a5ef-692b24c9eae3
+# ╠═265a5b81-f2a2-43d2-b1d0-007c6c39d104
+# ╟─dbbc2ca0-9121-40aa-8394-2af3b84bacc0
+# ╠═db3cf5fa-c088-40ab-bec0-0417ee4c9ba6
+# ╠═a4179927-2b3a-46bb-9ca1-327dbbc3b44c
+# ╠═39c546d6-c267-4b45-86fc-79426ae0d39e
+# ╠═624f9b72-7792-4b6f-b138-669751a749b3
+# ╠═515c9225-87b4-424e-845c-cd6da662e25a
+# ╠═8d333cbb-35ba-409e-aa0c-9791ceec722f
+# ╟─dc7ebc3f-38bb-4416-a488-7035ad34d1e8
+# ╟─6166cad7-1b60-4df2-95d3-1974d297dce0
+# ╠═a757ff7e-402d-4ba3-9ecd-f2e1cd539a6e
+# ╟─7ee50896-add5-4e32-a72c-5470ce6c7849
+# ╟─984d0af5-0afc-4146-b570-0d6a0547f3b8
+# ╟─f5f2c2be-b9ff-4b3f-bf3e-65ece46931fa
+# ╟─efaee005-a8f5-48fd-9db6-1169ba2e1aa0
 # ╟─0defd4c1-dbb9-4b66-bca0-3c4605c252bb
 # ╠═620e86a8-60ab-4aa3-b313-29ab83ef5f4e
 # ╟─e8c4a66c-94b7-4b0e-9b43-fcaa0f235733
@@ -835,65 +712,4 @@ p2=scatter(xx2, ΔE)
 # ╠═f8ebd537-bacc-4e1a-af8f-12f1196536ff
 # ╠═827932a6-68b6-4b37-8f02-fdfa819fee2c
 # ╠═1790b9e8-dc3c-4e47-8d8e-0a0cdea118fd
-# ╠═49c340c0-64e1-4d82-a24a-f7b83c108c64
-# ╠═dc0bd18b-2276-4a05-a7b1-f43acaf21b85
-# ╠═56bd49af-7c69-4778-be5b-c47e906b69ed
-# ╠═667d9d4a-88d9-48e2-86bc-63f2a587f1f5
-# ╠═f8f3ae28-e46b-43fb-bc06-a799ea0f6cdf
-# ╟─305bdb8a-e186-4c5a-b927-b7a406ac260a
-# ╟─701285fc-887d-425c-98a3-1ee09235066f
-# ╠═1d5d1c1c-050a-434e-a977-b8d2aea69b26
-# ╠═a34e32d8-3e18-4c22-87e2-032360661498
-# ╠═fa51de9f-6f7a-4173-96d4-18f5f225aa1a
-# ╟─be2f82a2-5c22-41a3-abe4-5a6f9de4e6d7
-# ╠═82ad33b1-3719-4aeb-9c82-1f8f1812ed61
-# ╠═7213814b-3dd9-4c8d-9f85-947a33d96e44
-# ╠═ff851aef-904f-444a-afb4-f7ef7d7766c4
-# ╠═d9f9dda4-b559-44a4-9677-fbe967322b2b
-# ╠═2ac72e25-e6f8-4468-be71-f64b3797a96c
-# ╠═34253cd5-3049-4651-a5f6-06807a2233bd
-# ╠═df45b862-8d94-4b71-951c-5d84a7d16af2
-# ╠═087a3ba0-14f4-4373-99f1-3dd2ccdb71b9
-# ╟─5ba56789-c1bb-4c1b-95cc-4943561434f4
-# ╠═44674366-5546-44b7-b6cc-b2476e3c8fc6
-# ╠═7ae73ea6-8878-43cc-9207-fda58fa41d9c
-# ╟─812a305a-c9bb-4b57-9621-cadf4b70984c
-# ╟─91b474ba-e955-416c-8bc7-aa2d9b88995f
-# ╟─e1b5c93e-9241-442b-a8ce-5c7d91809efc
-# ╟─847333af-8145-433a-b24c-554af2468da4
-# ╠═13478bcb-c4fc-4532-a1ef-4513b15e3295
-# ╠═70723775-1912-48ed-9ae5-d4663d0f81d3
-# ╠═50acbd4b-1a02-4c55-b605-caf07f12bd74
-# ╠═749ef6df-5909-4f40-a5ff-0ed7877de9ab
-# ╟─eb4e9485-5365-4c39-b791-3a2137679280
-# ╟─5e77a674-9ece-415e-abd5-2b244e47beb9
-# ╠═870d811d-ece6-4513-8f9a-558585d0d70a
-# ╠═18941712-b800-48c3-ad09-b16a0e5a8f9b
-# ╠═8d7c5fd9-5325-481a-a572-ca4e8dcc8655
-# ╠═2238db2f-3860-4abb-938a-8b771b0ee6d8
-# ╠═4a1b69b6-1567-4199-9a32-b2019e88366c
-# ╠═6f68dfa5-7f43-4ed0-baf0-683b8c14cc5b
-# ╠═81a3439e-0a5c-41ab-b4fa-9bda14451282
-# ╠═cb04852d-6ccf-46b2-94cb-e5faa3f4cb7a
-# ╠═c22d2cc0-8ea3-4a06-8283-9af4d13d78eb
-# ╠═5cce0ff7-b8ae-4288-84b4-20e2fc50b0b4
-# ╠═85a13faf-79ce-4e40-a69e-48f65dc2a7e9
-# ╠═34cd82e7-b58f-469e-be91-a1391903d661
-# ╠═90aa489d-3c50-4c4a-ac19-351de901fbe4
-# ╠═28591eda-995f-4224-98b8-ca1eab27559e
-# ╠═8e1f0bef-459d-4598-a01a-e59e00f53247
-# ╠═6f2896ac-ecf6-4256-82e0-0a4070fa14af
-# ╠═982d36b3-a7b6-4066-9441-9e02596423dd
-# ╠═e834a7d2-5dd9-4995-b3c9-3c771673edaa
-# ╠═b886963f-e1a9-4782-918c-f5009e57abc5
-# ╟─bd656131-eb56-467d-8f98-5e8de88266c3
-# ╠═6377fd8f-7b2b-4720-bf3a-a542075bcedd
-# ╠═e91052d7-1ca0-4ff5-aae4-1b8ace8f93cf
-# ╠═2dd6a4cb-42ab-4c82-be5e-529c763059c2
-# ╠═4d032e76-afe0-4b6b-bed2-bf1df1362dc5
-# ╠═d1eef849-92ea-49ed-b05e-c4e055a85c2c
-# ╠═28664572-0078-434f-a4cb-d70eaafe8d4d
-# ╠═9ca0036b-e68f-40ab-abc7-32fa346c01da
-# ╠═08c75daa-fe09-4839-9390-cd5034eb8125
-# ╠═f9153c23-f969-4854-8c92-2437efd5b8ce
-# ╠═58af890e-c198-4766-a7e3-3024dafe3190
+# ╠═665867f1-3adc-4de8-8fd1-bfafa3a56ae9
