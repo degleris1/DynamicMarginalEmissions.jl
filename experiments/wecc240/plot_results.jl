@@ -112,12 +112,6 @@ coords(k) = y[k], x[k]
 # ╔═╡ 64627393-f9b2-4c64-95c8-458cc005e237
 num_nodes = length(x)
 
-# ╔═╡ 7126918a-eb31-40a9-8f2d-7e181a1fcb3b
-node1 = 100; df_gis[node1, "Bus  Name"], coords(node1)
-
-# ╔═╡ 35e55d76-d175-4e77-9b69-930225cb8573
-node2 = 50; df_gis[node2, "Bus  Name"], coords(node2)
-
 # ╔═╡ d2bacf4a-af37-4ff9-bebb-3dc3d06edd8a
 md"""
 ## MEFs
@@ -167,15 +161,6 @@ make_rect(xi, yi, r=1) = make_rect(xi, yi, 2r, 2r)
 # ╔═╡ effd6c24-94ad-4803-9c30-7186a677480b
 in_rect(node, xi, yi, r=1) = (xi-r/2 < x[node] < xi+r/2) && (yi-r/2 < y[node] < yi+2/2)
 
-# ╔═╡ 35ec1921-8f4c-46cd-aa80-778a475b1542
-p1 = (x=x[node1], y=y[node1])
-
-# ╔═╡ 04d0d66a-8427-48a5-9c0e-e93eb619cd05
-p2 = (x=x[node2], y=y[node2])
-
-# ╔═╡ 59316c15-a94c-4c56-a30a-0e6c23629de7
-hr = 12
-
 # ╔═╡ 85f3a3f3-ca15-4e70-8745-a780e069aa9b
 minimum(sum.(first(results[3])[2][:gmax]))
 
@@ -199,6 +184,152 @@ DateTime(18, 07, 09, 00) in keys(results[5])
 # ╔═╡ f5bc0567-9fa5-45f7-8d70-c86099559984
 sum(fuel .== "Nuclear")
 
+# ╔═╡ 35e55d76-d175-4e77-9b69-930225cb8573
+node2 = 140; df_gis[node2, "Bus  Name"], coords(node2)
+
+# ╔═╡ 7126918a-eb31-40a9-8f2d-7e181a1fcb3b
+node1 = 100; df_gis[node1, "Bus  Name"], coords(node1)
+
+# ╔═╡ 04d0d66a-8427-48a5-9c0e-e93eb619cd05
+p_sacramento = (x=-121.3, y=39.0)
+
+# ╔═╡ 35ec1921-8f4c-46cd-aa80-778a475b1542
+p_bay = (x=-122.0, y=37.5)
+
+# ╔═╡ f06f51e4-98cb-4691-ab2f-acd9f5290aaa
+p1 = p_bay
+
+# ╔═╡ a6178160-2471-4e6f-bcd9-debb529d39d4
+md"""
+## Time Series
+"""
+
+# ╔═╡ ef79c984-db2a-4a1d-92e5-2d40abadcca3
+R = 0.25
+
+# ╔═╡ 76277c5f-c415-4861-b934-c76cc07a3820
+day_range = 1:24 # 4, 14, 19
+
+# ╔═╡ d6abbce4-27ba-4a1d-8fb0-ce97a40c716d
+function fig_time(
+	; run_id=1,
+	regions=[((0, 0), 1)],
+	hybrid_mode=[false],
+	labels=["run A"],
+	fig=Figure(resolution=(650, 200), fontsize=10),
+	whichdates=d -> true,
+	ls_cycle=[:solid, :dash],
+	color_cycle=[Cycled(1), Cycled(2), :orange],
+	bands=false
+)
+	run_id = typeof(run_id) <: Array ? run_id : [run_id]
+
+	ax = Axis(fig[1, 1], xgridvisible=false, ygridvisible=false)
+	xlims!(ax, 1, 23)
+	#ylims!(ax, 250, 750)
+	ax.xticks = 0:6:24
+	ax.xlabel = "Hour"
+	ax.ylabel = "LME [ton CO2 / MWh]"
+
+	for (indr, rid) in enumerate(run_id)
+		r = results[rid]
+		hm = hybrid_mode[indr]
+		
+		# Get MEF over time
+		mefs_hr = [
+			analysis.get_average_nodal_mefs(r, d -> whichdates(d) && hour(d) == h, hybrid_mode=hm) 
+			for h in 0:23
+		]
+		mefs_hr = reduce(hcat, mefs_hr)
+	
+		for (ind, (p, radius)) in enumerate(regions)
+			nodes = in_rect.(1:num_nodes, p.x, p.y, radius)
+			λ_nodes = reshape(mean(mefs_hr[nodes, :], dims=1), :)
+
+			λ_nodes = [
+				StatsBase.quantile(reshape(analysis.get_nodal_mefs(r, 
+					d -> whichdates(d) && hour(d) == h,
+					hybrid_mode=hm)[nodes, :], :), 0.75)
+				for h in 0:23
+			]
+			lines!(ax, λ_nodes, label="$(labels[indr])",
+				linewidth=3, linestyle=ls_cycle[ind], color=color_cycle[indr])
+
+			if bands
+				mefs_up = [
+					StatsBase.quantile(reshape(analysis.get_nodal_mefs(r, 
+						d -> whichdates(d) && hour(d) == h,
+						hybrid_mode=hm)[nodes, :], :), 0.75)
+					for h in 0:23
+				]
+				mefs_low = [
+					StatsBase.quantile(reshape(analysis.get_nodal_mefs(r, 
+						d -> whichdates(d) && hour(d) == h,
+						hybrid_mode=hm)[nodes, :], :), 0.25)
+					for h in 0:23
+				]
+
+				band!(ax, 1:24, mefs_up, mefs_low)
+			end
+		end
+	end
+
+	#axislegend(ax, position=:lb)
+	#Legend(fig[1, 2], ax)
+	
+	fig, ax
+end
+
+# ╔═╡ 971d68b9-c140-4594-a0af-4bb45f665508
+let
+	fig, ax = fig_time(
+		run_id=[4, 5], 
+		hybrid_mode=[false, false],
+		labels=["No Storage", "Storage"],
+		regions=[(p1, R)], 
+		whichdates=d -> day(d) in day_range,
+		ls_cycle=[:solid, :dash],
+		bands=true
+	)
+
+	ax.title = "Hourly LMEs for High Renewable Scenario"
+	ax.ylabel = "LME [ton CO2 / MWh]"
+	ax.ytickformat = ys -> string.(ys/1e3)
+	axislegend(ax, position=:lb, margin=(2, 2, 2, 2))
+
+	save(joinpath(RESULTS_DIR, "fig_240_storage_timeseries.pdf"), fig)
+	fig
+end
+
+# ╔═╡ 71a2f440-d3d5-4f1b-b045-13816971ecc2
+let
+	fig, ax = fig_time(
+		run_id=[4, 5, 5], 
+		hybrid_mode=[false, true, false],
+		labels=["No Storage", "Storage - Static", "Storage - Dynamic"],
+		regions=[(p1, 100)], 
+		whichdates=d -> day(d) in day_range,
+		ls_cycle=[:solid, :dash],
+		color_cycle=[:black, :blue, :orange]
+	)
+
+	ax.title = "Hourly Marginal Emissions Rates for High Renewable Network"
+	ax.ylabel = "LME [ton CO2 / MWh]"
+
+	save(joinpath(RESULTS_DIR, "fig_240_HR_time.pdf"), fig)
+	fig
+
+	nothing
+end
+
+# ╔═╡ 20e85734-92ff-4c34-9572-dd65ddd1d327
+md"""
+## Distributions
+"""
+
+# ╔═╡ 59316c15-a94c-4c56-a30a-0e6c23629de7
+hr = 18
+
 # ╔═╡ 7ffbe1bc-8cc6-4033-a70b-880209164199
 function fig_map(
 	i, 
@@ -207,6 +338,7 @@ function fig_map(
 	fig=Figure(resolution=(600, 300), fontsize=10),
 	clims=(0.0, 1.0),
 	ms=8,
+	r=R,
 )
 	case = cases[i]
 	r = results[i]
@@ -264,8 +396,8 @@ function fig_map(
 	)
 
 	# Plot region
-	lines!(ax, make_rect(p1[1], p1[2])..., color=:black)
-	lines!(ax, make_rect(p2[1], p2[2])..., color=:black)
+	lines!(ax, make_rect(p1[1], p1[2], R)..., color=:black)
+	#lines!(ax, make_rect(p2[1], p2[2], R)..., color=:black)
 	
 
 	# Colorbar
@@ -280,14 +412,6 @@ function fig_map(
     return fig, ax
 end
 
-# ╔═╡ a6178160-2471-4e6f-bcd9-debb529d39d4
-md"""
-## Time Series
-"""
-
-# ╔═╡ 76277c5f-c415-4861-b934-c76cc07a3820
-day_range = 1:31 # 4, 14, 19
-
 # ╔═╡ 07268e37-5b62-4ab3-8d0d-5bab2286cdbe
 let
 	get_cap = (i, wd) -> B * results[i][DateTime(18, 07, 05, 00)][:gmax][hr]
@@ -297,6 +421,7 @@ let
 		3, 
 		d -> hour(d) == hr && day(d) in day_range,
 		# get_vals = get_fuel,
+		#clims=(0.5, 1.0),
 	)
 
 	ax.title = ""
@@ -305,142 +430,38 @@ let
 	fig
 end
 
-# ╔═╡ d6abbce4-27ba-4a1d-8fb0-ce97a40c716d
-function fig_time(
-	; run_id=1,
-	regions=[((0, 0), 1)],
-	hybrid_mode=[false],
-	labels=["run A"],
-	fig=Figure(resolution=(650, 200), fontsize=10),
-	whichdates=d -> true,
-	ls_cycle=[:solid, :dash],
-	color_cycle=[Cycled(1), Cycled(2), :orange],
-	bands=false
-)
-	run_id = typeof(run_id) <: Array ? run_id : [run_id]
-
-	ax = Axis(fig[1, 1], xgridvisible=false, ygridvisible=false)
-	xlims!(ax, 1, 23)
-	#ylims!(ax, 250, 750)
-	ax.xticks = 0:6:24
-	ax.xlabel = "Hour"
-	ax.ylabel = "LME [ton CO2 / MWh]"
-
-	for (indr, rid) in enumerate(run_id)
-		r = results[rid]
-		hm = hybrid_mode[indr]
-		
-		# Get MEF over time
-		mefs_hr = [
-			analysis.get_average_nodal_mefs(r, d -> whichdates(d) && hour(d) == h, hybrid_mode=hm) 
-			for h in 0:23
-		]
-		mefs_hr = reduce(hcat, mefs_hr)
-	
-		for (ind, (p, radius)) in enumerate(regions)
-			nodes = in_rect.(1:num_nodes, p.x, p.y, radius)
-			λ_nodes = reshape(mean(mefs_hr[nodes, :], dims=1), :)
-			lines!(ax, λ_nodes, label="$(labels[indr])",
-				linewidth=3, linestyle=ls_cycle[ind], color=color_cycle[indr])
-
-			if bands
-				mefs_up = [
-					StatsBase.quantile(reshape(analysis.get_nodal_mefs(r, 
-						d -> whichdates(d) && hour(d) == h,
-						hybrid_mode=hm)[nodes, :], :), 0.75)
-					for h in 0:23
-				]
-				mefs_low = [
-					StatsBase.quantile(reshape(analysis.get_nodal_mefs(r, 
-						d -> whichdates(d) && hour(d) == h,
-						hybrid_mode=hm)[nodes, :], :), 0.25)
-					for h in 0:23
-				]
-
-				band!(ax, 1:24, mefs_up, mefs_low)
-			end
-		end
-	end
-
-	#axislegend(ax, position=:lb)
-	#Legend(fig[1, 2], ax)
-	
-	fig, ax
-end
-
-# ╔═╡ 971d68b9-c140-4594-a0af-4bb45f665508
-let
-	fig, ax = fig_time(
-		run_id=[4, 5], 
-		hybrid_mode=[false, false],
-		labels=["No Storage", "Storage"],
-		regions=[(p1, 1)], 
-		whichdates=d -> day(d) in day_range,
-		ls_cycle=[:solid, :dash],
-		bands=true
-	)
-
-	ax.title = "Hourly Marginal Emissions Rates for 2018 Network"
-	ax.ylabel = "LME [ton CO2 / MWh]"
-	ax.ytickformat = ys -> string.(ys/1e3)
-	axislegend(ax, position=:lb, margin=(2, 2, 2, 2))
-
-	save(joinpath(RESULTS_DIR, "fig_240_storage_timeseries.pdf"), fig)
-	fig
-end
-
-# ╔═╡ 71a2f440-d3d5-4f1b-b045-13816971ecc2
-let
-	fig, ax = fig_time(
-		run_id=[4, 5, 5], 
-		hybrid_mode=[false, true, false],
-		labels=["No Storage", "Storage - Static", "Storage - Dynamic"],
-		regions=[(p1, 100)], 
-		whichdates=d -> day(d) in day_range,
-		ls_cycle=[:solid, :dash],
-		color_cycle=[:black, :blue, :orange]
-	)
-
-	ax.title = "Hourly Marginal Emissions Rates for High Renewable Network"
-	ax.ylabel = "LME [ton CO2 / MWh]"
-
-	save(joinpath(RESULTS_DIR, "fig_240_HR_time.pdf"), fig)
-	fig
-
-	nothing
-end
-
-# ╔═╡ 20e85734-92ff-4c34-9572-dd65ddd1d327
-md"""
-## Distributions
-"""
+# ╔═╡ 76ddbef6-2ace-44e7-af9f-c71390c4955a
+D = 14
 
 # ╔═╡ b53cc8dd-c36e-4cf8-9f1d-473a0e985234
 function fig_distr(
 	i1; 
 	whichdates=d -> hour(d) == hr, 
 	i2=nothing, 
-	fig = Figure(resolution=(300, 300))
+	fig = Figure(resolution=(300, 300)),
+	d=D,
 )
 	r = results[i1]
 	nodal_mefs = analysis.get_nodal_mefs(r, whichdates)
-	all_mefs_a = nodal_mefs[in_rect.(1:num_nodes, p1.x, p1.y, 1), :][:]
-	all_mefs_b = nodal_mefs[in_rect.(1:num_nodes, p2.x, p2.y, 1), :][:]
-	all_mefs = reshape(nodal_mefs, :)
+	#all_mefs_a = nodal_mefs[in_rect.(1:num_nodes, p1.x, p1.y, R), :][:]
+	#all_mefs_b = nodal_mefs[in_rect.(1:num_nodes, p2.x, p2.y, R), :][:]
+	all_mefs = mean(nodal_mefs, dims=2)[:]
+
+	@show size(all_mefs)
 	
 	ax = Axis(fig[1, 1])
 	hidedecorations!(ax, ticks=false, ticklabels=false, label=false)
 
 	# Plot first set of data
 	kwargs = (strokewidth=1, strokecolor=:black, direction=:y)
-	density!(ax, all_mefs_a/1e3; offset=4.0, kwargs...)
-	density!(ax, all_mefs_b/1e3; offset=2.0, kwargs...)
+	#density!(ax, all_mefs_a/1e3; offset=4.0, kwargs...)
+	#density!(ax, all_mefs_b/1e3; offset=2.0, kwargs...)
 	density!(ax, all_mefs/1e3; color=(:slategray, 0.7), kwargs...)
 
 	kwargs = (linewidth=4, color=:black)
-	hlines!(ax, [mean(all_mefs_a)/1e3]; xmin=4/6, kwargs...)
-	hlines!(ax, [mean(all_mefs_b)/1e3]; xmin=2/6, xmax=4/6, kwargs...)
-	hlines!(ax, [mean(all_mefs)/1e3]; xmax=2/6, kwargs...)
+	#hlines!(ax, [mean(all_mefs_a)/1e3]; xmin=4/6, kwargs...)
+	#hlines!(ax, [mean(all_mefs_b)/1e3]; xmin=2/6, xmax=4/6, kwargs...)
+	#hlines!(ax, [mean(all_mefs)/1e3]; xmax=2/6, kwargs...)
 
 	# Plot second set of data
 	if i2 != nothing
@@ -463,10 +484,10 @@ function fig_distr(
 	ax.ylabel = "MEF [ton CO2 / MWh]"
 	
 	
-	xlims!(ax, 0, 6)
+	#xlims!(ax, 0, 10)
 	ax.xlabel = "Frequency"
-	ax.xticks = [0, 2, 4]
-	ax.xtickformat = xs -> ["All", "South", "North"]
+	ax.xticks = [-100]
+	# ax.xtickformat = xs -> ["All", "South", "North"]
 
 	return fig, ax
 end
@@ -481,12 +502,12 @@ figure_18 = let
 	fig = Figure(resolution=(650, 600), fontsize=10)
 
 	f1, ax1 = fig_distr(ri, fig=fig[2, 1])
-	f2, ax2 = fig_map(ri, fig=fig[2, 2], ms=6)
+	f2, ax2 = fig_map(ri, fig=fig[2, 2], ms=6, clims=(0.25, 1.25))
 	f3, ax3 = fig_distr(r_hr, fig=fig[3, 1])
-	f4, ax4 = fig_map(r_hr, fig=fig[3, 2], ms=6)
+	f4, ax4 = fig_map(r_hr, fig=fig[3, 2], ms=6, clims=(0.25, 1.25))
 
-	ylims!(ax1, 0.0, 1.0)
-	ylims!(ax3, 0.0, 1.0)
+	ylims!(ax1, 0.25, 1.25)
+	ylims!(ax3, 0.25, 1.25)
 
 	colsize!(fig.layout, 1, Auto(0.5))
 	
@@ -565,10 +586,10 @@ function make_error_figure(fig = Figure(resolution=(600, 200), fontsize=10))
 	# density!(ax, devs1[3], label="No Storage vs Dynamic", 
 	# 	npoints=500, strokewidth=2, bandwidth=0.01)
 	density!(ax, devs2[3], label="Fixed Storage vs Dynamic", 
-		npoints=500, strokewidth=2, bandwidth=0.002, color=(:gray, 0.5))
+		npoints=500, strokewidth=2, bandwidth=0.05, color=(:gray, 0.5))
 
-	#ylims!(0.0, 10.5)
-	xlims!(-0.0, 0.15)
+	ylims!(0.0, 4)
+	xlims!(0.0, 1.0)
 	ax.xlabel = "Relative RMS Deviation"
 	ax.ylabel = "Frequency"
 
@@ -589,7 +610,7 @@ let
 	axes = []
 	for (loc, dt) in zip(
 		[(1, 1), (1, 2), (2, 1), (2, 2)], 
-		[2, 5, 13, 27]
+		[2, 3, 13, 27]
 	)
 		_, ax = fig_time(
 			fig=grid[loc...],
@@ -600,11 +621,11 @@ let
 			whichdates=d -> day(d) in [dt],
 		)
 		ax.ytickformat = ys -> string.(ys/1e3)
-		ylims!(ax, 0, 900)
+		ylims!(ax, 0, 2000)
 		push!(axes, ax)
 
-		if loc == (1, 2)
-			axislegend(ax, position=:rb, margin=(0,0,0,0), padding=(0,0,0,0), labelsize=8)
+		if loc == (2, 2)
+			axislegend(ax, position=:rt, margin=(0,0,0,0), padding=(0,0,0,0), labelsize=8)
 		end
 	end
 
@@ -642,7 +663,7 @@ let
 
 	lines(gr)
 
-	c = cases[4][:co2_rates][fuel .== "Steam"]
+	c = cases[5][:co2_rates][fuel .== "Steam"]
 	c
 end
 
@@ -1983,8 +2004,6 @@ version = "3.5.0+0"
 # ╠═ba2a3175-b445-4227-a401-18ff40fc4c53
 # ╠═b6e667a5-d2ed-4ab6-9c94-9e6e45be84e8
 # ╠═64627393-f9b2-4c64-95c8-458cc005e237
-# ╠═7126918a-eb31-40a9-8f2d-7e181a1fcb3b
-# ╠═35e55d76-d175-4e77-9b69-930225cb8573
 # ╟─d2bacf4a-af37-4ff9-bebb-3dc3d06edd8a
 # ╟─cbc71e2e-0bd1-441c-bf17-c60053a60795
 # ╠═7a42f00e-193c-45ea-951f-dcd4e1c1975f
@@ -1995,9 +2014,6 @@ version = "3.5.0+0"
 # ╠═73fa2393-d2a2-429b-a84a-493acd8fb841
 # ╠═9900463f-5bc6-4649-b970-9456c5712d50
 # ╠═effd6c24-94ad-4803-9c30-7186a677480b
-# ╠═35ec1921-8f4c-46cd-aa80-778a475b1542
-# ╠═04d0d66a-8427-48a5-9c0e-e93eb619cd05
-# ╠═59316c15-a94c-4c56-a30a-0e6c23629de7
 # ╠═85f3a3f3-ca15-4e70-8745-a780e069aa9b
 # ╠═7771eb73-3ddb-4f80-b487-4685c1838501
 # ╟─be39a732-89d0-4a8b-9c88-3acd34f96dcc
@@ -2005,16 +2021,24 @@ version = "3.5.0+0"
 # ╠═2a6bfa51-8f05-46c9-8fd3-5b3f6dd307c7
 # ╠═b0805b35-6545-41ba-8dc3-45cf0072b094
 # ╠═f5bc0567-9fa5-45f7-8d70-c86099559984
-# ╠═07268e37-5b62-4ab3-8d0d-5bab2286cdbe
-# ╠═7ffbe1bc-8cc6-4033-a70b-880209164199
+# ╠═35e55d76-d175-4e77-9b69-930225cb8573
+# ╠═7126918a-eb31-40a9-8f2d-7e181a1fcb3b
+# ╟─07268e37-5b62-4ab3-8d0d-5bab2286cdbe
+# ╟─7ffbe1bc-8cc6-4033-a70b-880209164199
+# ╠═04d0d66a-8427-48a5-9c0e-e93eb619cd05
+# ╠═35ec1921-8f4c-46cd-aa80-778a475b1542
+# ╠═f06f51e4-98cb-4691-ab2f-acd9f5290aaa
 # ╟─a6178160-2471-4e6f-bcd9-debb529d39d4
+# ╠═ef79c984-db2a-4a1d-92e5-2d40abadcca3
 # ╠═76277c5f-c415-4861-b934-c76cc07a3820
 # ╠═971d68b9-c140-4594-a0af-4bb45f665508
 # ╟─71a2f440-d3d5-4f1b-b045-13816971ecc2
-# ╟─d6abbce4-27ba-4a1d-8fb0-ce97a40c716d
+# ╠═d6abbce4-27ba-4a1d-8fb0-ce97a40c716d
 # ╟─20e85734-92ff-4c34-9572-dd65ddd1d327
 # ╠═e1a1acda-1d52-45bd-8257-8b7249318c9b
-# ╟─b53cc8dd-c36e-4cf8-9f1d-473a0e985234
+# ╠═b53cc8dd-c36e-4cf8-9f1d-473a0e985234
+# ╠═59316c15-a94c-4c56-a30a-0e6c23629de7
+# ╠═76ddbef6-2ace-44e7-af9f-c71390c4955a
 # ╠═c6f2eb39-a0e6-44bf-8649-f25ef72961a4
 # ╠═5154fdd8-a58d-4faa-aced-7212ed0dc705
 # ╟─7b14b74e-bc68-4fe7-9a6e-5e58f322f02d
