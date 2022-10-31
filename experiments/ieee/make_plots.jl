@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.18.1
+# v0.19.5
 
 using Markdown
 using InteractiveUtils
@@ -85,7 +85,7 @@ figure_nodal_mefs = let
 	nodal_mefs = f["MEFs"] / 1000
 	
 	# Setup
-	size_inches = (3, 3)
+	size_inches = (3, 2)
 	size_pt = 72 .* size_inches
 	fig = Figure(resolution=size_pt ./ 0.75, fontsize=10)
 
@@ -108,7 +108,7 @@ figure_nodal_mefs = let
 	ylims!(ax, 0.98, 1.09)
 	ax.ylabel = "ΔE [%]"
 	ax.xlabel = "ΔD [%]"
-	ax.title = "Node $node"
+	#ax.title = "Node $node"
 	axislegend(ax, position=:lt, padding=(4.0, 4.0, 2.0, 2.0), rowgap=0, unique=true)
 
 	# # Setup

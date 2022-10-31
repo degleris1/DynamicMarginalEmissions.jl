@@ -112,6 +112,8 @@ function get_deviations(metric, r1, r2)
 
     # Compute deviations for all date-times in both
     mef = (ri, dt) -> get_nodal_mefs(ri.data, d -> d == dt, hybrid_mode=ri.hm)[:]
+    @show size(mef(r1, dts[1]))
+    @show size(mef(r2, dts[2]))
 
     return [metric(mef(r1, dt), mef(r2, dt)) for dt in dts]
 end

@@ -32,7 +32,11 @@ function run(setup_file::String, run_number)
     # Decide whether or not to use static or dynamic runs
     kwargs = (added_storage=added_storage, renewable_factor=renewable_factor, demand_factor=demand_factor)
     load_case = (T == 1) ? make_static_case : (d -> make_dynamic_case(d, T))
-    run_model = (T == 1) ? formulate_and_solve_static : (d -> formulate_and_solve_dynamic(d, T; kwargs...))
+
+    # FIX!!!
+    run_model = (T == 1) ? 
+        (d -> formulate_and_solve_static(d; kwargs...)) : 
+        (d -> formulate_and_solve_dynamic(d, T; kwargs...))
 
     # Create dates
     dates = start_date .+ Hour.(0 : T : (HOURS_PER_DAY*num_days-1))
