@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.19.5
+# v0.19.14
 
 using Markdown
 using InteractiveUtils
@@ -258,6 +258,9 @@ md"""
 ## Distributions
 """
 
+# ╔═╡ 4b9b61a7-ac58-4b19-9437-7840f6584b58
+
+
 # ╔═╡ 59316c15-a94c-4c56-a30a-0e6c23629de7
 hr = 18
 
@@ -327,7 +330,7 @@ function fig_map(
 	)
 
 	# Plot region
-	lines!(ax, make_rect(p1[1], p1[2], R)..., color=:black)
+	# lines!(ax, make_rect(p1[1], p1[2], R)..., color=:black)
 	#lines!(ax, make_rect(p2[1], p2[2], R)..., color=:black)
 	
 
@@ -376,7 +379,6 @@ function fig_distr(
 	nodal_mefs = analysis.get_nodal_mefs(r, whichdates)
 	all_mefs = mean(nodal_mefs, dims=2)[:]
 
-	
 	ax = Axis(fig[1, 1])
 	hidedecorations!(ax, ticks=false, ticklabels=false, label=false)
 
@@ -385,6 +387,7 @@ function fig_distr(
 	#density!(ax, all_mefs_a/1e3; offset=4.0, kwargs...)
 	#density!(ax, all_mefs_b/1e3; offset=2.0, kwargs...)
 	density!(ax, all_mefs/1e3; color=(:slategray, 0.7), kwargs...)
+	hlines!(ax, [mean(all_mefs)/1e3], color=:black)
 
 	kwargs = (linewidth=4, color=:black)
 	#hlines!(ax, [mean(all_mefs_a)/1e3]; xmin=4/6, kwargs...)
@@ -513,29 +516,82 @@ end
 # ╔═╡ e1a1acda-1d52-45bd-8257-8b7249318c9b
 fig_distr(4)[1]
 
+# ╔═╡ 5237b37a-1feb-4493-896e-60b4c0427f49
+ri, r_hr = 3, 5
+
+# ╔═╡ fb306c55-5558-46db-a9c6-87a6e079304a
+total_emissions = let
+	co2 = []
+	for i in [ri, r_hr]
+		c = cases[i][:co2_rates]
+	
+		flatten = g -> (typeof(g[1]) <: Array) ? reduce(hcat, g) : g
+	
+		push!(co2, [sum(c'flatten(r[:g])) for (k, r) in results[i]])
+	end
+
+	co2
+end
+
+# ╔═╡ 0d764950-bb7d-49fb-a8d3-9e12e68c1afe
+dim_total_emissions = length(total_emissions[1])
+
+# ╔═╡ 9efcc207-4a79-4cf0-b47a-c2cc2e7e6347
+function make_total_emissions_plot(ti; 
+	fig=Figure(resolution=(200, 200)),
+	scale=1e6
+)
+	ax = Axis(fig[1, 1], xgridvisible=false, ygridvisible=false)
+
+	density!(ax, ti / scale, direction=:y, 
+		strokewidth=1, strokecolor=:black, color=(:slategray, 0.7))
+	ylims!(ax, 0, 2)
+	ax.xticks = [-1]
+	ax.ylabel = "Daily Total Emissions [gton CO2]"
+
+	hlines!(ax, [mean(ti)/scale], color=:black)
+	
+
+	return fig, ax
+end
+
 # ╔═╡ c6f2eb39-a0e6-44bf-8649-f25ef72961a4
 figure_18 = let
 	ri = 3
 	r_hr = 5
 	fig = Figure(resolution=(650, 500), fontsize=10)
 
-	f1, ax1 = fig_distr(ri, fig=fig[2, 1])
+	f0, ax0 = make_total_emissions_plot(total_emissions[1], fig=fig[2, 0])
+	f1, ax1 = make_total_emissions_plot(total_emissions[2], fig=fig[2, 1])
 	f2, ax2 = fig_map(ri, fig=fig[2, 2], ms=6, clims=(0.25, 1.25))
+
+	f25, ax25 = fig_distr(ri, fig=fig[3, 0])
 	f3, ax3 = fig_distr(r_hr, fig=fig[3, 1])
 	f4, ax4 = fig_map(r_hr, fig=fig[3, 2], ms=6, clims=(0.25, 1.25))
 
-	ylims!(ax1, 0.25, 1.25)
+	ylims!(ax25, 0.25, 1.25)
 	ylims!(ax3, 0.25, 1.25)
 
-	colsize!(fig.layout, 1, Auto(0.5))
+	colsize!(fig.layout, 1, Auto(0.3))
+	colsize!(fig.layout, 0, Auto(0.3))
 	
-	ax2.title = ""
-	ax4.title= ""
+	ax2.title = "2018"
+	ax4.title= "High Renewable"
 	
-	ax1.ylabel = "LME [ton CO2 / MWh]"
-	ax3.ylabel = "LME [ton CO2 / MWh]"
+	#ax1.ylabel = "LME [ton CO2 / MWh]"
+	ax25.ylabel = "Nodal LMEs [ton CO2 / MWh]"
 
-	for (label, layout) in zip(["A", "B", "C", "D"], [fig[2, 1], fig[2, 2], fig[3, 1], fig[3, 2]])
+	ax1.yticks = [-10]
+	ax3.yticks = [-10]
+	ax1.ylabel = ""
+	ax3.ylabel = ""
+	
+	ax0.title = "2018"
+	ax1.title = "High Renewable"
+	ax25.title = "2018"
+	ax3.title = "High Renewable"
+
+	for (label, layout) in zip(["A", "B", "C", "D"], [fig[2, 0], fig[2, 2], fig[3, 0], fig[3, 2]])
     	Label(layout[1, 1, TopLeft()], label,
 	        textsize = 18,
 			font="Noto Sans Bold",
@@ -544,7 +600,7 @@ figure_18 = let
 		)
 	end
 
-	Label(fig[1, 1:2], "Nodal Emissions Rates at 6 PM in August", 
+	Label(fig[1, 0:2], "Nodal LMEs at 6 PM in August", 
 		textsize=10,
 		padding=(0, 0, 0, 0),
 		valign=:bottom
@@ -774,8 +830,9 @@ XLSX = "~0.7.10"
 PLUTO_MANIFEST_TOML_CONTENTS = """
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.7.1"
+julia_version = "1.8.2"
 manifest_format = "2.0"
+project_hash = "72f0af43e3361dea29802f5b22d554f8b09ef068"
 
 [[deps.AbstractFFTs]]
 deps = ["ChainRulesCore", "LinearAlgebra"]
@@ -808,6 +865,7 @@ version = "0.4.1"
 
 [[deps.ArgTools]]
 uuid = "0dad84c5-d112-42e6-8d28-ef12dabb789f"
+version = "1.1.1"
 
 [[deps.ArnoldiMethod]]
 deps = ["LinearAlgebra", "Random", "StaticArrays"]
@@ -924,6 +982,7 @@ version = "3.45.0"
 [[deps.CompilerSupportLibraries_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "e66e0078-7015-5450-92f7-15fbd957f2ae"
+version = "0.5.2+0"
 
 [[deps.Contour]]
 deps = ["StaticArrays"]
@@ -995,8 +1054,9 @@ uuid = "ffbed154-4ef7-542d-bbb7-c09d3a79fcae"
 version = "0.8.6"
 
 [[deps.Downloads]]
-deps = ["ArgTools", "LibCURL", "NetworkOptions"]
+deps = ["ArgTools", "FileWatching", "LibCURL", "NetworkOptions"]
 uuid = "f43a241f-c20a-4ad4-852c-f6b1247861c6"
+version = "1.6.0"
 
 [[deps.DualNumbers]]
 deps = ["Calculus", "NaNMath", "SpecialFunctions"]
@@ -1051,6 +1111,9 @@ deps = ["Pkg", "Requires", "UUIDs"]
 git-tree-sha1 = "9267e5f50b0e12fdfd5a2455534345c4cf2c7f7a"
 uuid = "5789e2e9-d7fb-5bc7-8068-2c6fae9b9549"
 version = "1.14.0"
+
+[[deps.FileWatching]]
+uuid = "7b1f6079-737a-58dc-b8bc-7a2ca5c1b5ee"
 
 [[deps.FillArrays]]
 deps = ["LinearAlgebra", "Random", "SparseArrays", "Statistics"]
@@ -1352,10 +1415,12 @@ version = "0.3.1"
 [[deps.LibCURL]]
 deps = ["LibCURL_jll", "MozillaCACerts_jll"]
 uuid = "b27032c2-a3e7-50c8-80cd-2d36dbcbfd21"
+version = "0.6.3"
 
 [[deps.LibCURL_jll]]
 deps = ["Artifacts", "LibSSH2_jll", "Libdl", "MbedTLS_jll", "Zlib_jll", "nghttp2_jll"]
 uuid = "deac9b47-8bc7-5906-a0fe-35ac56dc84c0"
+version = "7.84.0+0"
 
 [[deps.LibGit2]]
 deps = ["Base64", "NetworkOptions", "Printf", "SHA"]
@@ -1364,6 +1429,7 @@ uuid = "76f85450-5226-5b5a-8eaa-529ad045b433"
 [[deps.LibSSH2_jll]]
 deps = ["Artifacts", "Libdl", "MbedTLS_jll"]
 uuid = "29816b5a-b9ab-546f-933c-edad1886dfa8"
+version = "1.10.2+0"
 
 [[deps.Libdl]]
 uuid = "8f399da3-3557-5675-b5ff-fb832c97cbdb"
@@ -1476,6 +1542,7 @@ version = "0.4.2"
 [[deps.MbedTLS_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "c8ffd9c3-330d-5841-b78e-0817d7145fa1"
+version = "2.28.0+0"
 
 [[deps.Missings]]
 deps = ["DataAPI"]
@@ -1494,6 +1561,7 @@ version = "0.3.3"
 
 [[deps.MozillaCACerts_jll]]
 uuid = "14a3606d-f60d-562e-9121-12d972cd8159"
+version = "2022.2.1"
 
 [[deps.NaNMath]]
 git-tree-sha1 = "737a5957f387b17e74d4ad2f440eb330b39a62c5"
@@ -1508,6 +1576,7 @@ version = "1.0.2"
 
 [[deps.NetworkOptions]]
 uuid = "ca575930-c2e3-43a9-ace4-1e988b2c1908"
+version = "1.2.0"
 
 [[deps.Observables]]
 git-tree-sha1 = "dfd8d34871bc3ad08cd16026c1828e271d554db9"
@@ -1529,6 +1598,7 @@ version = "1.3.5+1"
 [[deps.OpenBLAS_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "Libdl"]
 uuid = "4536629a-c528-5b80-bd46-f80d51c5b363"
+version = "0.3.20+0"
 
 [[deps.OpenEXR]]
 deps = ["Colors", "FileIO", "OpenEXR_jll"]
@@ -1545,6 +1615,7 @@ version = "3.1.1+0"
 [[deps.OpenLibm_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "05823500-19ac-5b8b-9628-191a04bc5112"
+version = "0.8.1+0"
 
 [[deps.OpenSSL_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -1626,6 +1697,7 @@ version = "0.40.1+0"
 [[deps.Pkg]]
 deps = ["Artifacts", "Dates", "Downloads", "LibGit2", "Libdl", "Logging", "Markdown", "Printf", "REPL", "Random", "SHA", "Serialization", "TOML", "Tar", "UUIDs", "p7zip_jll"]
 uuid = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
+version = "1.8.0"
 
 [[deps.PkgVersion]]
 deps = ["Pkg"]
@@ -1746,6 +1818,7 @@ version = "0.3.0+0"
 
 [[deps.SHA]]
 uuid = "ea8e919c-243c-51af-8825-aaa63cd721ce"
+version = "0.7.0"
 
 [[deps.SIMD]]
 git-tree-sha1 = "7dbc15af7ed5f751a82bf3ed37757adf76c32402"
@@ -1878,6 +1951,7 @@ uuid = "4607b0f0-06f3-5cda-b6b1-a6196a1729e9"
 [[deps.TOML]]
 deps = ["Dates"]
 uuid = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
+version = "1.0.0"
 
 [[deps.TableTraits]]
 deps = ["IteratorInterfaceExtensions"]
@@ -1894,6 +1968,7 @@ version = "1.7.0"
 [[deps.Tar]]
 deps = ["ArgTools", "SHA"]
 uuid = "a4e569a6-e804-4fa4-b0f3-eef7a1d5b13e"
+version = "1.10.1"
 
 [[deps.TensorCore]]
 deps = ["LinearAlgebra"]
@@ -2016,6 +2091,7 @@ version = "0.9.4"
 [[deps.Zlib_jll]]
 deps = ["Libdl"]
 uuid = "83775a58-1f1d-513f-b197-d71354ab007a"
+version = "1.2.12+3"
 
 [[deps.Zstd_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -2038,6 +2114,7 @@ version = "0.15.1+0"
 [[deps.libblastrampoline_jll]]
 deps = ["Artifacts", "Libdl", "OpenBLAS_jll"]
 uuid = "8e850b90-86db-534c-a0d3-1478176c7d93"
+version = "5.1.1+0"
 
 [[deps.libfdk_aac_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -2066,10 +2143,12 @@ version = "1.3.7+1"
 [[deps.nghttp2_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "8e850ede-7688-5339-a07c-302acd2aaf8d"
+version = "1.48.0+0"
 
 [[deps.p7zip_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "3f19e933-33d8-53b3-aaab-bd5110c3b7a0"
+version = "17.4.0+0"
 
 [[deps.x264_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -2134,7 +2213,7 @@ version = "3.5.0+0"
 # ╠═7126918a-eb31-40a9-8f2d-7e181a1fcb3b
 # ╠═39ff81d3-9890-4291-8391-9cf0dbd9cf7e
 # ╠═07268e37-5b62-4ab3-8d0d-5bab2286cdbe
-# ╟─7ffbe1bc-8cc6-4033-a70b-880209164199
+# ╠═7ffbe1bc-8cc6-4033-a70b-880209164199
 # ╠═04d0d66a-8427-48a5-9c0e-e93eb619cd05
 # ╠═35ec1921-8f4c-46cd-aa80-778a475b1542
 # ╟─a6178160-2471-4e6f-bcd9-debb529d39d4
@@ -2153,9 +2232,14 @@ version = "3.5.0+0"
 # ╠═f06f51e4-98cb-4691-ab2f-acd9f5290aaa
 # ╟─20e85734-92ff-4c34-9572-dd65ddd1d327
 # ╠═e1a1acda-1d52-45bd-8257-8b7249318c9b
-# ╟─b53cc8dd-c36e-4cf8-9f1d-473a0e985234
+# ╟─4b9b61a7-ac58-4b19-9437-7840f6584b58
+# ╠═b53cc8dd-c36e-4cf8-9f1d-473a0e985234
 # ╠═59316c15-a94c-4c56-a30a-0e6c23629de7
 # ╠═76ddbef6-2ace-44e7-af9f-c71390c4955a
+# ╠═5237b37a-1feb-4493-896e-60b4c0427f49
+# ╠═fb306c55-5558-46db-a9c6-87a6e079304a
+# ╠═0d764950-bb7d-49fb-a8d3-9e12e68c1afe
+# ╠═9efcc207-4a79-4cf0-b47a-c2cc2e7e6347
 # ╠═c6f2eb39-a0e6-44bf-8649-f25ef72961a4
 # ╠═5154fdd8-a58d-4faa-aced-7212ed0dc705
 # ╟─7b14b74e-bc68-4fe7-9a6e-5e58f322f02d
