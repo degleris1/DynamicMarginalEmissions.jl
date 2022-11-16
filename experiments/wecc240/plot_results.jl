@@ -72,9 +72,6 @@ end;
 # ╔═╡ 3f03a7e6-2889-428d-984c-0995574f1fc3
 analysis = ingredients("analysis_utils.jl")
 
-# ╔═╡ 3e8a155e-3f0b-4c2b-9231-08d61fea8296
-
-
 # ╔═╡ 6db70f24-e8ba-461e-8d86-00e9a37b44d3
 md"""
 ## Load data
@@ -258,8 +255,32 @@ md"""
 ## Distributions
 """
 
-# ╔═╡ 4b9b61a7-ac58-4b19-9437-7840f6584b58
+# ╔═╡ a5dec126-a70e-44f2-b39f-5cf1e35707f9
+function available_capacity(r, resource_type)
+	c = cases[r][:co2_rates]
+	fuel = cases[r][:fuel]
+	gmax = cases[r][:gmax]
 
+	gens = map(f -> f in [resource_type], fuel)
+
+	# TODO filter by date and month
+	all_available_capacities = [
+		reduce(hcat, r[:gmax] .- r[:g])[:, 18]
+		for (dt, r) in filter(pr -> month(pr[1]) == 8, results[r])
+	]
+
+	total_available_capacity_for_resource = 
+		sum(mean(all_available_capacities)[gens])
+	
+	max_capacities_for_resource = [
+		reduce(hcat, r[:gmax])[:, 18]
+		for (dt, r) in filter(pr -> month(pr[1]) == 8, results[r])
+	]
+
+	total_max_capacity_for_resource = sum(mean(max_capacities_for_resource)[gens])
+
+	return total_available_capacity_for_resource / total_max_capacity_for_resource
+end
 
 # ╔═╡ 59316c15-a94c-4c56-a30a-0e6c23629de7
 hr = 18
@@ -335,15 +356,14 @@ function fig_map(
 	
 
 	# Colorbar
-	cb = Colorbar(fig[1, 2], sct, label="LME [ton CO2 / MWh]")
-
+	#cb = Colorbar(fig[1, 2], sct, label="LME [ton CO2 / MWh]")
+	#cb.tellheight = true
+	
 	ax.xticks = [-150]
 	ax.yticks = [20]
 	ax.title = "WECC: Average Nodal MEFs at Hour $hr "
-
-	cb.tellheight = true
 	
-    return fig, ax
+    return fig, ax, sct
 end
 
 # ╔═╡ 07268e37-5b62-4ab3-8d0d-5bab2286cdbe
@@ -367,6 +387,19 @@ end
 # ╔═╡ 76ddbef6-2ace-44e7-af9f-c71390c4955a
 D = 14
 
+# ╔═╡ 5237b37a-1feb-4493-896e-60b4c0427f49
+ri, r_hr = 3, 5
+
+# ╔═╡ b75419d4-a203-4103-8dc1-ea7c088f0ada
+gas_co2_rate, steam_co2_rate = let
+	c = cases[r_hr][:co2_rates]
+	fuel = cases[r_hr][:fuel]
+
+	gen_co2_rate(f) = mean(c[fuel .== f])
+
+	map(gen_co2_rate, ["Gas", "Steam"])
+end
+
 # ╔═╡ b53cc8dd-c36e-4cf8-9f1d-473a0e985234
 function fig_distr(
 	i1; 
@@ -388,6 +421,9 @@ function fig_distr(
 	#density!(ax, all_mefs_b/1e3; offset=2.0, kwargs...)
 	density!(ax, all_mefs/1e3; color=(:slategray, 0.7), kwargs...)
 	hlines!(ax, [mean(all_mefs)/1e3], color=:black)
+
+	hlines!(ax, [gas_co2_rate/1e3], color=:blue)
+	hlines!(ax, [steam_co2_rate/1e3], color=:blue)
 
 	kwargs = (linewidth=4, color=:black)
 	#hlines!(ax, [mean(all_mefs_a)/1e3]; xmin=4/6, kwargs...)
@@ -516,8 +552,11 @@ end
 # ╔═╡ e1a1acda-1d52-45bd-8257-8b7249318c9b
 fig_distr(4)[1]
 
-# ╔═╡ 5237b37a-1feb-4493-896e-60b4c0427f49
-ri, r_hr = 3, 5
+# ╔═╡ cfe44d37-6e91-463c-b18c-0096f5c6b40f
+unique_fuels = sort(unique(cases[r_hr][:fuel]))
+
+# ╔═╡ 0f2a4703-8648-476d-b704-ba553e67799c
+map(f -> (f, available_capacity(ri, f), available_capacity(r_hr, f)), unique_fuels)
 
 # ╔═╡ fb306c55-5558-46db-a9c6-87a6e079304a
 total_emissions = let
@@ -561,19 +600,31 @@ figure_18 = let
 	r_hr = 5
 	fig = Figure(resolution=(650, 500), fontsize=10)
 
-	f0, ax0 = make_total_emissions_plot(total_emissions[1], fig=fig[2, 0])
-	f1, ax1 = make_total_emissions_plot(total_emissions[2], fig=fig[2, 1])
-	f2, ax2 = fig_map(ri, fig=fig[2, 2], ms=6, clims=(0.25, 1.25))
+	gl1 = fig[1, 1] = GridLayout()
+	gl2 = fig[1, 2] = GridLayout()
 
-	f25, ax25 = fig_distr(ri, fig=fig[3, 0])
-	f3, ax3 = fig_distr(r_hr, fig=fig[3, 1])
-	f4, ax4 = fig_map(r_hr, fig=fig[3, 2], ms=6, clims=(0.25, 1.25))
+	f0, ax0 = make_total_emissions_plot(total_emissions[1], fig=gl1[1, 1])	
+	f1, ax1 = make_total_emissions_plot(total_emissions[2], fig=gl1[1, 2])
+
+	f25, ax25 = fig_distr(ri, fig=gl2[1, 1])
+	ax25.xlabel = ""
+	f3, ax3 = fig_distr(r_hr, fig=gl2[1, 2])
+	ax3.xlabel = ""
+
+	colgap!(gl1, 1, 6)
+	colgap!(gl2, 1, 6)
+
+	f2, ax2, sct1 = fig_map(ri, fig=fig[2, 1], ms=6, clims=(0.25, 1.25))
+	f4, ax4, sct2 = fig_map(r_hr, fig=fig[2, 2], ms=6, clims=(0.25, 1.25))
+	
+	cb = Colorbar(fig[2, 3], sct1, label="LME [ton CO2 / MWh]")
+	cb.tellheight = true
 
 	ylims!(ax25, 0.25, 1.25)
 	ylims!(ax3, 0.25, 1.25)
 
-	colsize!(fig.layout, 1, Auto(0.3))
-	colsize!(fig.layout, 0, Auto(0.3))
+	#colsize!(fig.layout, 1, Auto(0.3))
+	#colsize!(fig.layout, 0, Auto(0.3))
 	
 	ax2.title = "2018"
 	ax4.title= "High Renewable"
@@ -591,7 +642,7 @@ figure_18 = let
 	ax25.title = "2018"
 	ax3.title = "High Renewable"
 
-	for (label, layout) in zip(["A", "B", "C", "D"], [fig[2, 0], fig[2, 2], fig[3, 0], fig[3, 2]])
+	for (label, layout) in zip(["A", "B", "C", "D"], [fig[1, 1], fig[1, 2], fig[2, 1], fig[2, 2]])
     	Label(layout[1, 1, TopLeft()], label,
 	        textsize = 18,
 			font="Noto Sans Bold",
@@ -600,15 +651,14 @@ figure_18 = let
 		)
 	end
 
-	Label(fig[1, 0:2], "Nodal LMEs at 6 PM in August", 
-		textsize=10,
-		padding=(0, 0, 0, 0),
-		valign=:bottom
-	)
+	# Label(fig[1, 1:2], "Nodal LMEs at 6 PM in August", 
+	# 	textsize=10,
+	# 	padding=(0, 0, 0, 0),
+	# 	valign=:bottom
+	# )
 	
-	colgap!(fig.layout, 1, 4)
-	rowgap!(fig.layout, 1, 6)
-	rowgap!(fig.layout, 2, 0)
+	colgap!(fig.layout, 1, 20)
+	rowgap!(fig.layout, 1, 20)
 
 	fig
 end
@@ -701,7 +751,7 @@ function make_error_figure(fig = Figure(resolution=(600, 200), fontsize=10))
 	density!(ax, sample_devs, label="Fixed Storage vs Dynamic", 
 		npoints=500, strokewidth=2, bandwidth=0.05, color=(:gray, 0.5))
 
-	#ylims!(0.0, 4)
+	xlims!(0.0, 1.5)
 	#xlims!(0.0, 1.0)
 	ax.xlabel = "Relative RMS Deviation"
 	ax.ylabel = "Frequency"
@@ -2177,7 +2227,6 @@ version = "3.5.0+0"
 # ╠═3f03a7e6-2889-428d-984c-0995574f1fc3
 # ╠═93b1dd21-6f9d-4770-acd3-fe8f625f6d46
 # ╠═25d6013f-ac12-4bb6-baa0-28925dc16e66
-# ╠═3e8a155e-3f0b-4c2b-9231-08d61fea8296
 # ╟─6db70f24-e8ba-461e-8d86-00e9a37b44d3
 # ╠═f9fab4fe-baec-4bfd-9d84-ef9caac85f5f
 # ╠═d7598abb-2be7-4e3b-af9e-14827ef5a3b0
@@ -2227,12 +2276,15 @@ version = "3.5.0+0"
 # ╠═3a92e994-c094-4ee5-8a02-9c5c6df4551f
 # ╠═971d68b9-c140-4594-a0af-4bb45f665508
 # ╠═3e977d3a-01b6-428e-962f-a5128b739a78
-# ╠═d6abbce4-27ba-4a1d-8fb0-ce97a40c716d
+# ╟─d6abbce4-27ba-4a1d-8fb0-ce97a40c716d
 # ╠═9d35d4df-5fca-430e-bfae-b801107ffb61
 # ╠═f06f51e4-98cb-4691-ab2f-acd9f5290aaa
 # ╟─20e85734-92ff-4c34-9572-dd65ddd1d327
 # ╠═e1a1acda-1d52-45bd-8257-8b7249318c9b
-# ╟─4b9b61a7-ac58-4b19-9437-7840f6584b58
+# ╠═b75419d4-a203-4103-8dc1-ea7c088f0ada
+# ╠═cfe44d37-6e91-463c-b18c-0096f5c6b40f
+# ╠═a5dec126-a70e-44f2-b39f-5cf1e35707f9
+# ╠═0f2a4703-8648-476d-b704-ba553e67799c
 # ╠═b53cc8dd-c36e-4cf8-9f1d-473a0e985234
 # ╠═59316c15-a94c-4c56-a30a-0e6c23629de7
 # ╠═76ddbef6-2ace-44e7-af9f-c71390c4955a
