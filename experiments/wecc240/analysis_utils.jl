@@ -13,7 +13,7 @@ function load_results(p)
 	    DateTime(f[1:end-5], "yy-mm-dd-HH") => BSON.load(joinpath(p, f), @__MODULE__) 
 	    for f in filter(f -> f[1:2] in ["04", "18"], readdir(p))
     )
-    end
+end
 
 
 """
