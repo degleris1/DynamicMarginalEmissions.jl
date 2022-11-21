@@ -215,6 +215,9 @@ node1 = 100; df_gis[node1, "Bus  Name"], coords(node1)
 # ╔═╡ 39ff81d3-9890-4291-8391-9cf0dbd9cf7e
 mnth = 8
 
+# ╔═╡ 59316c15-a94c-4c56-a30a-0e6c23629de7
+hr = 12
+
 # ╔═╡ 04d0d66a-8427-48a5-9c0e-e93eb619cd05
 p_sacramento = (x=-121.3, y=39.0)
 
@@ -228,48 +231,6 @@ md"""
 
 # ╔═╡ ef79c984-db2a-4a1d-92e5-2d40abadcca3
 R = 0.25
-
-# ╔═╡ 76277c5f-c415-4861-b934-c76cc07a3820
-day_range = 1:31 # 4, 14, 19
-
-# ╔═╡ fb62741d-d65e-4c6f-a256-5389623362ad
-is_renewable = map(f -> f in ["PV-2", "PV-1", "Wind-1", "Wind-2",], fuel)
-
-# ╔═╡ 93b1dd21-6f9d-4770-acd3-fe8f625f6d46
-avg_renewable = mean([sum(r[:gmax][2][is_renewable]) for (_, r) in results[5]])
-
-# ╔═╡ a91cbac6-27ba-4238-9b9f-ed561d2267ca
-sortperm(cases[4][:params][:gt] .* is_renewable, rev=true)
-
-# ╔═╡ 6cf44a9c-c4f8-42c8-8b19-753ad53ac62b
-cases[4][:params][:gt][205]
-
-# ╔═╡ 34461bf7-19e6-4ca9-9238-da512d947ef4
-p_renew = let
-	i = 240
-	@show fuel[i]
-	(x=x[i], y=y[i])
-end
-
-# ╔═╡ 4c9f5116-6629-4494-a344-ea9061728956
-summer = [5, 6, 7, 8]
-
-# ╔═╡ 3a92e994-c094-4ee5-8a02-9c5c6df4551f
-winter = [11, 12, 1, 2]
-
-# ╔═╡ 9d35d4df-5fca-430e-bfae-b801107ffb61
-
-
-# ╔═╡ f06f51e4-98cb-4691-ab2f-acd9f5290aaa
-p1 = (x=x[211], y=y[211])
-
-# ╔═╡ 20e85734-92ff-4c34-9572-dd65ddd1d327
-md"""
-## Distributions
-"""
-
-# ╔═╡ 59316c15-a94c-4c56-a30a-0e6c23629de7
-hr = 18
 
 # ╔═╡ 7ffbe1bc-8cc6-4033-a70b-880209164199
 function fig_map(
@@ -369,6 +330,45 @@ let
 	#save(joinpath(RESULTS_DIR, "wecc240_map1.pdf"), fig)
 	fig
 end
+
+# ╔═╡ 76277c5f-c415-4861-b934-c76cc07a3820
+day_range = 1:31 # 4, 14, 19
+
+# ╔═╡ fb62741d-d65e-4c6f-a256-5389623362ad
+is_renewable = map(f -> f in ["PV-2", "PV-1", "Wind-1", "Wind-2",], fuel)
+
+# ╔═╡ 93b1dd21-6f9d-4770-acd3-fe8f625f6d46
+avg_renewable = mean([sum(r[:gmax][2][is_renewable]) for (_, r) in results[5]])
+
+# ╔═╡ a91cbac6-27ba-4238-9b9f-ed561d2267ca
+sortperm(cases[4][:params][:gt] .* is_renewable, rev=true)
+
+# ╔═╡ 6cf44a9c-c4f8-42c8-8b19-753ad53ac62b
+cases[4][:params][:gt][205]
+
+# ╔═╡ 34461bf7-19e6-4ca9-9238-da512d947ef4
+p_renew = let
+	i = 240
+	@show fuel[i]
+	(x=x[i], y=y[i])
+end
+
+# ╔═╡ 4c9f5116-6629-4494-a344-ea9061728956
+summer = [5, 6, 7, 8]
+
+# ╔═╡ 3a92e994-c094-4ee5-8a02-9c5c6df4551f
+winter = [11, 12, 1, 2]
+
+# ╔═╡ 9d35d4df-5fca-430e-bfae-b801107ffb61
+
+
+# ╔═╡ f06f51e4-98cb-4691-ab2f-acd9f5290aaa
+p1 = (x=x[211], y=y[211])
+
+# ╔═╡ 20e85734-92ff-4c34-9572-dd65ddd1d327
+md"""
+## Distributions
+"""
 
 # ╔═╡ 76ddbef6-2ace-44e7-af9f-c71390c4955a
 D = 14
@@ -644,7 +644,7 @@ figure_18 = let
 end
 
 # ╔═╡ 5154fdd8-a58d-4faa-aced-7212ed0dc705
-save(joinpath(RESULTS_DIR, "fig_240_map.pdf"), figure_18)
+save(joinpath(RESULTS_DIR, "fig_240_map_month$(mnth)_hr$(hr).pdf"), figure_18)
 
 # ╔═╡ 7b14b74e-bc68-4fe7-9a6e-5e58f322f02d
 md"""
@@ -832,11 +832,86 @@ function total_mef(r)
 	return dropdims(sum(r, dims=2), dims=2)
 end
 
+# ╔═╡ 12405d50-bcba-4edd-813c-76a5b8775e6b
+# total mefs per node
+begin
+	λ_tot_18 = reduce(
+		hcat, total_mef(results[ri][dt][:λ])[:,hr] for dt in  filter(x -> month(x) == mnth, keys(results[ri]))
+	);
+	
+	λ_tot_hr = reduce(
+		hcat, total_mef(results[r_hr][dt][:λ])[:,hr] for dt in  filter(x -> month(x) == mnth, keys(results[r_hr]))
+	);
+end;
+
+# ╔═╡ 66c5ec69-3155-4a73-af06-4597f2b09dfa
+begin
+
+	dim = 2
+
+	μ_18 = dropdims(mean(λ_tot_18, dims=dim), dims=dim)
+	σ_18 = dropdims(std(λ_tot_18, dims=dim), dims=dim)
+	CV_18 = σ_18 ./ μ_18
+	
+	μ_hr = dropdims(mean(λ_tot_hr, dims=dim), dims=dim)
+	σ_hr = dropdims(std(λ_tot_hr, dims=dim), dims=dim)
+	CV_hr = σ_hr ./ μ_hr
+
+end
+
+# ╔═╡ eb21dad6-54dd-40aa-9e4d-e877bf901367
+# coefficient of variation
+
+let
+	fig = Figure()#resolution=(650, 500), fontsize=10)
+	ax = Axis(fig[1,1], xlabel="Day of month",ylabel="CV = σ/μ")
+	lines!(CV_18, label="2018", title="test")
+	lines!(CV_hr, label="HR")
+	fig
+end
+
+# ╔═╡ b7f4a04e-ca6d-4340-8641-e305840e368d
+size(λ_tot_18)
+
+# ╔═╡ 66707e17-02ec-416e-b9f0-9b6168acd0ae
+idx_plot = 14
+
+# ╔═╡ fd18b8a9-c7d0-483a-9603-82ffe45f2414
+#lme trajectories
+let
+	fig = Figure()
+
+	ax = Axis(fig[1,1], xlabel="day of the month", ylabel="λ", title="node = $(idx_plot)")
+	
+	lines!(λ_tot_18[idx_plot, :])
+	lines!(λ_tot_hr[idx_plot, :])
+	fig
+end
+
+# ╔═╡ aca9781b-0ee1-431a-83d0-f15975a03f43
+begin
+	# correlation patterns of lmes
+	cor_18 = cor(λ_tot_18, dims=2)
+	cor_hr = cor(λ_tot_hr, dims=2)
+
+	cor_X = cor(λ_tot_18, λ_tot_hr, dims=2)
+end;
+
+# ╔═╡ d7c4adcb-c0b2-4cc8-9673-eeaca80ec033
+heatmap(cor_18)
+
+# ╔═╡ 547d5a4a-b3db-4fb3-acfc-3ab8123e0b6e
+heatmap(cor_hr)
+
+# ╔═╡ a1570dd5-53bb-441e-a3b7-0b439ede76f0
+heatmap(cor_X)
+
 # ╔═╡ f816914a-cce7-4f5e-998b-c84666666d73
+# difference in lmes between the same nodes under the different scenarios
 Δλ = reduce(vcat, [
 		reduce(hcat, 
-			(total_mef(results[ri][dt][:λ]) .- total_mef(results[r_hr][dt][:λ]))[:, 18])
-		for (dt) in filter(x -> month(x) == 8, keys(results[ri]))
+			(total_mef(results[ri][dt][:λ]) .- total_mef(results[r_hr][dt][:λ]))[:, hr])
+		for (dt) in filter(x -> month(x) == mnth, keys(results[ri]))
 ]);
 
 # ╔═╡ 1896e6f3-606f-4b84-88e4-a62a7a739cfe
@@ -872,9 +947,9 @@ sp = sortperm(q50_n)
 
 # ╔═╡ e2bc41ca-37d6-449c-a773-1757947fa09c
 let
-	p = plot(q50_n[sp])
-	plot!(q90_n[sp], color=:orange)
-	plot!(q10_n[sp], color=:green)
+	p = lines(q50_n[sp])
+	lines!(q90_n[sp], color=:orange)
+	lines!(q10_n[sp], color=:green)
 	p
 end
 
@@ -884,11 +959,11 @@ function fraction_demand_per_resource_type(r, resource_type)
 	gens = map(f -> f in [resource_type], fuel)
 
 	total_generation = reduce(hcat, [
-		reduce(hcat, results[r][dt][:g])[gens, 18] for (dt) in filter(x -> month(x) == 8, keys(results[r]))
+		reduce(hcat, results[r][dt][:g])[gens, hr] for (dt) in filter(x -> month(x) == mnth, keys(results[r]))
 			])
 
 	total_demand = [
-		sum(reduce(hcat, results[r][dt][:d])[:, 18]) for (dt) in filter(x -> month(x) == 8, keys(results[r]))
+		sum(reduce(hcat, results[r][dt][:d])[:, hr]) for (dt) in filter(x -> month(x) == mnth, keys(results[r]))
 	]
 
 	total_generation = dropdims(sum(total_generation, dims=1), dims=1)
@@ -945,15 +1020,15 @@ function available_capacity(r, resource_type, q)
 
 	# TODO filter by date and month
 	all_available_capacities = [
-		reduce(hcat, r_[:gmax] .- r_[:g])[:, 18]
-		for (dt, r_) in filter(pr -> month(pr[1]) == 8, results[r])
+		reduce(hcat, r_[:gmax] .- r_[:g])[:, hr]
+		for (dt, r_) in filter(pr -> month(pr[1]) == mnth, results[r])
 	]
 
 
 	
 	max_capacities_for_resource = [
-		reduce(hcat, r_[:gmax])[:, 18]
-		for (dt, r_) in filter(pr -> month(pr[1]) == 8, results[r])
+		reduce(hcat, r_[:gmax])[:, hr]
+		for (dt, r_) in filter(pr -> month(pr[1]) == mnth, results[r])
 	]
 
 	# here you average before taking the capacities
@@ -974,7 +1049,7 @@ end
 
 # ╔═╡ a53cef1b-e064-407b-82af-9db8ff319dbe
 begin
-	q_ = .0
+	q_ = .5
 	
 	av_cap = Dict(f => (available_capacity(ri, f, q_)[2], available_capacity(r_hr, f, q_)[2]) for f in unique_fuels)
 end
@@ -1017,9 +1092,6 @@ another way is to ask how many generators are open
 av_cap_vec = Dict(
 	f => (available_capacity(ri, f, .6)[1], available_capacity(r_hr, f, .6)[1]) for f in unique_fuels
 );
-
-# ╔═╡ 23968408-8627-491c-9d5a-2d4bcdc96318
-aa = av_cap_vec["Steam"][1]
 
 # ╔═╡ 5df243e2-3813-4623-86ba-6d6e77d4a8b0
 """proportion of available generators"""
@@ -1088,6 +1160,12 @@ begin
 	pl
 	
 end
+
+# ╔═╡ 38590154-c38f-4c25-9e30-f6a5ceb4b578
+kk = collect(keys(results[ri]))[1]
+
+# ╔═╡ 57232842-7f1b-4b4a-819c-842cb5192c7f
+collect(keys(results[ri][kk]))
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -2503,6 +2581,7 @@ version = "3.5.0+0"
 # ╠═35e55d76-d175-4e77-9b69-930225cb8573
 # ╠═7126918a-eb31-40a9-8f2d-7e181a1fcb3b
 # ╠═39ff81d3-9890-4291-8391-9cf0dbd9cf7e
+# ╠═59316c15-a94c-4c56-a30a-0e6c23629de7
 # ╠═07268e37-5b62-4ab3-8d0d-5bab2286cdbe
 # ╠═7ffbe1bc-8cc6-4033-a70b-880209164199
 # ╠═04d0d66a-8427-48a5-9c0e-e93eb619cd05
@@ -2525,7 +2604,6 @@ version = "3.5.0+0"
 # ╠═e1a1acda-1d52-45bd-8257-8b7249318c9b
 # ╠═b75419d4-a203-4103-8dc1-ea7c088f0ada
 # ╠═b53cc8dd-c36e-4cf8-9f1d-473a0e985234
-# ╠═59316c15-a94c-4c56-a30a-0e6c23629de7
 # ╠═76ddbef6-2ace-44e7-af9f-c71390c4955a
 # ╠═5237b37a-1feb-4493-896e-60b4c0427f49
 # ╠═fb306c55-5558-46db-a9c6-87a6e079304a
@@ -2552,6 +2630,16 @@ version = "3.5.0+0"
 # ╟─6acf8b05-53c1-444c-93e3-d3ff1ce2fb3c
 # ╠═cfe44d37-6e91-463c-b18c-0096f5c6b40f
 # ╠═f1985da7-f96c-4a01-8e29-2b354349a130
+# ╠═12405d50-bcba-4edd-813c-76a5b8775e6b
+# ╠═66c5ec69-3155-4a73-af06-4597f2b09dfa
+# ╠═eb21dad6-54dd-40aa-9e4d-e877bf901367
+# ╠═b7f4a04e-ca6d-4340-8641-e305840e368d
+# ╠═66707e17-02ec-416e-b9f0-9b6168acd0ae
+# ╠═fd18b8a9-c7d0-483a-9603-82ffe45f2414
+# ╠═aca9781b-0ee1-431a-83d0-f15975a03f43
+# ╠═d7c4adcb-c0b2-4cc8-9673-eeaca80ec033
+# ╠═547d5a4a-b3db-4fb3-acfc-3ab8123e0b6e
+# ╠═a1570dd5-53bb-441e-a3b7-0b439ede76f0
 # ╠═f816914a-cce7-4f5e-998b-c84666666d73
 # ╠═1896e6f3-606f-4b84-88e4-a62a7a739cfe
 # ╠═97bf2231-c34a-4086-8d44-cb1c4c6bbeae
@@ -2569,12 +2657,13 @@ version = "3.5.0+0"
 # ╠═f3733150-48df-4511-9578-f46dab8b6b75
 # ╠═358f606a-b200-4833-81f1-fd7663c12bba
 # ╠═9f994d3d-b343-455e-9da8-2b0c871da5fa
-# ╠═23968408-8627-491c-9d5a-2d4bcdc96318
 # ╠═51e898b8-6d45-4eb2-ae15-ee88fd153a40
 # ╠═5df243e2-3813-4623-86ba-6d6e77d4a8b0
 # ╠═c9e431db-49a3-40fe-8437-0b4e95625118
 # ╠═76aa2360-d03e-4c92-be36-70f2a0bc0352
 # ╠═0b079fc2-8643-4681-aca7-a4b1aeaf6034
 # ╠═41b5a11c-df97-485c-a919-e0639d426d33
+# ╠═38590154-c38f-4c25-9e30-f6a5ceb4b578
+# ╠═57232842-7f1b-4b4a-819c-842cb5192c7f
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
