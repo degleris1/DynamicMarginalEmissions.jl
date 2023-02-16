@@ -7,6 +7,11 @@ PATH_GEN = joinpath(NREL_DIR, "Time_Series/TIMESERIES_DAUC_GEN_V1.csv")
 
 NREL_FUEL_MAP = Dict("Steam" => 'C', "Gas" => 'G')
 
+"""
+    get_nrel_data(date)
+
+Get network data for the 2018 dataset.
+"""
 function get_nrel_data(date)
     node = get_node_params()
     gen = get_gen_params(node.id_map)
@@ -20,6 +25,11 @@ function get_nrel_data(date)
 end
 
 
+"""
+    get_node_params()
+
+Get nodal parameters from the 2018 datasets.
+"""
 function get_node_params()
     cleanup(xi) = typeof(xi) <: Real ? xi : Base.parse(Float64, strip.(xi))
 
@@ -37,6 +47,11 @@ function get_node_params()
     return (name=busnames, region=regions, id_map=id_map, nickname=nickname, lat=lat, lon=lon)
 end
 
+"""
+    get_gen_params(id_map)
+
+Get generator parameters for the 2018 dataset.
+"""
 function get_gen_params(id_map)
     # How are we going to get heat rates?
     # One option: divide cost by price of fuel
@@ -88,6 +103,12 @@ function get_gen_params(id_map)
     return (params..., B=B)
 end
 
+
+"""
+    get_storage_params(id_map)
+
+Get storage parameters for the 2018 dataset.
+"""
 function get_storage_params(id_map)
     df = DataFrame(XLSX.readtable(PATH_NETWORK, "ESS")...)
 
@@ -105,6 +126,11 @@ function get_storage_params(id_map)
     return (bus=bus, C=C, P=P, ηc=ηc, ηd=ηd, S=S)
 end
 
+"""
+    get_line_params(id_map)
+
+Get transmission line parameters for the 2018 dataset.
+"""
 function get_line_params(id_map)
     df = DataFrame(XLSX.readtable(PATH_NETWORK, "Line")...)
 
@@ -123,6 +149,11 @@ function get_line_params(id_map)
     return (src=src, snk=snk, β=β, fmax=fmax, A=A)
 end
 
+"""
+    get_dynamic_demand(date, id_map)
+
+Get demand for each node for all hours throughout the day.
+"""
 function get_dynamic_demand(date, id_map)
     @assert year(date) == 2018
 
@@ -130,8 +161,6 @@ function get_dynamic_demand(date, id_map)
     df_load = DataFrame(CSV.File(PATH_LOAD))
     d = dayofyear(date)
     row = (d-1)*24 + hour(date) + 1
-    #_f = r -> DateTime(2018, r.Month, r.Day, r.Period-1) == date
-    #row = findfirst(_f, eachrow(df_load))
 
     # Create demand vector
     d = zeros(length(id_map))
@@ -142,6 +171,11 @@ function get_dynamic_demand(date, id_map)
     return d
 end
 
+"""
+    get_dynamic_gmax(date, gen_params)
+
+Get maximum generator capacities over 24 hours.
+"""
 function get_dynamic_gmax(date, gen_params)
     @assert year(date) == 2018
     gmax = deepcopy(gen_params.gmax)
@@ -150,8 +184,6 @@ function get_dynamic_gmax(date, gen_params)
     df_gen = DataFrame(CSV.File(PATH_GEN))
     d = dayofyear(date)
     row = (d-1)*24 + hour(date) + 1
-    #_f = r -> DateTime(2018, r.Month, r.Day, r.Period-1) == date
-    #row = findfirst(_f, eachrow(df_gen))
 
     # Update max capacities
     gens = names(df_gen[row, 5:end])

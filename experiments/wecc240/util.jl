@@ -39,9 +39,21 @@ FUEL_EMISSIONS = Dict('G' => 53.0, 'C' => 97.0, 'R' => 0.0)
 include("dataset_2004.jl")
 include("nrel.jl")
 
+"""
+    formulate_and_solve_dynamic(
+        date, 
+        T; 
+        Z=Z, 
+        line_max=line_max, 
+        line_weight=line_weight, 
+        use_NREL_network=use_NREL_network,
+        added_storage=0.0,
+        renewable_factor=1.0,
+        demand_factor=1.0, 
+    )
 
-
-
+Instantiate and solve the dynamic problem. 
+"""
 function formulate_and_solve_dynamic(
     date, 
     T; 
@@ -157,6 +169,20 @@ function formulate_and_solve_dynamic(
     )
 end
 
+"""
+    formulate_and_solve_static(
+        date; 
+        Z=Z, 
+        line_max=line_max, 
+        line_weight=line_weight, 
+        use_NREL_network=use_NREL_network,
+        added_storage=0.0,
+        renewable_factor=1.0,
+        demand_factor=1.0,
+    )
+
+Instantiate and solve static problem.
+"""
 function formulate_and_solve_static(
     date; 
     Z=Z, 
@@ -208,8 +234,12 @@ function formulate_and_solve_static(
     return (g=g, p=p, λ=λ, d=d, gmax=gmax, pmax=pmax, status=string(pmp.problem.status))
 end
 
+"""
+    scale_renewables(renewable_factor, gmax, fuel) 
+
+Scale renewable penetration.
+"""
 function scale_renewables(renewable_factor, gmax, fuel)
-    k = length(gmax)
     renewables = get_renewables(fuel)
 
     new_gmax = copy(gmax)
@@ -218,11 +248,21 @@ function scale_renewables(renewable_factor, gmax, fuel)
     return new_gmax
 end
 
+"""
+    get_renewables(fuel)
+
+Get all the renewable generation.
+"""
 function get_renewables(fuel)
     k = length(fuel)
     return filter(i -> occursin("PV", fuel[i]) || occursin("Wind", fuel[i]), 1:k)
 end
 
+"""
+    get_F_and_pmax()
+
+Gather the matrix F and pmax
+"""
 function get_F_and_pmax()
     case = make_static_case(DateTime(2018, 01, 01, 00))
     F = make_pfdf_matrix(case.A, case.β)
@@ -245,9 +285,9 @@ function get_costs(heat, fuel, fuel_costs)
 end
 
 """
-    make_static_case(hour, day, month, year=2004)
+    make_static_case(date; use_NREL_network=false)
 
-Return data for specifying a static case (no storage or ramping).
+Return data for a static case (no storage or ramping).
 """
 function make_static_case(date; use_NREL_network=false)
     @assert year(date) in [2004, 2018]
@@ -259,6 +299,11 @@ function make_static_case(date; use_NREL_network=false)
     end
 end
 
+"""
+    _make_static_case2018(date)
+
+Return data for the 2018 static case at a given date.
+"""
 function _make_static_case2018(date)
     params = get_nrel_data(date)
 
@@ -287,6 +332,11 @@ function _make_static_case2018(date)
     return case
 end
 
+"""
+    _make_static_case2004(date; use_NREL_network=false)
+
+Return data for the 2004 case at a given date.
+"""
 function _make_static_case2004(date; use_NREL_network=false)
     df = load_wecc_240_dataset()
 
@@ -330,7 +380,7 @@ end
 
 
 """
-    make_dynamic_case(hour, day, month, duration, year=2004)
+    make_dynamic_case(date, T; use_NREL_network=false)
 
 Return data for specifying a dynamic case, for a given duration T in number of timesteps.
 """
@@ -344,6 +394,11 @@ function make_dynamic_case(date, T; use_NREL_network=false)
     end
 end
 
+"""
+    _make_dynamic_case2018(date, T, δ=1e-4)
+
+Return data for the 2018 dynamic case at a given date, for a duration `T` in number of timesteps.
+"""
 function _make_dynamic_case2018(date, T, δ=1e-4)
     params = [get_nrel_data(date + Hour(t)) for t in 0:(T-1)]
 
@@ -379,6 +434,11 @@ function _make_dynamic_case2018(date, T, δ=1e-4)
     return case
 end
 
+"""
+    _make_dynamic_case2004(date, T, δ=1e-4; use_NREL_network=false)
+
+Return data for the 2004 dynamic case at a given date, for a duration `T` in number of timesteps.
+"""
 function _make_dynamic_case2004(date, T, δ=1e-4; use_NREL_network=false)
     df = load_wecc_240_dataset()
 
@@ -401,13 +461,11 @@ function _make_dynamic_case2004(date, T, δ=1e-4; use_NREL_network=false)
 
     # Demand and Generator data
     # Needs to be extracted at every time step
-    # TODO: make sure this is the case
     d_dyn = [] 
     gmin_dyn = []
     gmax_dyn = []
     ramp_dyn = []
 
-    # TODO: look for a better way to keep variables outside of for loops
     B = nothing
     heat = nothing
     fuel = nothing
@@ -431,8 +489,6 @@ function _make_dynamic_case2004(date, T, δ=1e-4; use_NREL_network=false)
     co2_rates = get_costs(heat, fuel, FUEL_EMISSIONS)
 
     # Storage data
-    # TODO: clarify the meaning of each parameter
-    # TODO: make vector-valued efficiencies compatible with the code
     efficiency, s_capacity, s_rate, _ = get_storage_data(df.storage)
     S = map_nodes*get_storage_map(df.storage, node_ids)
 
@@ -447,7 +503,7 @@ end
 
 
 """
-    get_map_nodes(node_ids_04, node_ids_nrel, nicknames_04)
+    get_map_nodes(ode_ids_04, node_ids_nrel)
 
 Returns a matrix that maps the nodes from the 2004 to the 2018 dataset. 
 """

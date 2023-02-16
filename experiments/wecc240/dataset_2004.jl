@@ -49,7 +49,7 @@ function get_demand_map(hour, day, month, year, df_demand)
 end
 
 """
-    get_generator_data(demand_map, df_gen)
+    get_generator_data(demand_map, node_ids, df_gen, df_heat)
 
 Return the generator-node map `B`, the minimum outputs `gmin`, the maximum outputs `gmax`, 
 the ramp rates `ramp`, the heat rates `heat`, and the fuel types `fuel`. Note that not
@@ -106,7 +106,7 @@ function get_generator_data(demand_map, node_ids, df_gen, df_heat)
 end
 
 """
-    make_demand_vector(demand_map, df_participation)
+    make_demand_vector(demand_map, nodes, df_participation)
 
 Construct a vector containing demand at each node.
 """
@@ -123,7 +123,7 @@ function make_demand_vector(demand_map, nodes, df_participation)
 end
 
 """
-    get_storage_map(storage_nodes, nodes)
+    get_storage_map(df_storage, nodes)
 
 Constructs matrix that maps storage data to vector-valued quantities
 compatible with the codebase.
@@ -165,7 +165,7 @@ end
 Return incidence matrix, line susceptances, line capacities, and line hurdle rates.
 """
 function get_network_structure(df_branch)
-    node_names, node_ids, _ = get_node_info(df_branch)
+    node_names, _, _ = get_node_info(df_branch)
     n, m = length(node_names), nrow(df_branch)
 
     β = abs.(1 ./ df_branch.reactance)
