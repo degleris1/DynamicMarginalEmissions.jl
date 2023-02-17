@@ -1,8 +1,18 @@
 ### A Pluto.jl notebook ###
-# v0.18.1
+# v0.19.4
 
 using Markdown
 using InteractiveUtils
+
+# This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
+macro bind(def, element)
+    quote
+        local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
+        local el = $(esc(element))
+        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
+        el
+    end
+end
 
 # ╔═╡ 0ae79723-a5cf-4508-b41d-9622948185a9
 using Pkg; Pkg.activate("")
@@ -27,25 +37,20 @@ using Statistics
 # ╔═╡ 31aedaa9-2d5c-4ddf-acfa-8b836a252f70
 using CarbonNetworks
 
-# ╔═╡ 0f7e3ce7-9cf2-46ea-926b-43b7601246f7
-using StringDistances
+# ╔═╡ 4d52befa-c24c-4ad0-b975-376b8c8af3d2
+using Dates
 
-# ╔═╡ 7a42f00e-193c-45ea-951f-dcd4e1c1975f
-using CairoMakie
+# ╔═╡ 92a7dddf-a46e-4d42-9ca2-4d8b2e891b50
+using Plots
 
-# ╔═╡ 5cb1709a-eda0-41b3-8bff-f58c19608be5
+# ╔═╡ a4577627-0a2b-403d-8558-4ccbf0622749
+using LinearAlgebra
+
+# ╔═╡ 8876dc66-7d6d-48ac-94d5-5dd489e81b87
+using LaTeXStrings
+
+# ╔═╡ 620e86a8-60ab-4aa3-b313-29ab83ef5f4e
 using PlutoUI
-
-# ╔═╡ 2d3cf797-4cc2-4aad-bc3e-94f5474e99f9
-begin
-	using GeoMakie
-	using GeoMakie.GeoInterface
-	using GeoMakie.GeoJSON
-	using Downloads
-end
-
-# ╔═╡ d1eef849-92ea-49ed-b05e-c4e055a85c2c
-using LinearRegression
 
 # ╔═╡ cab761be-ee1b-4002-a187-df72c29d9771
 # equivalent to include that will replace it
@@ -67,6 +72,9 @@ end;
 # ╔═╡ 113b99d8-0708-4da8-a8d6-7c60734e4a31
 util = ingredients("util.jl")
 
+# ╔═╡ f354a0e5-5e4f-40ab-807d-f9f19e74d378
+analysis = ingredients("analysis_utils.jl")
+
 # ╔═╡ f13e5dea-33b9-45c0-876e-42654fe6a8c7
 util.FUEL_EMISSIONS
 
@@ -84,632 +92,518 @@ DATA_DIR = config["data"]["GOOGLE_DRIVE"]
 # ╔═╡ 45c73bb3-eecf-4b92-8e91-6a4c83addfdc
 RESULTS_DIR = config["data"]["SAVE_DIR"]
 
-# ╔═╡ ae02b617-f2d0-4fa6-86f9-3a6e4088a803
+# ╔═╡ efc7f458-1bbd-45e9-b05a-a076eee7a90c
+run_names = ["july18_static", "july18_dynamic", "year18_dynamic"]
+
+# ╔═╡ 00c39925-e3a4-4d5e-9a00-e950c711648e
+paths = [joinpath(DATA_DIR, "results240", name) for name in run_names]
+
+# ╔═╡ e055e21b-166b-41f6-83d7-1ebf5e2626da
+cases = [BSON.load(joinpath(p, "case.bson"), @__MODULE__) for p in paths];
+
+# ╔═╡ ede8ffc2-2a2a-4a09-b702-610270f24491
+results = map(analysis.load_results, paths);
+
+# ╔═╡ 11aef0e7-372d-4b3b-845d-e63bc620b5f9
+idx = 3
+
+# ╔═╡ f2197b5f-562a-435a-88a4-fc26415e77a9
+n_nodes = size(cases[idx][:A], 1);
+
+# ╔═╡ 6b3a9e01-e14c-488d-bde5-7eae4e8e87e0
+n_gens = size(cases[idx][:B], 2)
+
+# ╔═╡ ae72be0b-b54f-47bd-9888-ad297463bb38
+md"""
+We are analyzing the dataset: $(run_names[idx])
+"""
+
+# ╔═╡ 24a57eb1-8761-4e03-9f36-3f5823ca703d
+md"""
+## Todo
+- net demand (i.e. substract the renewable generation at each node from demand)
+- hour of day
+"""
+
+# ╔═╡ 2e5e38fc-2a85-4cdb-9f30-b5100503d10c
+md"""
+## Total MEF for the dynamic model
+"""
+
+# ╔═╡ 083f1edc-06cf-413e-b187-df6d23b51850
+alldates = d -> true
+
+# ╔═╡ f0999280-9383-41ba-803b-840dcca60de5
+dates = sort(collect(keys(results[idx])))
+
+# ╔═╡ 81898fc0-be77-4941-848e-581fb8cfb1ed
+# collect total mefs
+mefs = analysis.get_nodal_mefs(results[idx], alldates; hybrid_mode=false);
+
+# ╔═╡ 38c99b5d-a25a-4c0e-8908-961247d7e722
+mefs_obs = analysis.get_nodal_mefs(results[idx], alldates; hybrid_mode=false, observed=true);
+
+# ╔═╡ dfbf46a2-8a02-4c77-b757-6a7546a36f1f
+hours = [h for _ in 1:length(dates) for h in 1:24];
+
+# ╔═╡ c8c8d968-7e5b-4edf-8fec-2a7625b119a3
+# representing total mefs
 begin
-	fnm_static = "wecc240_static_results_initialCode.bson"
-	fnm_dynamic = "wecc240_dynamic_results_COND50_initialCode.bson"
+	plot(transpose(mefs), color=:gray, legend=false)
+	ylims!(-100, 1e4)
+	xlabel!("Time [hr]")
+	ylabel!("MEF []")
+	title!("Total mef over time for each node")
 end
 
-# ╔═╡ 6de86962-a420-4885-ae7a-18748549c4c2
-path = joinpath(DATA_DIR, fnm_static)
-
-# ╔═╡ 2757231c-ef30-417a-87dd-7d155049ba47
-data = BSON.load(path, @__MODULE__);
-
-# ╔═╡ 37b3f4ba-9fb0-4285-aa33-f9905414c764
-results = data[:results];
-
-# ╔═╡ 8cab03dd-f034-443f-9a60-32aa87d1fde5
-path_dyn = joinpath(DATA_DIR, fnm_dynamic)
-
-# ╔═╡ 83e2c12a-fe36-4123-baf3-0e8c1bdecead
-data_dyn = BSON.load(path_dyn, @__MODULE__);
-
-# ╔═╡ 704175e9-921e-42ea-877f-35ce07610b8a
-results_dyn = data_dyn[:results];
-
-# ╔═╡ e3288d1f-4b66-49d5-9270-57827151a361
-nodes = data[:meta].node_names
-
-# ╔═╡ b4f91614-ada2-4961-8913-96855f7ca81b
-md"""
-## Load substation data
-"""
-
-# ╔═╡ 0f0b8da3-30b6-4166-aab8-322ee320e971
-"""
-Assign a geographical coordinate to nodes in the network. 
-"""
-
-# ╔═╡ bfb33d19-ceca-4a3a-87d0-d75960cd4544
+# ╔═╡ f5e407e6-fa2c-4825-a7fe-6690bf6ad06c
+# representing observed mef
 begin
-wecc_states = uppercase.(["ca", "or", "wa", "nv", "mt", "id", "wy", "ut", "co", "az", "nm"])
-substations = let
-df = DataFrame(CSV.File(joinpath(DATA_DIR, "substations.csv")))
-filter!(r -> !ismissing(r.STATE) && r.STATE in wecc_states, df)
-end;
-end;
-
-# ╔═╡ a0591816-88a4-4144-9d43-09f1205614af
-function get_coords(node)
-	 _, i = findnearest(
-		 rstrip(node[1:end-10]), 
-		 coalesce.(substations.NAME, ""), 
-		 DamerauLevenshtein()
-	 )
-	 return substations.LATITUDE[i], substations.LONGITUDE[i]
-end;
-
-# ╔═╡ 5392f525-ecb3-47c7-a32f-73a6b02967df
-begin
-x = [c[2] for c in get_coords.(nodes)]
-y = [c[1] for c in get_coords.(nodes)]
-end;
-
-# ╔═╡ d2bacf4a-af37-4ff9-bebb-3dc3d06edd8a
-md"""
-## Average MEFs
-"""
-
-# ╔═╡ 3c9f279c-ca03-4a8d-b9bc-3ad3668b76f7
-is_valid = [d.status for d in results] .== MathOptInterface.OPTIMAL;
-
-# ╔═╡ 29d3d70d-03d2-4883-9efd-ff382afef4af
-mefs = [v ? d.λ : missing for (d, v) in zip(results, is_valid)];
-
-# ╔═╡ cfcc5416-2038-48c4-a2b0-bcd92b574441
-demands = [v ? d.d : missing for (d, v) in zip(results, is_valid)];
-
-# ╔═╡ ad687e9a-9d7b-4990-9772-d9cfafe26421
-begin
-	node1 = 195
-	node2 = 50
+	plot(transpose(mefs_obs), color=:gray, legend=false)
+	ylims!(-100, 1e4)
+	xlabel!("Time [hr]")
+	ylabel!("MEF []")
+	title!("Observed mef over time for each node")
 end
 
-# ╔═╡ cbc71e2e-0bd1-441c-bf17-c60053a60795
+# ╔═╡ b7a82318-2999-42c0-975f-079b28104684
 md"""
-## Plot!
+### For a given node: 
 """
 
-# ╔═╡ 59316c15-a94c-4c56-a30a-0e6c23629de7
-hour = 6
+# ╔═╡ 0fdee674-965a-4f9b-9f52-aff2efe935f8
+node = 200
 
-# ╔═╡ 161fcf67-b65b-4661-bc9e-ff714268b444
-λ = mean(skipmissing(mefs[hour, :]))[:, 1]
-
-# ╔═╡ 2c0c2056-01a0-48eb-852d-92a172703975
-all_λs = reduce(vcat, skipmissing(mefs[hour, :]))[:, 1]
-
-# ╔═╡ a9362a09-277b-4e97-9e66-d6df99f18a70
-all_mefs_a = [m[node1] for m in skipmissing(mefs[hour, :])]
-
-# ╔═╡ fe91b3ba-3159-48b0-a3d5-7af7bfe6fc34
-all_mefs_b = [m[node2] for m in skipmissing(mefs[hour, :])]
-
-# ╔═╡ 7ffbe1bc-8cc6-4033-a70b-880209164199
-function fig_map(fig = Figure(resolution=(450, 300), fontsize=10))
-	# Everthing in === is from https://lazarusa.github.io/BeautifulMakie/GeoPlots/geoCoastlinesStatesUS/
-	# ===========
-    ax = Axis(fig[1,1])
-	
-	states_url = "https://raw.githubusercontent.com/PublicaMundi/MappingAPI/master/data/geojson/us-states.json"
-    states = Downloads.download(states_url)
-    states_geo = GeoJSON.read(read(states, String))
-    n = length(GeoInterface.features(states_geo))
-
-    trans = Proj4.Transformation("+proj=longlat +datum=WGS84", "+proj=latlong", 
-        always_xy=true) 
-	
-    # see https://proj.org/operations/projections/index.html for more options 
-    # all input data coordinates are projected using this function
-    ax.scene.transformation.transform_func[] = Makie.PointTrans{2}(trans)
-	
-    xlims!(ax, -125, -100)
-	ylims!(ax, 32, 51)
-    
-	# now the plot 
-    lines!(ax, GeoMakie.coastlines(), color = :black)
-    poly!(ax, states_geo, color=(:lightgray, 0.2), 
-		colormap = :plasma, strokecolor = :black, 
-        strokewidth = 1, overdraw = true)
-	# ============
-
-	
-	# and my part
-	
-	# Edges
-	A = data[:case].A
-	for j in 1:size(A, 2)
-		fr = findfirst(==(-1), A[:, j])
-		to = findfirst(==(1), A[:, j])
-
-		lines!(ax, [x[fr]; x[to]], [y[fr]; y[to]], 
-			color=(:black, 0.08))
-	end
-
-	# Nodes
-	sct = scatter!(ax, x, y, markersize=8, marker=:hexagon, color=λ/1e3, 
-		colormap=:jet1, colorrange=(-0.25, 1.5))
-
-	# Colorbar
-	cb = Colorbar(fig[1, 2], sct, label="Marginal Emissions Rate [ton CO2 / MWh]")
-
-	ax.xticks = [-150]
-	ax.yticks = [20]
-	ax.title = "WECC 2004: Average Nodal MEFs at Hour $hour"
-
-	cb.tellheight = true
-	
-    return fig, ax
+# ╔═╡ 8d206091-89b8-49c3-af53-95a262298426
+begin
+	p_ = plot()
+	plot!(mefs[node, :], label="true")
+	plot!(mefs_obs[node, :], label="observed")
+	xlabel!("Time")
+	ylabel!("MEF")
+	ylims!(-100, 2000)
+	xlims!(200, 400)
+	p_
 end
 
-# ╔═╡ 07268e37-5b62-4ab3-8d0d-5bab2286cdbe
-fig_map()[1];
+# ╔═╡ 7bbd7076-5a16-4914-8118-0d9238f75569
+begin
+	mefs_nodes_days = [reshape(mefs[n, :], (24, Int(length(mefs[n, :])/24))) for n in 1:n_nodes]
+	mean_ = mean(mefs_nodes_days[node], dims=2)
+	std_ = std(mefs_nodes_days[node], dims=2);
+	plot(mean_ - std_, fillrange=mean_ .+ std_, fillalpha = .3, label="std range")
+	plot!(mean_, label="mean", lw=2)
+	xlabel!("Hour of day")
+	ylabel!("MEF")
+end
 
-# ╔═╡ e5e10f07-1001-4438-b32d-c1f25cce04b1
+# ╔═╡ e8fee23c-dc1a-430a-b896-31f09c4c503e
 md"""
-## Analyze dynamic data
+## Compute regression-based and observed MEFs
 """
 
-# ╔═╡ b90eb7df-a78c-4bc5-ae3b-41f62e38da54
-total_mef(λ) = sum(λ, dims=1)[1, :][hour]
+# ╔═╡ 1bed3bbb-7411-441c-8028-f4dc91b0f1aa
+md"""
+confusion: 
+- observed MEF can be defined as the diagonal of the mef matrix
+- then can also be defined as the approximation by linear regression at that given hour
 
-# ╔═╡ d4d509bd-8f96-4da3-917f-a65acb569953
-nodal_mef_dyn(n) = reduce(vcat, [total_mef(results_dyn[d].λ[n, :, :]) for d in 1:365])
+Can you extract and analyze both of them? 
+"""
 
-# ╔═╡ d1f26911-bd79-4ce6-b0d8-218f8a772840
-all_λs_dyn = reduce(hcat, [nodal_mef_dyn(n) for n in 1:length(nodes)]);
+# ╔═╡ a1da5ecd-219d-4e4e-b39d-1addddc89f13
+demand = analysis.get_demand(results[idx]);
 
-# ╔═╡ b53cc8dd-c36e-4cf8-9f1d-473a0e985234
-function fig_distr(fig = Figure(resolution=(300, 300)))
-	ax = Axis(fig[1, 1])
-	hidedecorations!(ax, ticks=false, ticklabels=false, label=false)
-	
-	kwargs = (strokewidth=1, strokecolor=:black, direction=:y)
-	density!(ax, all_mefs_a/1e3; offset=4.0, kwargs...)
-	density!(ax, all_mefs_b/1e3; offset=2.0, kwargs...)
-	density!(ax, all_λs/1e3; color=(:slategray, 0.7), kwargs...)
+# ╔═╡ 66caf393-88ce-4e6c-9a4a-afdfa7b24304
+Δd = diff(demand, dims=2);
 
-	kwargs = (direction=:y,)
-	density!(ax, nodal_mef_dyn(node1)/1e3; color=(:red, 0.2), offset=4, kwargs...)
-	density!(ax, nodal_mef_dyn(node2)/1e3; color=(:red, 0.2), offset=2, kwargs...)
-	density!(ax, reshape(all_λs_dyn, :)/1e3; color=(:red, 0.2), kwargs...)
+# ╔═╡ 576e6a18-eb15-4578-9bda-569c1397a8d3
+co2_rates = cases[2][:co2_rates];
 
-	kwargs = (linewidth=4, color=:black)
-	hlines!(ax, [mean(all_mefs_a)/1e3]; xmin=4/6, kwargs...)
-	hlines!(ax, [mean(all_mefs_b)/1e3]; xmin=2/6, xmax=4/6, kwargs...)
-	hlines!(ax, [mean(all_λs)/1e3]; xmax=2/6, kwargs...)
-	
+# ╔═╡ 112eb399-f273-42a0-a6b6-52ce543bc696
+E = analysis.get_total_emissions(results[idx], transpose(co2_rates));
 
-	ylims!(ax, -0.25, 1.5)
-	ax.ylabel = "MEF [ton CO2 / MWh]"
-	
-	
-	xlims!(ax, 0, 6)
-	ax.xlabel = "Frequency"
-	ax.xticks = [0, 2, 4]
-	ax.xtickformat = xs -> ["All", "LA", "SF"]
+# ╔═╡ 9b4e015d-a0b6-4046-b9c7-9f12b93d84fa
+length(sort(collect(keys(results[idx]))))
 
-	return fig, ax
+# ╔═╡ 98e1f152-67c7-43d2-b3b5-68bbc322478d
+plot([sum(demand[:, i]) for i in 1:size(demand, 2)], label=false, xlabel="Time", ylabel="Demand")
+
+# ╔═╡ a003c654-7072-4e3f-9aa8-154c0efa565c
+begin
+	plot(E, legend=false)
+	xlabel!("Time")
+	ylabel!("Total emissions across the network")
 end
 
-# ╔═╡ e1a1acda-1d52-45bd-8257-8b7249318c9b
-fig_distr()[1];
+# ╔═╡ fb6a6791-c704-43f1-9784-1cd17dfa7858
+ΔE = diff(E, dims=1);
 
-# ╔═╡ c6f2eb39-a0e6-44bf-8649-f25ef72961a4
-full_figure = let
-	fig = Figure(resolution=(650, 300), fontsize=10)
+# ╔═╡ 9323dbf3-6a22-476a-8186-766fe1515c18
+function get_R2(preds, y)
+	res = preds - y 
+	R2 = 1 - res'*res/sum((y .- mean(y)).^2)
+	return R2
+end;
 
-	f1, ax1 = fig_distr(fig[2, 1])
-	f2, ax2 = fig_map(fig[2, 2])
-
-
-	colsize!(fig.layout, 1, Auto(0.5))
-	
-	ax2.title = ""
-	ax1.ylabel = "Marginal Emissions Rate [ton CO2 / MWh]"
-
-	for (label, layout) in zip(["A", "B"], [fig[2, 1], fig[2, 2]])
-    	Label(layout[1, 1, TopLeft()], label,
-	        textsize = 18,
-			font="Noto Sans Bold",
-	        padding = (0, 0, 5, 0),
-	        halign = :right
-		)
-	end
-
-	Label(fig[1, 1:2], "WECC 2004: Nodal MEFs at Hour $hour", 
-		textsize=12,
-		padding=(0, 0, 0, 0),
-		valign=:bottom
+# ╔═╡ 26d698fe-c2da-4a34-b446-4dd4dfacf861
+function plot_preds(preds, y)
+	p = scatter(preds, y, legend=false, alpha=.2)
+	plot!(
+		LinRange(minimum(y), maximum(y), 10), 
+		LinRange(minimum(y), maximum(y), 10), 
+		ls=:dash, lw = 3
 	)
-	rowgap!(fig.layout, 1, 6)
+	ylabel!("ΔE real")
+	xlabel!("ΔE predicted")
+	return p
+end;
 
+# ╔═╡ 01805ad9-0d4c-4d8e-8f79-69da710a3d2f
+scatter_alpha=.2
 
+# ╔═╡ cab3f6a6-f982-459f-9fa0-8cc7290cd29e
+node_filt = [k for k in 1:n_nodes if k!= node]
 
-	fig
+# ╔═╡ ec0278e1-0300-4842-80f0-857b414867a9
+μ = 1
+
+# ╔═╡ ad960911-9354-4a31-bcbc-f1f0a95482ae
+md"""
+### Analysis of regression-based mefs estimation
+"""
+
+# ╔═╡ dede3a80-c551-4673-97d4-66640ac0023b
+md"""
+## Same analysis, but with two groups
+"""
+
+# ╔═╡ fd198417-f955-443f-b7bd-40b5106356eb
+hour_filt1 = 10 .<= hours[2:end] .<= 20;
+
+# ╔═╡ 7991857c-eef0-4536-89df-600131e188d6
+function get_reg_mefs(X, y, μ)
+	return inv(X'*X + μ*I(size(X, 2)))*X'*y
 end
 
-# ╔═╡ 5154fdd8-a58d-4faa-aced-7212ed0dc705
-save(joinpath(RESULTS_DIR, "wecc240_full_figure.pdf"), full_figure)
+# ╔═╡ 66ecb9fd-b976-432a-9df3-7a6a8618bc2e
+# linear regression on all nodes at once, over all timesteps lumped together
+begin
+	X = transpose(Δd); # matrix has many nodes with zero demand; therefore columns have to be filtered so as to use only the nodes with actual mef
+	idx_valid = vec(sum(X .=== missing, dims=2).== 0)
+	X_demand = X[idx_valid, :]
+	demand_nodes = findall(vec(sum(abs.(X_demand), dims=1)).!==0.0)
+	X_demand = X_demand[:, demand_nodes]
+	rank_ = rank(X_demand)
+	mef_opt = get_reg_mefs(X_demand, ΔE[idx_valid], μ)
+	mefs_reg = zeros(n_nodes)
+	mefs_reg[demand_nodes] .= mef_opt
+end;
 
-# ╔═╡ dfc765e0-39d3-4ae4-93f0-4f0406f9f358
-λ_dyn = mean(all_λs_dyn, dims=1)[1, :]
+# ╔═╡ 2e59c950-93e7-48d4-840c-c40f7296614d
+begin
+	# compute R2 for this regression
+	preds = X_demand*mef_opt
+	R2 = get_R2(preds, ΔE[idx_valid])
+end;
 
-# ╔═╡ 305bdb8a-e186-4c5a-b927-b7a406ac260a
+# ╔═╡ 05305b47-b71a-4452-96ca-ef809924d5c2
 md"""
-### Compare regression-based MEF vs exact differentiation-based MEFs
+The regression has predictive power: R^2 = $(round(R2 * 100)) %
 """
 
-# ╔═╡ 701285fc-887d-425c-98a3-1ee09235066f
+# ╔═╡ 4afd6719-cff9-4891-87a1-82405b07c084
+let
+	plot_preds(preds, ΔE[idx_valid])
+end
+
+# ╔═╡ ded35429-73ce-461c-9144-84741cabb512
+res_pred = transpose(Δd)[:, node_filt] * mefs_reg[node_filt];
+
+# ╔═╡ 07c3faea-d89b-4e88-98f6-21423aa8d202
+let
+	lw = 4
+	p = scatter(Δd[node, :], ΔE-res_pred, label=false, alpha=scatter_alpha)
+	xx = LinRange(minimum(skipmissing(Δd[node, :])), maximum(skipmissing(Δd[node, :])), 10)
+	plot!(xx, mefs_reg[node]*xx, lw=lw, label="Reg MEF=$(round(mefs_reg[node]))")
+	plot!(xx, mean(mefs[node, :])*xx, ls=:dash, lw=lw, label="Mean True MEF=$(round( mean(mefs[node, :])))")
+	xlabel!("Δd at node $(node)")
+	ylabel!(L"$\Delta E -\sum_{j\neq i} \Delta d_j \beta_j$")
+	title!("ΔE total wrt Δd at node $(node)")
+	p
+end
+
+# ╔═╡ 3dc3b990-1e8b-43b7-856a-17667c6be634
+# histogram
+let
+	bins = -1000:100:3000
+	histogram(mefs[node, :], bins=bins, alpha=0.4, label="True")
+	histogram!(mefs_obs[node, :], bins=bins, alpha=0.4, label="Observed")
+	plot!([mefs_reg[node]], seriestype="vline", label="Regression", lw=3)
+	plot!([median(mefs[node, :])], seriestype="vline", label="Median True", lw=3)
+	plot!([median(mefs_obs[node, :])], seriestype="vline", label="Median Observed", lw=3, color="firebrick")
+	xlabel!("MEF")
+	ylabel!("Counts")
+end
+
+# ╔═╡ 7833642f-5b87-4d1d-b311-72901851a58f
+let
+	u = median(mefs, dims=2)[demand_nodes]
+	p = sortperm(u)
+	scatter(u[p], label="median mef true")
+	scatter!(median(mefs_obs, dims=2)[demand_nodes][p], label="median mef obs")
+	scatter!(mefs_reg[demand_nodes][p], label="mef reg")
+	ylims!(0, 2000)
+	xlabel!("Node number")
+	ylabel!("MEF")
+	title!("MEFs of nodes, sorted according to true")
+end
+
+# ╔═╡ e3c716f3-0460-4b6b-a49a-f783a23950b8
+# linear regression on all nodes at once, over all timesteps lumped together
+begin
+	X_demand_g1 = X_demand[hour_filt1[idx_valid], :]
+	X_demand_g2 = X_demand[.!hour_filt1[idx_valid], :]
+	mefs_g1, mefs_g2 = zeros(n_nodes), zeros(n_nodes)
+	mefs_g1[demand_nodes] = get_reg_mefs(X_demand_g1, ΔE[idx_valid][hour_filt1[idx_valid]], μ)
+	mefs_g2[demand_nodes] = get_reg_mefs(X_demand_g2, ΔE[idx_valid][.!hour_filt1[idx_valid]], μ)
+end;
+
+# ╔═╡ 581b23b6-4850-4617-97b9-9775c2cad229
+begin
+	# get R2 for both subgroups
+	preds_g1 = X_demand_g1 * mefs_g1[demand_nodes]
+	R2_g1 = get_R2(preds_g1, ΔE[idx_valid][hour_filt1[idx_valid]])
+
+	preds_g2 = X_demand_g2 * mefs_g2[demand_nodes]
+	R2_g2 = get_R2(preds_g2, ΔE[idx_valid][.!hour_filt1[idx_valid]])
+
+end;
+
+# ╔═╡ 2e65831e-97e0-4b13-8e00-a8bc7741e026
 md"""
-Todo: 
-- demand map: estimate mef bsed on region-level demand and then map to nodal, compare with results from comptuations
+The prediction power for both subgroups are: 
+- Group 1: R2 = $(round(R2_g1*100)) %
+- Group 2: R2 = $(round(R2_g2*100)) %
 """
 
-# ╔═╡ 1d5d1c1c-050a-434e-a977-b8d2aea69b26
-# get the co2 costs if they were not saved
-co2_costs = util.get_costs(data[:case].heat, data[:case].fuel, util.FUEL_EMISSIONS);
+# ╔═╡ 9d314690-0f1d-46c8-92e8-72de962a580a
+# visualizing the prediction power
+let
+p1 = plot_preds(preds_g1, ΔE[idx_valid][hour_filt1[idx_valid]])
+p2 = plot_preds(preds_g2, ΔE[idx_valid][.!hour_filt1[idx_valid]])
+plot(p1, p2)
+end
 
-# ╔═╡ a34e32d8-3e18-4c22-87e2-032360661498
-g_opt = [[results_dyn[d].g[k].value for k in 1:24] for d in 1:365];
+# ╔═╡ 7d4a7daf-778e-4040-997a-be1cc95c75c0
+# histogram
+let
+	bins = -1000:100:3000
+	histogram(mefs[node, :], bins=bins, alpha=0.4, label="True")
+	# histogram!(mefs_obs[node, :], bins=bins, alpha=0.4, label="Observed")
+	plot!([mefs_g1[node]], seriestype="vline", label="Regression 1", lw=3)
+	plot!([mefs_g2[node]], seriestype="vline", label="Regression 2", lw=3)
+	# plot!([median(mefs[node, :])], seriestype="vline", label="Median True", lw=3)
+	# plot!([median(mefs_obs[node, :])], seriestype="vline", label="Median Observed", lw=3, color="firebrick")
+	xlabel!("MEF")
+	ylabel!("Counts")
+end
 
-# ╔═╡ fa51de9f-6f7a-4173-96d4-18f5f225aa1a
-E_tot = [[dot(co2_costs,g_opt[d][k]) for k in 1:24] for d in 1:365];
-
-# ╔═╡ be2f82a2-5c22-41a3-abe4-5a6f9de4e6d7
+# ╔═╡ 621c8dc3-fd4f-48da-9d49-cdad33941975
 md"""
-We want to compute, at a given hour, the changes in emissions and related them to changes in demand at a given node.
+# Extracting regression mef from a subset of node
 """
 
-# ╔═╡ 82ad33b1-3719-4aeb-9c82-1f8f1812ed61
-node1, node2
+# ╔═╡ 5b287f18-ab7a-4588-b231-b1b6f1315ddd
+th_cor = .99
 
-# ╔═╡ 7213814b-3dd9-4c8d-9f85-947a33d96e44
-# recontsruct the flows over the network
-function get_ps(case, results)
+# ╔═╡ a46a11ed-7433-4b36-baca-11f899755eca
+conn_nodes, XX = analysis.get_connected_clusters(X_demand, th_cor);
 
-	F = CarbonNetworks.make_pfdf_matrix(case.A, case.β)
+# ╔═╡ bef12ca3-b2f1-4a41-a343-0ac98b9155e7
+let
+	heatmap(XX.>=th_cor)
+	xlabel!("Node id")
+	ylabel!("Node id")
+end
 
-	ps = []
+# ╔═╡ 45335ae0-b302-4dfb-966f-b6cc0adb5dc7
+md"""
+we see we have $(length(conn_nodes)) clusters of connected nodes. We are expecting that these nodes have demands that vary nearly equally. 
 
-	for k in 1:length(results)
-		p_crt = []
-		for j in 1:length(results[k].g)
-			g_crt = results[k].g[j]
-			d_crt = results[k].d[j]
-			p = CarbonNetworks.evaluate(F*(d_crt - case.B*g_crt))
-			push!(p_crt, p)
-		end
-		push!(ps, p_crt)
+For instance, let us visualize the demand patterns of a given group
+"""
+
+# ╔═╡ 4b34e966-42b8-4d87-9e79-da678ab51b29
+plot([length(g) for g in conn_nodes])
+
+# ╔═╡ 7af9c674-ad8b-48e7-b228-42814129ece5
+md"""
+We see that for all groups, all curves actually collapse on one another. 
+"""
+
+# ╔═╡ c0869e4f-5960-40f7-8cf2-043fb7a95a84
+md"""
+Now, we can summarize each group by a single demand vector, the total demand across this group!
+"""
+
+# ╔═╡ 4042ad0a-0fe2-4c50-a5ef-692b24c9eae3
+# contains total Δd for each group
+X_demand_gp = hcat([sum(X_demand[:, nodes_gp], dims=2) for nodes_gp in conn_nodes]...);
+
+# ╔═╡ 265a5b81-f2a2-43d2-b1d0-007c6c39d104
+# linear regression on all nodes at once, over all timesteps lumped together
+begin
+
+	mef_gp = get_reg_mefs(X_demand_gp, ΔE[idx_valid], μ)
+	# mefs_reg = zeros(n_nodes)
+	# mefs_reg[demand_nodes] .= mef_opt
+end;
+
+# ╔═╡ dbbc2ca0-9121-40aa-8394-2af3b84bacc0
+md"""
+The MEF should represent, on average over this cluster, how much emissions change wrt a change in demand. Therefore it should be equal to the average mef in the group? (Maybe weighted average)?
+"""
+
+# ╔═╡ db3cf5fa-c088-40ab-bec0-0417ee4c9ba6
+@bind gp_id Slider(1:length(conn_nodes))
+
+# ╔═╡ a4179927-2b3a-46bb-9ca1-327dbbc3b44c
+idx_valid_demand = vec(sum(demand.===missing, dims=1) .==0);
+
+# ╔═╡ 0a1f8447-6c8b-45ff-875f-74748980d5f4
+d_gp = demand[demand_nodes, idx_valid_demand][conn_nodes[gp_id], :];
+
+# ╔═╡ ecec3381-2d36-4e2c-bb07-ee24681eb391
+begin
+	p = plot()
+	for k in 1:size(d_gp, 1)
+		plot!(d_gp[k, :]/d_gp[k, 1], alpha=.4, ls=:dash, legend=false)
 	end
-
-	return ps
+	xlims!(4000, 4100)
+	title!("Group $(gp_id), with $(size(d_gp,1)) nodes.")
+	p
 end
 
-# ╔═╡ ff851aef-904f-444a-afb4-f7ef7d7766c4
-ps_dyn = get_ps(data_dyn[:case], results_dyn);
+# ╔═╡ 39c546d6-c267-4b45-86fc-79426ae0d39e
+# factor in the weighted average
+ω = mean(d_gp./sum(d_gp, dims=1), dims=2)
 
-# ╔═╡ d9f9dda4-b559-44a4-9677-fbe967322b2b
-# get pmax - HARDCODED for now
-begin
-line_weight = 2.0
-line_max = 100.0
-Z = 1e3
-pmax = line_weight * min.(data_dyn[:case].fmax / Z, line_max);
-end;
+# ╔═╡ 624f9b72-7792-4b6f-b138-669751a749b3
+# weighted average mefs over the region
+weighted_mef_gp = ω'*mefs[conn_nodes[gp_id], :]
 
-# ╔═╡ 2ac72e25-e6f8-4468-be71-f64b3797a96c
-# gets the number of congested lines at each timestep
-congested = [[sum(abs.(ps_dyn[d][h]./pmax) .> .99) for h in 1:24] for d in 1:365];
-
-# ╔═╡ df45b862-8d94-4b71-951c-5d84a7d16af2
-# demand at the given hour over the year
-d_h = hcat([results_dyn[d].d[hour] for d in 1:365]...);
-
-# ╔═╡ 087a3ba0-14f4-4373-99f1-3dd2ccdb71b9
-gmax = hcat([results_dyn[d].gmax[k] for k in 1:24 for d in 1:365]...)
-
-# ╔═╡ 5ba56789-c1bb-4c1b-95cc-4943561434f4
-md"""
-Plotting all the generator data. 
-"""
-
-# ╔═╡ 44674366-5546-44b7-b6cc-b2476e3c8fc6
-begin
-	f = Figure()
-	ax = Axis(f[1,1], xlabel="time", ylabel="gmax/gmax(t=0)")
-	ng, _ = size(gmax)
-	for gid in 1:ng
-		lines!(gmax[gid, :]./gmax[gid, 1], color="gray")
-	end
-	f
-end
-
-
-# ╔═╡ 91b474ba-e955-416c-8bc7-aa2d9b88995f
-md"""
-
-## regression-based mef estimation
-"""
-
-# ╔═╡ e1b5c93e-9241-442b-a8ce-5c7d91809efc
-md"""
-Regressing over each node
-"""
-
-# ╔═╡ 13478bcb-c4fc-4532-a1ef-4513b15e3295
-# changes in emissions
-ΔE = [(E_tot[d][hour] - E_tot[d][hour-1]) for d in 1:365];
-
-# ╔═╡ 70723775-1912-48ed-9ae5-d4663d0f81d3
-# gather all the demand changes, at every node
-Δd = hcat([
-	[results_dyn[d].d[hour][n] - results_dyn[d].d[hour-1][n] for d in 1:365] 
-	for n in 1:length(nodes)
-]...);
-
-# ╔═╡ 1fba9a4a-8090-4fc5-a373-670ed04dfb4e
-# get the values for the scatter plot at the two nodes of interest
-
-begin
-xx1 = Δd[:, node1]
-xx2 = Δd[:, node2]
-end;
-
-# ╔═╡ 0df59933-2c53-46ae-88fe-a7fbd1b4b339
-lr_E = linregress(Δd, ΔE)
-
-# ╔═╡ 50acbd4b-1a02-4c55-b605-caf07f12bd74
-MEFs_reg = LinearRegression.slope(lr_E)
-
-# ╔═╡ 749ef6df-5909-4f40-a5ff-0ed7877de9ab
-lines(MEFs_reg)
-
-# ╔═╡ db737f8d-ed35-43c8-84fb-c7329763b3c1
-MEFs_reg[node1]
-
-# ╔═╡ 5e77a674-9ece-415e-abd5-2b244e47beb9
-md"""
-Regressing over demand regions.
-"""
-
-# ╔═╡ 3a472b5f-b6f4-462c-9e4e-513ff6b6e6c0
-df = util.load_wecc_240_dataset()
-
-# ╔═╡ 870d811d-ece6-4513-8f9a-558585d0d70a
-df.demand
-
-# ╔═╡ 18941712-b800-48c3-ad09-b16a0e5a8f9b
-demand_map = util.get_demand_map(1, 1, 1, 2004, df.demand)
-
-# ╔═╡ c81d94e7-0c70-44c7-8112-470fc51a0adb
-demand_map["10 SOUTHWST"]
-
-# ╔═╡ 64173d8e-b948-4061-bb55-d5d2c87e1fd2
-size(df.participation)
-
-# ╔═╡ 21b39b31-3936-43b8-a97f-80f8ad7b1aea
-length(demand_map)
-
-# ╔═╡ 8d7c5fd9-5325-481a-a572-ca4e8dcc8655
-regions = unique(Array(df.participation[:, "Region"]))
-
-# ╔═╡ adab0eb6-8c01-446e-8d65-cb87369ab0f1
-length(regions)
-
-# ╔═╡ 00c62ecd-2753-4895-ba3a-19d68561b680
-length(unique(collect(keys(demand_map))))
-
-# ╔═╡ 4c800043-fbfe-4940-8f89-9dc023f87141
-df.demand[1, "Year"]
-
-# ╔═╡ 2238db2f-3860-4abb-938a-8b771b0ee6d8
-# we want to create a vector of demands for all the regions only
-begin
-
-	demands_regions = []
-
-	for k in 1:size(df.demand)[1]
-		yr = df.demand[k, "Year"]
-		month = df.demand[k, "Month"]
-		day = df.demand[k, "Day"]
-		hr = df.demand[k, "Period"]
-
-		demand_map = util.get_demand_map(hr, day, month, yr, df.demand)
-
-		d_regions = [demand_map[rr] for rr in regions]
-
-		push!(demands_regions, d_regions)
-		
-	end
-	demands_regions = hcat(demands_regions...)
-end
-
-# ╔═╡ 4a1b69b6-1567-4199-9a32-b2019e88366c
-begin
-	_, nts = size(demands_regions)
-	ndays = Int(nts/24)
-	idx_hr = [hour+k*24 for k in 0:ndays-1]
-end
-
-# ╔═╡ 6f68dfa5-7f43-4ed0-baf0-683b8c14cc5b
-Δd_regions = transpose(hcat([demands_regions[:, idx] - demands_regions[:, idx-1] for idx in idx_hr]...))
-
-# ╔═╡ db354372-b117-4237-afc2-f68a98788f42
-length(ΔE)
-
-# ╔═╡ a61fa2b2-7304-426b-bdfe-6bb1c23f46c2
-md"""Q? why is the length 365 and not 366? I am guessing because feb 29th is omitted in the results? we can simply take it out of Δd_regions. 
-"""
-
-# ╔═╡ 90aa489d-3c50-4c4a-ac19-351de901fbe4
-md"""
-## add subtitle
-"""
-
-# ╔═╡ 28591eda-995f-4224-98b8-ca1eab27559e
-# only the diagonal terms in the mefs
-all_λs_obs_dyn = [[diag(results_dyn[d].λ[n, :, :]) for d in 1:365] for n in 1:length(nodes)];
-
-# ╔═╡ 8e1f0bef-459d-4598-a01a-e59e00f53247
-# collect the average observable mef from the dynamic model
-begin
-
-	λ_obs_1 = [all_λs_obs_dyn[node1][d][hour] for d in 1:365]
-	λ_obs_2 = [all_λs_obs_dyn[node2][d][hour] for d in 1:365]
-
-	λ_total_1 = all_λs_dyn[:, node1]
-	λ_total_2 = all_λs_dyn[:, node2]
-end;
-
-# ╔═╡ 34253cd5-3049-4651-a5f6-06807a2233bd
+# ╔═╡ 515c9225-87b4-424e-845c-cd6da662e25a
 let
-	f = Figure()
-	ax = Axis(f[1,1], xlabel="day", ylabel="number of congested lines")
-
-	lines!([congested[d][hour] for d in 1:365])
-	lines!(λ_total_1./1000)
-
-	ax = Axis(f[1,2], xlabel="total demand", ylabel="number congested lines")
-
-	scatter!(vec(sum(d_h, dims=1)), [congested[d][hour] for d in 1:365])
-	# ylims!(ax, -2000, 2000)
-
-	ax = Axis(f[2,2], xlabel="# congested lines", ylabel="λ true")
-
-	scatter!([congested[d][hour] for d in 1:365], λ_total_1)
-	ylims!(ax, -2000, 2000)
-
-
-	ax = Axis(f[2,1], xlabel="# congested lines", ylabel="observed mef")
-
-	scatter!([congested[d][hour] for d in 1:365], λ_obs_1)
-	ylims!(ax, -2000, 2000)
-	
-
-	
-	f
-
+	histogram(vec(weighted_mef_gp), label="Weighted avg MEF")
+	plot!([mef_gp[gp_id]], seriestype="vline", label="Regression group", lw=3)
+	plot!([median(mefs_reg[demand_nodes][conn_nodes[gp_id]])], seriestype="vline", label="Reg node, median in group", lw=3)
+	xlabel!("MEF")
+	ylabel!("Counts")
 end
 
-# ╔═╡ 6f2896ac-ecf6-4256-82e0-0a4070fa14af
-begin
-	f2 = Figure()
-	hist(f2[1, 1], λ_obs_1, bins = -1000:200:1000)
-	hist!(f2[1, 1], λ_total_1, bins = -1000:200:1000)
-	f2
-end
-
-# ╔═╡ 982d36b3-a7b6-4066-9441-9e02596423dd
+# ╔═╡ 8d333cbb-35ba-409e-aa0c-9791ceec722f
 let
-f = Figure()
-
-ax = Axis(f[1, 1], xlabel = "x label", ylabel = "y label",
-    title = "Title")
-for n = 1:length(nodes)
-	lines!(all_λs_dyn[:, n], color=:gray)
-end
-ylims!(ax, -1000, 4000)
-ax.title="All total MEFs over time"
-ax.xlabel="Day"
-ax.ylabel="MEF"
-f
+	histogram(mef_gp, alpha=.4)
+	histogram!(mefs_reg[demand_nodes], alpha=.4)
 end
 
-# ╔═╡ e834a7d2-5dd9-4995-b3c9-3c771673edaa
-let
-f = Figure()
-
-ax = Axis(f[1, 1], xlabel = "x label", ylabel = "y label",
-    title = "Title")
-
-lines!(λ_obs_1)
-lines!(λ_total_1, color=:red)
-ylims!(ax, -2000, 2000)
-f
-end
-
-# ╔═╡ b886963f-e1a9-4782-918c-f5009e57abc5
-let
-	f = Figure()
-	ax = Axis(f[1,1], xlabel="nodal demand", ylabel=" observed mef")
-
-	scatter!(d_h[node1, :], λ_obs_1)
-	ylims!(ax, -2000, 2000)
-
-	ax = Axis(f[1,2], xlabel="nodal demand", ylabel="true mef")
-
-	scatter!(d_h[node1, :], λ_total_1)
-	ylims!(ax, -2000, 2000)
-
-
-	ax = Axis(f[2,1], xlabel="total demand", ylabel="observed mef")
-
-	scatter!(vec(sum(d_h, dims=1)), λ_obs_1)
-	ylims!(ax, -2000, 2000)
-	
-	ax = Axis(f[2,2], xlabel="total demand", ylabel="true mef")
-
-	scatter!(vec(sum(d_h, dims=1)), λ_total_1)
-	ylims!(ax, -2000, 2000)
-	
-	f
-
-end
-
-# ╔═╡ bd656131-eb56-467d-8f98-5e8de88266c3
+# ╔═╡ dc7ebc3f-38bb-4416-a488-7035ad34d1e8
 md"""
-There clearly are two populations. Therefore you want to: 
-- classify the points wrt them being in group 1 or 2
-- run different linear regressions based on the group they're in
-- compare those different regressions.
-
-the very simple answer for now is to do: 
-- smaller than X in group 0
-- larger than X is group 1
+## Orders of magnitude of estimated MEFS with these methods
 """
 
-# ╔═╡ e91052d7-1ca0-4ff5-aae4-1b8ace8f93cf
-begin
-	cutoff1 = 500
-	assign_group(cutoff, x) = x > cutoff ? 1 : 0;
-
-	group1 = assign_group.(cutoff1, λ_obs_1)
+# ╔═╡ 6166cad7-1b60-4df2-95d3-1974d297dce0
+let
+	bins = -1000:100:3000
+	alpha=0.4
+	histogram(mean(mefs, dims=2), bins=bins, alpha=alpha, label="True")
+	histogram!(mefs_reg, bins=bins, alpha=alpha, label="Reg")
+	xlabel!("MEF")
+	ylabel!("Counts")
+	title!("Average values over all timesteps")
 end
 
-# ╔═╡ 6377fd8f-7b2b-4720-bf3a-a542075bcedd
-lines(group1)
+# ╔═╡ a757ff7e-402d-4ba3-9ecd-f2e1cd539a6e
+hours_filt_day = 10 .< (1:24) .< 20
 
-# ╔═╡ 2dd6a4cb-42ab-4c82-be5e-529c763059c2
-Bool.(group1)
+# ╔═╡ 7ee50896-add5-4e32-a72c-5470ce6c7849
+true_mefs_g1 = [mean(mean(mefs_[hours_filt_day, :], dims=2)) for mefs_ in mefs_nodes_days]
 
-# ╔═╡ 4d032e76-afe0-4b6b-bed2-bf1df1362dc5
+# ╔═╡ 984d0af5-0afc-4146-b570-0d6a0547f3b8
+true_mefs_g2 = [mean(mean(mefs_[.!hours_filt_day, :], dims=2)) for mefs_ in mefs_nodes_days]
+
+# ╔═╡ 09b71d83-53ad-4b7b-ba70-b51ea90aa37e
+let
+	c1 = :skyblue2 
+	c2 = :firebrick
+	lw = 4
+	
+	scatter(Δd[node, hour_filt1], (ΔE-res_pred)[hour_filt1], alpha=scatter_alpha, label="10-20", color=c1)
+	scatter!(Δd[node, .!hour_filt1], (ΔE-res_pred)[.!hour_filt1], alpha=scatter_alpha, label="20-10", color=c2)
+	xx = LinRange(minimum(skipmissing(Δd[node, :])), maximum(skipmissing(Δd[node, :])), 10)
+	plot!(xx, mefs_g1[node]*xx, lw=4, label="MEF=$(round(mefs_g1[node]))", color=c1)
+	plot!(xx, mefs_g2[node]*xx, lw=4, label="MEF=$(round(mefs_g2[node]))", color=c2)
+	plot!(xx, true_mefs_g1[node]*xx, lw=4, label="MEF=$(round(mefs_g1[node]))", color=c1, ls=:dash)
+	plot!(xx, true_mefs_g2[node]*xx, lw=4, ls=:dash, label="MEF=$(round(mefs_g2[node]))", color=c2)
+	
+	xlabel!("Δd at node $(node)")
+	ylabel!("ΔE")
+	title!("ΔE total wrt Δd at node $(node)")
+end
+
+# ╔═╡ f5f2c2be-b9ff-4b3f-bf3e-65ece46931fa
+let
+	bins = -1000:100:3000
+	alpha=0.4
+	histogram(
+		true_mefs_g1, 
+		bins=bins, alpha=alpha, label="True")
+	histogram!(mefs_g1, bins=bins, alpha=alpha, label="Reg")
+	xlabel!("MEF")
+	ylabel!("Counts")
+	title!("Average values over Group 1")
+end
+
+# ╔═╡ efaee005-a8f5-48fd-9db6-1169ba2e1aa0
+let
+	bins = -1000:100:3000
+	alpha=0.4
+	histogram(
+		true_mefs_g2, 
+		bins=bins, alpha=alpha, label="True")
+	histogram!(mefs_g2, bins=bins, alpha=alpha, label="Reg")
+	xlabel!("MEF")
+	ylabel!("Counts")
+	title!("Average values over Group 2")
+end
+
+# ╔═╡ 0defd4c1-dbb9-4b66-bca0-3c4605c252bb
 md"""
-Rolling window in julia? 
+### Compute regression-based mefs at a given hour
 """
 
-# ╔═╡ 28664572-0078-434f-a4cb-d70eaafe8d4d
+# ╔═╡ e8c4a66c-94b7-4b0e-9b43-fcaa0f235733
+@bind hr Slider(1:24)
+
+# ╔═╡ 6b5f3833-6168-4d45-9283-0fec34404658
+hr
+
+# ╔═╡ f8ebd537-bacc-4e1a-af8f-12f1196536ff
+ΔE_hr = [ΔE[hr + k*24] for k in 0:length(results[idx])-1];
+
+# ╔═╡ 827932a6-68b6-4b37-8f02-fdfa819fee2c
+Δd_hr = hcat([Δd[:, hr + k*24] for k in 0:length(results[idx])-1]...);
+
+# ╔═╡ 1790b9e8-dc3c-4e47-8d8e-0a0cdea118fd
 begin
-lr1_group1 = linregress(xx1[Bool.(group1)], ΔE[Bool.(group1)])
-lr1_group0 = linregress(xx1[Bool.(1 .-group1)], ΔE[Bool.(1 .-group1)])
-end;
-
-# ╔═╡ 9ca0036b-e68f-40ab-abc7-32fa346c01da
-LinearRegression.slope(lr1_group1)
-
-# ╔═╡ 08c75daa-fe09-4839-9390-cd5034eb8125
-LinearRegression.slope(lr1_group0)
-
-# ╔═╡ f9153c23-f969-4854-8c92-2437efd5b8ce
-begin
-	s1 = scatter(xx1[Bool.(group1)], ΔE[Bool.(group1)])
-	scatter!(xx1[Bool.(1 .-group1)], ΔE[Bool.(1 .-group1)])
-	s1
+	scatter(Δd_hr[node, :], ΔE_hr, legend=false)
+	ylabel!("ΔE at given hour")
+	xlabel!("Δx at given hour")
 end
 
-# ╔═╡ 58af890e-c198-4766-a7e3-3024dafe3190
-p2=scatter(xx2, ΔE)
+# ╔═╡ 665867f1-3adc-4de8-8fd1-bfafa3a56ae9
+[median(mef_reg[demand_nodes][gp_id])]
 
 # ╔═╡ Cell order:
 # ╠═0ae79723-a5cf-4508-b41d-9622948185a9
@@ -719,108 +613,103 @@ p2=scatter(xx2, ΔE)
 # ╠═32e5f26a-9b2f-4fc0-a0cd-1a5f101f0db9
 # ╠═e19f3dbe-b54a-45c3-b496-cf762f821ed5
 # ╠═31aedaa9-2d5c-4ddf-acfa-8b836a252f70
+# ╠═4d52befa-c24c-4ad0-b975-376b8c8af3d2
+# ╠═92a7dddf-a46e-4d42-9ca2-4d8b2e891b50
+# ╠═a4577627-0a2b-403d-8558-4ccbf0622749
+# ╠═8876dc66-7d6d-48ac-94d5-5dd489e81b87
 # ╟─cab761be-ee1b-4002-a187-df72c29d9771
-# ╟─113b99d8-0708-4da8-a8d6-7c60734e4a31
+# ╠═113b99d8-0708-4da8-a8d6-7c60734e4a31
+# ╠═f354a0e5-5e4f-40ab-807d-f9f19e74d378
 # ╟─f13e5dea-33b9-45c0-876e-42654fe6a8c7
 # ╟─6db70f24-e8ba-461e-8d86-00e9a37b44d3
 # ╠═f9fab4fe-baec-4bfd-9d84-ef9caac85f5f
 # ╠═d7598abb-2be7-4e3b-af9e-14827ef5a3b0
 # ╠═45c73bb3-eecf-4b92-8e91-6a4c83addfdc
-# ╠═ae02b617-f2d0-4fa6-86f9-3a6e4088a803
-# ╠═6de86962-a420-4885-ae7a-18748549c4c2
-# ╠═2757231c-ef30-417a-87dd-7d155049ba47
-# ╠═37b3f4ba-9fb0-4285-aa33-f9905414c764
-# ╠═8cab03dd-f034-443f-9a60-32aa87d1fde5
-# ╠═83e2c12a-fe36-4123-baf3-0e8c1bdecead
-# ╠═704175e9-921e-42ea-877f-35ce07610b8a
-# ╠═e3288d1f-4b66-49d5-9270-57827151a361
-# ╟─b4f91614-ada2-4961-8913-96855f7ca81b
-# ╟─0f0b8da3-30b6-4166-aab8-322ee320e971
-# ╠═0f7e3ce7-9cf2-46ea-926b-43b7601246f7
-# ╠═a0591816-88a4-4144-9d43-09f1205614af
-# ╠═bfb33d19-ceca-4a3a-87d0-d75960cd4544
-# ╠═5392f525-ecb3-47c7-a32f-73a6b02967df
-# ╟─d2bacf4a-af37-4ff9-bebb-3dc3d06edd8a
-# ╠═3c9f279c-ca03-4a8d-b9bc-3ad3668b76f7
-# ╠═29d3d70d-03d2-4883-9efd-ff382afef4af
-# ╠═cfcc5416-2038-48c4-a2b0-bcd92b574441
-# ╠═161fcf67-b65b-4661-bc9e-ff714268b444
-# ╠═2c0c2056-01a0-48eb-852d-92a172703975
-# ╠═ad687e9a-9d7b-4990-9772-d9cfafe26421
-# ╠═a9362a09-277b-4e97-9e66-d6df99f18a70
-# ╠═fe91b3ba-3159-48b0-a3d5-7af7bfe6fc34
-# ╟─cbc71e2e-0bd1-441c-bf17-c60053a60795
-# ╠═7a42f00e-193c-45ea-951f-dcd4e1c1975f
-# ╠═5cb1709a-eda0-41b3-8bff-f58c19608be5
-# ╠═2d3cf797-4cc2-4aad-bc3e-94f5474e99f9
-# ╠═59316c15-a94c-4c56-a30a-0e6c23629de7
-# ╠═07268e37-5b62-4ab3-8d0d-5bab2286cdbe
-# ╟─7ffbe1bc-8cc6-4033-a70b-880209164199
-# ╠═e1a1acda-1d52-45bd-8257-8b7249318c9b
-# ╟─b53cc8dd-c36e-4cf8-9f1d-473a0e985234
-# ╟─c6f2eb39-a0e6-44bf-8649-f25ef72961a4
-# ╠═5154fdd8-a58d-4faa-aced-7212ed0dc705
-# ╟─e5e10f07-1001-4438-b32d-c1f25cce04b1
-# ╠═b90eb7df-a78c-4bc5-ae3b-41f62e38da54
-# ╠═d4d509bd-8f96-4da3-917f-a65acb569953
-# ╠═d1f26911-bd79-4ce6-b0d8-218f8a772840
-# ╠═dfc765e0-39d3-4ae4-93f0-4f0406f9f358
-# ╟─305bdb8a-e186-4c5a-b927-b7a406ac260a
-# ╟─701285fc-887d-425c-98a3-1ee09235066f
-# ╠═1d5d1c1c-050a-434e-a977-b8d2aea69b26
-# ╠═a34e32d8-3e18-4c22-87e2-032360661498
-# ╠═fa51de9f-6f7a-4173-96d4-18f5f225aa1a
-# ╟─be2f82a2-5c22-41a3-abe4-5a6f9de4e6d7
-# ╠═82ad33b1-3719-4aeb-9c82-1f8f1812ed61
-# ╠═7213814b-3dd9-4c8d-9f85-947a33d96e44
-# ╠═ff851aef-904f-444a-afb4-f7ef7d7766c4
-# ╠═d9f9dda4-b559-44a4-9677-fbe967322b2b
-# ╠═2ac72e25-e6f8-4468-be71-f64b3797a96c
-# ╠═34253cd5-3049-4651-a5f6-06807a2233bd
-# ╠═df45b862-8d94-4b71-951c-5d84a7d16af2
-# ╠═087a3ba0-14f4-4373-99f1-3dd2ccdb71b9
-# ╠═5ba56789-c1bb-4c1b-95cc-4943561434f4
-# ╠═44674366-5546-44b7-b6cc-b2476e3c8fc6
-# ╟─91b474ba-e955-416c-8bc7-aa2d9b88995f
-# ╟─e1b5c93e-9241-442b-a8ce-5c7d91809efc
-# ╠═1fba9a4a-8090-4fc5-a373-670ed04dfb4e
-# ╠═13478bcb-c4fc-4532-a1ef-4513b15e3295
-# ╠═70723775-1912-48ed-9ae5-d4663d0f81d3
-# ╠═0df59933-2c53-46ae-88fe-a7fbd1b4b339
-# ╠═50acbd4b-1a02-4c55-b605-caf07f12bd74
-# ╠═749ef6df-5909-4f40-a5ff-0ed7877de9ab
-# ╠═db737f8d-ed35-43c8-84fb-c7329763b3c1
-# ╟─5e77a674-9ece-415e-abd5-2b244e47beb9
-# ╠═3a472b5f-b6f4-462c-9e4e-513ff6b6e6c0
-# ╠═870d811d-ece6-4513-8f9a-558585d0d70a
-# ╠═18941712-b800-48c3-ad09-b16a0e5a8f9b
-# ╠═c81d94e7-0c70-44c7-8112-470fc51a0adb
-# ╠═64173d8e-b948-4061-bb55-d5d2c87e1fd2
-# ╠═21b39b31-3936-43b8-a97f-80f8ad7b1aea
-# ╠═8d7c5fd9-5325-481a-a572-ca4e8dcc8655
-# ╠═adab0eb6-8c01-446e-8d65-cb87369ab0f1
-# ╠═00c62ecd-2753-4895-ba3a-19d68561b680
-# ╠═4c800043-fbfe-4940-8f89-9dc023f87141
-# ╠═2238db2f-3860-4abb-938a-8b771b0ee6d8
-# ╠═4a1b69b6-1567-4199-9a32-b2019e88366c
-# ╠═6f68dfa5-7f43-4ed0-baf0-683b8c14cc5b
-# ╠═db354372-b117-4237-afc2-f68a98788f42
-# ╠═a61fa2b2-7304-426b-bdfe-6bb1c23f46c2
-# ╠═90aa489d-3c50-4c4a-ac19-351de901fbe4
-# ╠═28591eda-995f-4224-98b8-ca1eab27559e
-# ╠═8e1f0bef-459d-4598-a01a-e59e00f53247
-# ╠═6f2896ac-ecf6-4256-82e0-0a4070fa14af
-# ╠═982d36b3-a7b6-4066-9441-9e02596423dd
-# ╠═e834a7d2-5dd9-4995-b3c9-3c771673edaa
-# ╠═b886963f-e1a9-4782-918c-f5009e57abc5
-# ╟─bd656131-eb56-467d-8f98-5e8de88266c3
-# ╠═6377fd8f-7b2b-4720-bf3a-a542075bcedd
-# ╠═e91052d7-1ca0-4ff5-aae4-1b8ace8f93cf
-# ╠═2dd6a4cb-42ab-4c82-be5e-529c763059c2
-# ╠═4d032e76-afe0-4b6b-bed2-bf1df1362dc5
-# ╠═d1eef849-92ea-49ed-b05e-c4e055a85c2c
-# ╠═28664572-0078-434f-a4cb-d70eaafe8d4d
-# ╠═9ca0036b-e68f-40ab-abc7-32fa346c01da
-# ╠═08c75daa-fe09-4839-9390-cd5034eb8125
-# ╠═f9153c23-f969-4854-8c92-2437efd5b8ce
-# ╠═58af890e-c198-4766-a7e3-3024dafe3190
+# ╠═efc7f458-1bbd-45e9-b05a-a076eee7a90c
+# ╠═00c39925-e3a4-4d5e-9a00-e950c711648e
+# ╠═e055e21b-166b-41f6-83d7-1ebf5e2626da
+# ╠═ede8ffc2-2a2a-4a09-b702-610270f24491
+# ╠═11aef0e7-372d-4b3b-845d-e63bc620b5f9
+# ╠═f2197b5f-562a-435a-88a4-fc26415e77a9
+# ╠═6b3a9e01-e14c-488d-bde5-7eae4e8e87e0
+# ╟─ae72be0b-b54f-47bd-9888-ad297463bb38
+# ╟─24a57eb1-8761-4e03-9f36-3f5823ca703d
+# ╟─2e5e38fc-2a85-4cdb-9f30-b5100503d10c
+# ╠═083f1edc-06cf-413e-b187-df6d23b51850
+# ╠═f0999280-9383-41ba-803b-840dcca60de5
+# ╠═81898fc0-be77-4941-848e-581fb8cfb1ed
+# ╠═38c99b5d-a25a-4c0e-8908-961247d7e722
+# ╠═dfbf46a2-8a02-4c77-b757-6a7546a36f1f
+# ╟─c8c8d968-7e5b-4edf-8fec-2a7625b119a3
+# ╟─f5e407e6-fa2c-4825-a7fe-6690bf6ad06c
+# ╟─b7a82318-2999-42c0-975f-079b28104684
+# ╠═0fdee674-965a-4f9b-9f52-aff2efe935f8
+# ╟─8d206091-89b8-49c3-af53-95a262298426
+# ╟─7bbd7076-5a16-4914-8118-0d9238f75569
+# ╟─e8fee23c-dc1a-430a-b896-31f09c4c503e
+# ╟─1bed3bbb-7411-441c-8028-f4dc91b0f1aa
+# ╠═a1da5ecd-219d-4e4e-b39d-1addddc89f13
+# ╠═66caf393-88ce-4e6c-9a4a-afdfa7b24304
+# ╠═576e6a18-eb15-4578-9bda-569c1397a8d3
+# ╠═112eb399-f273-42a0-a6b6-52ce543bc696
+# ╠═9b4e015d-a0b6-4046-b9c7-9f12b93d84fa
+# ╠═98e1f152-67c7-43d2-b3b5-68bbc322478d
+# ╟─a003c654-7072-4e3f-9aa8-154c0efa565c
+# ╠═fb6a6791-c704-43f1-9784-1cd17dfa7858
+# ╠═66ecb9fd-b976-432a-9df3-7a6a8618bc2e
+# ╠═9323dbf3-6a22-476a-8186-766fe1515c18
+# ╠═2e59c950-93e7-48d4-840c-c40f7296614d
+# ╟─05305b47-b71a-4452-96ca-ef809924d5c2
+# ╠═26d698fe-c2da-4a34-b446-4dd4dfacf861
+# ╟─4afd6719-cff9-4891-87a1-82405b07c084
+# ╠═01805ad9-0d4c-4d8e-8f79-69da710a3d2f
+# ╠═cab3f6a6-f982-459f-9fa0-8cc7290cd29e
+# ╠═ded35429-73ce-461c-9144-84741cabb512
+# ╟─07c3faea-d89b-4e88-98f6-21423aa8d202
+# ╠═ec0278e1-0300-4842-80f0-857b414867a9
+# ╠═3dc3b990-1e8b-43b7-856a-17667c6be634
+# ╟─ad960911-9354-4a31-bcbc-f1f0a95482ae
+# ╠═7833642f-5b87-4d1d-b311-72901851a58f
+# ╟─dede3a80-c551-4673-97d4-66640ac0023b
+# ╠═fd198417-f955-443f-b7bd-40b5106356eb
+# ╠═e3c716f3-0460-4b6b-a49a-f783a23950b8
+# ╠═581b23b6-4850-4617-97b9-9775c2cad229
+# ╟─2e65831e-97e0-4b13-8e00-a8bc7741e026
+# ╟─9d314690-0f1d-46c8-92e8-72de962a580a
+# ╟─09b71d83-53ad-4b7b-ba70-b51ea90aa37e
+# ╠═7991857c-eef0-4536-89df-600131e188d6
+# ╠═7d4a7daf-778e-4040-997a-be1cc95c75c0
+# ╟─621c8dc3-fd4f-48da-9d49-cdad33941975
+# ╠═5b287f18-ab7a-4588-b231-b1b6f1315ddd
+# ╠═a46a11ed-7433-4b36-baca-11f899755eca
+# ╠═bef12ca3-b2f1-4a41-a343-0ac98b9155e7
+# ╟─45335ae0-b302-4dfb-966f-b6cc0adb5dc7
+# ╠═4b34e966-42b8-4d87-9e79-da678ab51b29
+# ╠═0a1f8447-6c8b-45ff-875f-74748980d5f4
+# ╟─ecec3381-2d36-4e2c-bb07-ee24681eb391
+# ╟─7af9c674-ad8b-48e7-b228-42814129ece5
+# ╟─c0869e4f-5960-40f7-8cf2-043fb7a95a84
+# ╠═4042ad0a-0fe2-4c50-a5ef-692b24c9eae3
+# ╠═265a5b81-f2a2-43d2-b1d0-007c6c39d104
+# ╟─dbbc2ca0-9121-40aa-8394-2af3b84bacc0
+# ╠═db3cf5fa-c088-40ab-bec0-0417ee4c9ba6
+# ╠═a4179927-2b3a-46bb-9ca1-327dbbc3b44c
+# ╠═39c546d6-c267-4b45-86fc-79426ae0d39e
+# ╠═624f9b72-7792-4b6f-b138-669751a749b3
+# ╠═515c9225-87b4-424e-845c-cd6da662e25a
+# ╠═8d333cbb-35ba-409e-aa0c-9791ceec722f
+# ╟─dc7ebc3f-38bb-4416-a488-7035ad34d1e8
+# ╟─6166cad7-1b60-4df2-95d3-1974d297dce0
+# ╠═a757ff7e-402d-4ba3-9ecd-f2e1cd539a6e
+# ╟─7ee50896-add5-4e32-a72c-5470ce6c7849
+# ╟─984d0af5-0afc-4146-b570-0d6a0547f3b8
+# ╟─f5f2c2be-b9ff-4b3f-bf3e-65ece46931fa
+# ╟─efaee005-a8f5-48fd-9db6-1169ba2e1aa0
+# ╟─0defd4c1-dbb9-4b66-bca0-3c4605c252bb
+# ╠═620e86a8-60ab-4aa3-b313-29ab83ef5f4e
+# ╟─e8c4a66c-94b7-4b0e-9b43-fcaa0f235733
+# ╟─6b5f3833-6168-4d45-9283-0fec34404658
+# ╠═f8ebd537-bacc-4e1a-af8f-12f1196536ff
+# ╠═827932a6-68b6-4b37-8f02-fdfa819fee2c
+# ╠═1790b9e8-dc3c-4e47-8d8e-0a0cdea118fd
+# ╠═665867f1-3adc-4de8-8fd1-bfafa3a56ae9

@@ -1,0 +1,5 @@
+RUN_ID = "jan04_static"
+START_DATETIME = "2004-01-01-00"
+TIME_HORIZON = 1
+NUM_DAYS = 31
+FLAG = ""
