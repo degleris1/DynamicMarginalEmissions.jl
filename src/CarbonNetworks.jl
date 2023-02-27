@@ -28,7 +28,6 @@ export flatten_variables_dyn, unflatten_variables_dyn
 export kkt_dyn, sensitivity_demand_dyn, kkt_dims_dyn, storage_kkt_dims
 
 export sensitivity_price, sensitivity_demand
-export loss_and_grad, stochastic_loss_and_grad
 export compute_mefs
 export plot_sensitivity_check
 export make_dynamic, generate_random_data
@@ -44,10 +43,10 @@ export INIT_COND, FINAL_COND
 include("model.jl")
 include("dyn_model.jl")
 
-include("parse_data.jl")
 include("sensitivity.jl")
 include("dyn_sensitivity.jl")
 
+include("parse_data.jl")
 include("utils.jl")
 
 ECOS_OPT = () -> ECOS.Optimizer()
