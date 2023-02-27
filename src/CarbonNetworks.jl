@@ -47,7 +47,6 @@ include("dyn_model.jl")
 include("parse_data.jl")
 include("sensitivity.jl")
 include("dyn_sensitivity.jl")
-include("descent.jl")
 
 include("utils.jl")
 
