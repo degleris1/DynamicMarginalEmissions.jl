@@ -1,4 +1,4 @@
-module CarbonNetworks
+module DynamicMarginalEmissions
 
 # Module Imports
 using CSV
