@@ -39,6 +39,8 @@ export generate_network
 
 export INIT_COND, FINAL_COND
 
+export evaluate, dispatch_and_compute_emissions_rates
+
 # Files
 include("model.jl")
 include("dyn_model.jl")
@@ -48,6 +50,7 @@ include("dyn_sensitivity.jl")
 
 include("parse_data.jl")
 include("utils.jl")
+include("simple_api.jl")
 
 ECOS_OPT = () -> ECOS.Optimizer()
 OPT = ECOS_OPT
