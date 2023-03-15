@@ -5,7 +5,7 @@ The repo implements the dynamic marginal emissions rates calculations derived in
 > **Lucas Fuentes Valenzuela, [Anthony Degleris](https://degleris1.github.io/), [Abbas El Gamal](https://isl.stanford.edu/~abbas/), [Marco Pavone](https://web.stanford.edu/~pavone/), [Ram Rajagopal](https://ramr.su.domains/)**. 
 > <br> [Dynamic locational marginal emissions via implicit differentiation](
 https://arxiv.org/abs/2302.14282). 
-> *IEEE Transactions on Power Systems*. 2023 Feb 22.
+> <br> *IEEE Transactions on Power Systems*. 2023 Feb 22.
 
 The package solves standard dynamic economic dispatch problems used to dispatch electricity systems.
 It supports a full electricity network model with linearized (DC) power flow constraints, as well as batteries and ramping constraints.
