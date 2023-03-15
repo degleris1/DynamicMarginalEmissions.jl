@@ -6,6 +6,7 @@ marginal emissions rates. Below, we refer to the following variables.
 
 - `T` : The number of time periods, same as `time_horizon`
 - `n` : The number of nodes
+- `m` : The number of transmission lines
 - `k` : The number of generators
 - `s` : The number of batteries
 
@@ -35,7 +36,7 @@ Return a `NamedTuple` with keys `(lmes, g, meta)`.
 
 - `demand_schedule::Vector{Vector}` with size `(T,)`
 
-    The entry `demand_schedule[t]` is a vector of length `n` nodal demands.
+    Each entry `demand_schedule[t]` contains the `n` nodal demands for time `t`.
 
 - `node_line_incidence_matrix::Matrix` with size `(n, m)`
 
@@ -43,55 +44,59 @@ Return a `NamedTuple` with keys `(lmes, g, meta)`.
 
 - `node_generator_incidence_matrix::Matrix` with size `(n, k)`
 
-    TODO
+    The incidence matrix mapping generators to nodes.
 
 - `node_battery_incidence_matrix::Matrix` with size `(n, s)`
 
-    TODO
+    The incidence matrix mapping batteries to nodes.
 
-- `generator_costs_quadratic`
+- `generator_costs_quadratic::Vector{Vector}` with size `(T,)`
 
-    TODO
+    Each entry `generator_costs_quadratic[t]` contains the `k` generator quadratic cost 
+    coefficients for time `t`.
 
-- `generator_costs_linear`
+- `generator_costs_linear::Vector{Vector}` with size `(T,)`
 
-    TODO
+    Each entry `generator_costs_linear[t]` contains the `k` generator linear cost 
+    coefficients for time `t`.
 
-- `generator_capacities`
+- `generator_capacities::Vector{Vector}` with size `(T,)`
 
-    TODO
+    Each entry `generator_capacities[t]` contains the `k` generator capacities
+    for time `t`.
 
-- `generator_emissions_rates`
+- `generator_emissions_rates::Vector{<:Real}` with size `(k,)`
 
+    The `k` generator emissions rates.
 
+- `generator_ramping_rates::Union{Vector{<:Real}, Nothing} = nothing` with size `(k,)` (optional)
 
-- `generator_ramping_rates`
+    The `k` generator ramping rates.
 
+- `line_susceptances::Vector{<:Real}` with size `(m,)`
 
+    The `m` line electrical susceptances (inverse of impedance).
 
-- `line_susceptances`
+- `line_capacities::Vector{Vector}` with size `(T,)`
 
+    Each entry `line_capacities[t]` contains the `m` line capacities
+    for time `t`.
 
+- `battery_capacities::Vector` with size `(s,)`
 
-- `line_capacities`
+    The maximum capacity of each battery.
 
+- `battery_max_powers::Vector` with size `(s,)`
 
-
-- `battery_capacities`
-
-
-
-- `battery_max_powers`
-
-
+    The maximum charging or discharging rate of each battery.
 
 - `battery_charge_efficiency::Real = 1.0` (optional)
 
-
+    The efficiency of battery charging.
 
 - `battery_discharge_efficiency::Real = 1.0` (optional)
 
-
+    The efficiency of battery discharging.
 
 - `solver=ECOS.Optimizer` (optional)
 
