@@ -2,8 +2,8 @@
 
 The repo implements the dynamic marginal emissions rates calculations derived in:
 
-> Lucas Fuentes Valenzuela, [Anthony Degleris](https://degleris1.github.io/), [Abbas El Gamal](https://isl.stanford.edu/~abbas/), (Marco Pavone)[https://web.stanford.edu/~pavone/], [Ram Rajagopal](https://ramr.su.domains/). 
-> [Dynamic locational marginal emissions via implicit differentiation](
+> **Lucas Fuentes Valenzuela, [Anthony Degleris](https://degleris1.github.io/), [Abbas El Gamal](https://isl.stanford.edu/~abbas/), [Marco Pavone](https://web.stanford.edu/~pavone/), [Ram Rajagopal](https://ramr.su.domains/)**. 
+> <br> [Dynamic locational marginal emissions via implicit differentiation](
 https://arxiv.org/abs/2302.14282). 
 > *IEEE Transactions on Power Systems*. 2023 Feb 22.
 
