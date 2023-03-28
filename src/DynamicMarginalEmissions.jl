@@ -12,8 +12,7 @@ using SparseArrays
 using Zygote
 
 using Base.Iterators: product
-using PowerModels: parse_file, make_basic_network, make_per_unit!,
-    calc_basic_incidence_matrix
+import PowerModels
 
 
 # Exports
