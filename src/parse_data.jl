@@ -177,7 +177,7 @@ function load_synthetic_network(case_name; line_outage=nothing)
     # Demand
     d = _make_d(load, n)
 
-    return θ, d, net
+    return θ, d, net, β
 end
 
 """
