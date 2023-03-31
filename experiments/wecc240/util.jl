@@ -317,7 +317,7 @@ function _make_static_case2018(date)
     fl[fuel .== "Steam"] .+= HEAT_RATE_COAL * FUEL_COSTS_18['C']
 
     # To get the CO2 rate, divide the cost by the fuel cost to get the heat rate
-    # Then multiple by the emissions rate
+    # Then multiply by the emissions rate
     _fuel = [get(NREL_FUEL_MAP, f, 'R') for f in fuel]
     fuel_cost = [FUEL_COSTS_18[f] for f in _fuel]
     fuel_emissions_rates = [FUEL_EMISSIONS[f] for f in _fuel]
