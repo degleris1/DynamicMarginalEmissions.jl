@@ -1,13 +1,14 @@
 using Distributions, Random
 
-function make_dynamic(net::PowerNetwork, T, P, C, dyn_gmax, η_c, η_d)
-	fqs = [net.fq for t in 1:T]
-	fls = [net.fl for t in 1:T]
-	pmaxs = [net.pmax for t in 1:T]
-	return DynamicPowerNetwork(fqs, fls, pmaxs, dyn_gmax, net.A, net.B, net.F, P, C, T; η_c=η_c, η_d=η_d)
+function make_dynamic(net::PowerNetwork, T, S, P, C, dyn_gmax, τ, η_c, η_d, ρ)
+	fqs = [net.fq for _ in 1:T]
+	fls = [net.fl for _ in 1:T]
+	pmaxs = [net.pmax for _ in 1:T]
+	return DynamicPowerNetwork(fqs, fls, pmaxs, dyn_gmax, net.A, net.B, net.F, S, P, C, T, τ, η_c, η_d, ρ)
 end
 
-make_dynamic(net::PowerNetwork, T, P, C, η) = make_dynamic(net, T, P, C, [net.gmax for _ in 1:T], η, η);
+make_dynamic(net::PowerNetwork, T, S, P, C; η=1, τ=TAU, ρ=nothing) = make_dynamic(
+    net, T, S, P, C, [net.gmax for _ in 1:T], τ, η, η, ρ);
 
 function generate_random_data(n, l, ns, T)
     Random.seed!(2)
@@ -60,13 +61,13 @@ function generate_random_data(n, l, ns, T)
         S[nodes_storage[i], i] = 1
     end
     
-    return A, B, cq_dyn, cl_dyn, d_dyn, gmax_dyn, pmax_dyn, P, C, S
+    β = rand(Exponential(10), n)
+    return A, B, cq_dyn, cl_dyn, d_dyn, gmax_dyn, pmax_dyn, P, C, S, β
 end
 
 function generate_network(n, l, T, ns; η=1.)
 
-    A, B, cq_dyn, cl_dyn, d_dyn, gmax_dyn, pmax_dyn, P, C, S = generate_random_data(n, l, ns, T)
-    β = rand(Exponential(10), n)
+    A, B, cq_dyn, cl_dyn, d_dyn, gmax_dyn, pmax_dyn, P, C, S, β = generate_random_data(n, l, ns, T)
     F = make_pfdf_matrix(A, β)
 
     net_dyn = DynamicPowerNetwork(
