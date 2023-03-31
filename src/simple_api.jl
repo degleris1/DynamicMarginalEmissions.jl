@@ -14,10 +14,15 @@ marginal emissions rates. Below, we refer to the following variables.
 
 Return a `NamedTuple` with keys `(lmes, g, meta)`.
 
-- `lmes::Matrix` with size `(n, T)`
+- `lmes::Matrix` with size `(n, T, T)`
 
-    The entry `lmes[i, t]` is the marginal emissions rate at node `i` and 
-    time `t`.
+    The entry `lmes[i, τ, t]` is the marginal emissions rate at node `i`, emissions time τ 
+    and consumption time `t`.
+
+- `total_lmes::Matrix` with size `(n, T)`
+
+    The entry `lmes[i, t]` is the total marginal emissions rate at node `i` and 
+    consumption time `t`.
 
 - `g::Matrix` with size `(n, T)`
 
@@ -154,8 +159,12 @@ function dispatch_and_compute_emissions_rates(
     # Solve problem
     solve_time = @elapsed solve!(power_problem, solver)
 
+    if ~ (power_problem.problem.status in [Convex.MOI.OPTIMAL, Convex.MOI.ALMOST_OPTIMAL])
+        @show power_problem.problem.status
+    end
+
     # Evaluate solution
-    g = CarbonNetworks.evaluate.(power_problem.g)
+    g = DynamicMarginalEmissions.evaluate.(power_problem.g)
 
     # Compute locational marginal emissions rates
     differentiation_time = @elapsed λ = compute_mefs(
@@ -180,10 +189,10 @@ function dispatch_and_compute_emissions_rates(
     end
 
     # Aggregrate LMEs to find total emissions affect
-    lmes = zeros(n, T)
+    total_lmes = zeros(n, T)
     
     for (i, t) in Iterators.product(1:n, 1:T)
-        lmes[i, t] = sum(dynamic_lmes[i, :, t])
+        total_lmes[i, t] = sum(dynamic_lmes[i, :, t])
     end
 
     # Populate metadata
@@ -195,5 +204,5 @@ function dispatch_and_compute_emissions_rates(
         :full_lmes => dynamic_lmes,
     )
 
-    return (lmes=lmes, g=g, meta=meta)
+    return (lmes=dynamic_lmes, total_lmes=total_lmes, g=g, meta=meta)
 end
