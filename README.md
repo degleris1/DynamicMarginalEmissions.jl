@@ -35,20 +35,15 @@ Finally, navigate to `DynamicMarginalEmissions.jl`, launch `julia`, and run
 
 ## Usage 
 
-### Basic
-- [ ] demo notebook showcasing one-function call to compute_mefs()
-- [ ] export notebook to html
-
-### Advanced
-- [ ] write details, and point to the proper repo
+See `notebooks/demo.jl` for the basic functionality of the repo.
 
 
 
 
 ## Reproducing paper results
 
-- [ ] notebook for wecc240
-- [ ] notebook for rodm 
+All results generated for our article are in `experiments/rodm` 
+and `experiments/rodm`.
 
 
 
@@ -73,3 +68,4 @@ If you use our work in you research, please cite the following reference.
 ## TODO
 
 - [ ] Remove unused exports
+- [ ] Add advanced functionality
