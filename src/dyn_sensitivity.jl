@@ -1,11 +1,11 @@
 # Computing sensitivities for dynamic power management problems
 
 """
-    sensitivity_demand_dyn(P::PowerManagementProblem, net::DynamicPowerNetwork, d, ∇C, t)
+    sensitivity_demand_dyn(P::PowerManagementProblem, net::DynamicPowerNetwork, d, ∇C)
 
-Compute `∇_{d_t} C( x_opt(d_t) )`, where `x_opt(d_t)` is the optimal solution (primal
+Compute `∇_{d} C( x_opt(d) )`, where `x_opt(d)` is the optimal solution (primal
 and dual variables) of the power management problem `P` with parameters 
-`(fq, fl, d, pmax, gmax, A, B)` and demand `d_t` at time `t`, and where
+`(fq, fl, d, pmax, gmax, A, B)` and demand `d`, and where
 `∇C` is the gradient `∇_x C(x)`.
 """
 function sensitivity_demand_dyn(P::PowerManagementProblem, net::DynamicPowerNetwork, d, ∇C)
@@ -86,11 +86,6 @@ end
 
 Constructs the Jacobian for a dynamic network `net`, with input variables `x` and
 demand `d_dyn`.
-
-Notes
------
-The Jacobian in this system is computed as... 
-# TODO: add
 """
 function compute_jacobian_kkt_dyn(x, net, d_dyn)
 
@@ -146,8 +141,6 @@ function compute_jacobian_kkt_dyn(x, net, d_dyn)
     g_prev = t -> (t == 1) ? zeros(l) : g[t-1]
     ρ_ = t -> (t==1) ? net.gmax[1] : net.ρ
 
-    # we do not need the below I think because of unflatten....()
-    # s_crt = t -> (t==T) ? FINAL_COND.*C : s[t]
     Ks = [
         compute_jacobian_kkt_dyn_t(
             s[t], ch[t], dis[t], 
@@ -170,6 +163,8 @@ function compute_jacobian_kkt_dyn(x, net, d_dyn)
 end
 
 """
+    _to_delete(size, ns, l)
+
 Returns the rows/columns to eliminate in the jacobian
 """
 function _to_delete(size, ns, l)
@@ -188,7 +183,10 @@ function _to_delete(size, ns, l)
 end
 
 """
-Eliminate rows and columns in a matrix
+    prune_matrix(∂K, to_delete; axis="both")
+
+Eliminate rows and columns in a matrix `∂K`, where the rows/columns
+to delte are given by `to_delete` and the axis of deletion is `axis`.
 """
 function prune_matrix(∂K, to_delete; axis="both")
     _, ncols = size(∂K)
@@ -204,11 +202,11 @@ end
 
 
 """
-    compute_jacobian_kkt_charge_discharge(dims, n)
+    compute_jacobian_kkt_charge_discharge(dims, ns, m, l, F, S)
 
 Compute the part of the Jacobian of the static problem associated with dynamic variables (primal and dual), 
-with `dims` being the dimension of the static system, `ns` the number of storage nodes, and `l` 
-the number of generators.
+with `dims` being the dimension of the static system, `ns` the number of storage nodes, `m` the number of lines, `l` 
+the number of generators, `F` the PFDF matrix and `S` and storage-to-node mapping.
 """
 function compute_jacobian_kkt_charge_discharge_ramp(dims, ns, m, l, F, S)
     dKdch = [spzeros(dims-m-1, ns); F*S; -ones(1, ns)]
@@ -225,13 +223,12 @@ end
     compute_jacobian_kkt_future_ramp(dims, ns, l)
 
 Compute the part of the Jacobian (dStatic / dRamp), where `dims` is the 
-dimension of the static system, `n` is the number of nodes, and `l` is
+dimension of the static system, `n` is the number of nodes, `ns` the number of storage nodes, and `l` is
 the number of generators.
 
 Note: this function computes it only for the future timestep. 
 The ramping constraints associated with the current timestep are accounted for 
 in `compute_jacobian_kkt_charge_discharge_ramp`.
-
 """
 function compute_jacobian_kkt_future_ramp(dims, ns, l)
     dKdλl = [I(l); spzeros(dims-l, l)]
@@ -241,11 +238,14 @@ function compute_jacobian_kkt_future_ramp(dims, ns, l)
 end
 
 """
-    compute_jacobian_kkt_dyn_t(s, ch, dis, λsl, λsu, λchl, λchu, λdisl, λdisu, net, t)
+    compute_jacobian_kkt_dyn_t(
+        s, ch, dis, 
+        λsl, λsu, λchl, λchu, λdisl, λdisu, λrampl, λrampu, 
+        gt, gt_prev, ρ,
+        net, t
+    )
 
-Compute the Jacobian for a given timestep of the storage part of the problem. 
-Input variables are the primal and dual variables, `net` is the dynamic network and 
-`t` is the timestep at which the Jacobian is to be computed.
+Compute the Jacobian for a given timestep of the storage part of the problem at time `t`.
 """
 function compute_jacobian_kkt_dyn_t(
     s, ch, dis, 
