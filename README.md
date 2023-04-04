@@ -10,8 +10,8 @@ https://arxiv.org/abs/2302.14282).
 The package solves standard dynamic economic dispatch problems used to dispatch electricity systems.
 It supports a full electricity network model with linearized (DC) power flow constraints, as well as batteries and ramping constraints.
 
-After computing the optimal dispatch, the package can compute *the derivative of total emissions with respect to changes electricity demand at a given node and time*, known as the **(dynamic) locational marginal emissions rate (LME)**.
-The LMEs are **dynamic** :zap: because they not only calculate how changes in demand will affect emissions at the current moment, but also how they will affect emissions later in the day.
+After computing the optimal dispatch, the package can compute *the derivative of total emissions with respect to changes in electricity demand at a given node and time*, known as the **(dynamic) locational marginal emissions rate (LME)**.
+The LMEs are **dynamic** :zap: because they not only calculate how changes in demand will affect emissions at the current moment, but also how they will affect emissions at other points in time.
 
 
 
@@ -43,7 +43,7 @@ See `notebooks/demo.jl` for the basic functionality of the repo.
 ## Reproducing paper results
 
 All results generated for our article are in `experiments/rodm` 
-and `experiments/rodm`.
+and `experiments/wecc240`.
 
 
 
@@ -55,7 +55,7 @@ If you use our work in you research, please cite the following reference.
 ```
 @article{valenzuela2023dynamic,
   title={Dynamic locational marginal emissions via implicit differentiation},
-  author={Valenzuela, Lucas Fuentes and Degleris, Anthony and El Gamal, Abbas and Pavone, Marco and Rajagopal, Ram},
+  author={Fuentes Valenzuela, Lucas and Degleris, Anthony and El Gamal, Abbas and Pavone, Marco and Rajagopal, Ram},
   journal={IEEE Transactions on Power Systems},
   year={2023},
   publisher={IEEE}
