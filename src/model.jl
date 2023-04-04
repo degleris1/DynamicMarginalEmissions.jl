@@ -42,14 +42,22 @@ end
 
 
 """
-    PowerManagementProblem(f, d, pmax, gmax, A; τ=1e-5)
+    PowerManagementProblem(fq, fl, d, pmax, gmax, A, B, F; τ=TAU, ch=0, dis=0, S=0, η_c=1.0, η_d=1.0)
 
-Set up a power management problem with generation costs `f`, demand `d`,
-maximum power flow `pmax`, maximum generation `gmax`, and network
-incidence matrix `A`.
-
-The parameter `τ` is a regularization weight used to make the problem
-strongly convex by adding τ ∑ᵢ pᵢ² to the objective.
+Set up a static power management problem with the following parameters: 
+- `fq`: quadratic generator costs
+- `fl`: linear generator costs
+- `d`: nodal demand
+- `pmax`: maximum power flow
+- `gmax`: generation capacities
+- `A`: network incidence matrix
+- `B`: generator-to-node matrix
+- `F`: PFDF matrix
+- `τ`: regularization weight used to make the problem strongly convex by adding τ ∑ᵢ pᵢ² to the objective
+- `ch`: additional charge over one timestep in the batteries of the network
+- `dis`: additional discharge over onetimestep in the batteries of the network
+- `S`: battery-to-node matrix
+- `η_c` and `η_d`: battery charge and discharge efficiencies
 """
 function PowerManagementProblem(fq, fl, d, pmax, gmax, A, B, F; τ=TAU, ch=0, dis=0, S=0, η_c=1.0, η_d=1.0)
     n, m = size(A)
@@ -58,7 +66,7 @@ function PowerManagementProblem(fq, fl, d, pmax, gmax, A, B, F; τ=TAU, ch=0, di
     p = Variable(m)
 
     problem = minimize(
-        (1/2)*sumsquares(dot(*)(sqrt.(fq), g))  #quadform(g, diagm(fq))  # <--- NICE PEROFRMANCE BOOST WOO
+        (1/2)*sumsquares(dot(*)(sqrt.(fq), g))
         + fl'g
         + (τ/2)*sumsquares(p)
     )
@@ -94,9 +102,6 @@ conservation constraint.
 """
 get_lmps(P::PowerManagementProblem) = -P.problem.constraints[end-1].dual[:, 1] .- P.problem.constraints[end].dual[1]
 
-
-
-
 # ===
 # KKT OPERATOR
 # ===
@@ -113,8 +118,14 @@ kkt_dims(n, m, l) = 4m + 3l + 1
 """
     kkt(x, fq, fl, d, pmax, gmax, A; τ=TAU)
 
-Compute the KKT operator applied to `x`, with parameters given by `fq`,
-`fl`, `d`, `pmax`, `gmax`, `A`, and `τ`.
+Compute the KKT operator applied to `x`, with: 
+- `fq`: quadratic generator costs
+- `fl`: linear generator costs
+- `d`: nodal demand
+- `pmax`: maximum power flow
+- `gmax`: generation capacities
+- `A`: network incidence matrix
+- `τ`: regularization weight used to make the problem strongly convex by adding τ ∑ᵢ pᵢ² to the objective
 """
 function kkt(x, fq, fl, d, pmax, gmax, A, B, F; τ=TAU, ch=0, dis=0,  S=0)
     n, m = size(A)
@@ -125,14 +136,14 @@ function kkt(x, fq, fl, d, pmax, gmax, A, B, F; τ=TAU, ch=0, dis=0,  S=0)
     # Lagragian is
     # L = J + λpl'(-p - pmax) + ... + λgu'(g - gmax) + v'(Ap - g - d) + νF'(p - F*(B*g - d))
     return [
-        Diagonal(fq)*g + fl - λgl + λgu - B'*F'*ν + νE[1]*B'*ones(n); # ∇_g L
-        ν + λpu - λpl + τ*p; # ∇_p L
-        λpl .* (-p - pmax); 
-        λpu .* (p - pmax);
-        -λgl .* g;
-        λgu .* (g - gmax);
-        p - F*(B*g - d .- S*ch .+ S*dis);
-        ones(n)' * (B*g - d .- S*ch .+ S*dis);
+        Diagonal(fq)*g + fl - λgl + λgu - B'*F'*ν + νE[1]*B'*ones(n); # stationarity: ∇_g L
+        ν + λpu - λpl + τ*p; # stationarity: ∇_p L
+        λpl .* (-p - pmax); # complementary slackness
+        λpu .* (p - pmax); # complementary slackness
+        -λgl .* g; # complementary slackness
+        λgu .* (g - gmax); # complementary slackness
+        p - F*(B*g - d .- S*ch .+ S*dis); # equality constraints
+        ones(n)' * (B*g - d .- S*ch .+ S*dis); # equality constraints
     ]
 end
 

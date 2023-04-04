@@ -1,5 +1,18 @@
 using Distributions, Random
 
+"""
+    make_dynamic(net::PowerNetwork, T, S, P, C, dyn_gmax, τ, η_c, η_d, ρ)
+
+Transforms the static PowerNetwork `net` into a DynamicPowerNetwork with
+- time horizon `T`
+- storage matrix `S`
+- battery (dis)charging rates `P`
+- battery capacities `C`
+- generator capacities `dyn_gmax`
+- regularization weight `τ`
+- charging and discharging efficiencies `η_c` and `η_d`
+- ramping rate ρ
+"""
 function make_dynamic(net::PowerNetwork, T, S, P, C, dyn_gmax, τ, η_c, η_d, ρ)
 	fqs = [net.fq for _ in 1:T]
 	fls = [net.fl for _ in 1:T]
@@ -10,6 +23,11 @@ end
 make_dynamic(net::PowerNetwork, T, S, P, C; η=1, τ=TAU, ρ=nothing) = make_dynamic(
     net, T, S, P, C, [net.gmax for _ in 1:T], τ, η, η, ρ);
 
+"""
+    generate_random_data(n, l, ns, T)
+
+Generate random network data for `n` nodes, `l` generators, `ns` storage nodes and `T` timesteps.
+"""
 function generate_random_data(n, l, ns, T)
     Random.seed!(2)
 
@@ -65,6 +83,12 @@ function generate_random_data(n, l, ns, T)
     return A, B, cq_dyn, cl_dyn, d_dyn, gmax_dyn, pmax_dyn, P, C, S, β
 end
 
+"""
+    generate_network(n, l, T, ns; η=1.)
+
+Generate random power network with `n` nodes, `l` generators, `T` timesteps and `ns` storage nodes.
+Battery charging efficiencies are given by `η`.
+"""
 function generate_network(n, l, T, ns; η=1.)
 
     A, B, cq_dyn, cl_dyn, d_dyn, gmax_dyn, pmax_dyn, P, C, S, β = generate_random_data(n, l, ns, T)
