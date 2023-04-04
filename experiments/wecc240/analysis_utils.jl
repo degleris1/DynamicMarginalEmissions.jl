@@ -95,6 +95,10 @@ function get_demand(r; n_nodes=243, n_timesteps=24)
 end
 
 """
+    get_total_emissions(r, co2_rates; n_gens=309, n_timesteps=24)
+
+Compute total emissions from simulations results `r` with generator emission co2_rates
+`co2_rates`.
 """
 function get_total_emissions(r, co2_rates; n_gens=309, n_timesteps=24)
     dates = sort(collect(keys(r)))
@@ -106,6 +110,12 @@ function get_total_emissions(r, co2_rates; n_gens=309, n_timesteps=24)
 	return vec(E)
 end
 
+"""
+    get_deviations(metric, r1, r2)
+
+Compute the difference between LMEs from two different simulations, according
+to a given `metric`.
+"""
 function get_deviations(metric, r1, r2)
     # Get all date-times in R1 and R2
     dts = intersect(keys(r1.data), keys(r2.data))
