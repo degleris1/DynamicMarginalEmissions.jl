@@ -8,24 +8,6 @@ and dual variables) of the power management problem `P` with parameters
 `(fq, fl, d, pmax, gmax, A, B)` and demand `d_t` at time `t`, and where
 `∇C` is the gradient `∇_x C(x)`.
 """
-function sensitivity_demand_dyn(P::PowerManagementProblem, net::DynamicPowerNetwork, d, ∇C, t)
-    T = net.T
-    x = flatten_variables_dyn(P)
-
-    # Get partial Jacobians of KKT operator
-    _, ∂K_xT = Zygote.forward_jacobian(x -> kkt_dyn(x, net, d), x)
-
-    # Now compute ∇C(g*(θ)) = -∂K_θ' * inv(∂K_x') * ∇C 
-    v = ∂K_xT \ ∇C
-    ∇C_θ = -∂K_θT * v
-
-    return ∇C_θ
-end
-
-"""
-    sensitivity_demand_dyn(P::PowerManagementProblem, net::DynamicPowerNetwork, d, ∇C)
-"""
-
 function sensitivity_demand_dyn(P::PowerManagementProblem, net::DynamicPowerNetwork, d, ∇C)
 
     _, _, l, ns, T = get_problem_dims(net)
@@ -57,19 +39,6 @@ function sensitivity_demand_dyn(P::PowerManagementProblem, net::DynamicPowerNetw
     end
 
     return ∇C_θ
-end
-
-
-"""
-    compute_mefs(P::PowerManagementProblem, net::DynamicPowerNetwork, d, c, t)
-
-Compute the marginal emission factors at time `t` given carbon costs `c`
-and demands `d`.
-"""
-function compute_mefs(P::PowerManagementProblem, net::DynamicPowerNetwork, d, c, t)
-    ∇C_dyn = _make_∇C(net, c)
-    
-    return sensitivity_demand_dyn(P, net, d, ∇C_dyn, t)
 end
 
 
