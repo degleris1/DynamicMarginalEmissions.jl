@@ -4,7 +4,7 @@
 # POWER MANAGEMENT PROBLEM
 # ===
 
-# TODO: incorporate as kwarg? 
+# Initial and final state of charge of batteries in the network
 INIT_COND = .5
 FINAL_COND = .5
 
@@ -63,7 +63,7 @@ end
 # Dynamic PowerManagementProblem
 # ===
 """
-    DynamicPowerManagementProblem(fq, fl, d, pmax, gmax, A, B, P, C; τ=TAU)
+    DynamicPowerManagementProblem(fq, fl, d, pmax, gmax, A, B, F, S, P, C; τ=TAU,  η_c=1.0, η_d=1.0, ρ=nothing)
 
 Define a PowerManagementProblem over `T` timesteps, where timesteps can be coupled
 via the presence of nodal storage. Arguments are arrays of dimension `T`. `fq` and `fl`
@@ -71,11 +71,11 @@ are the quadratic and linear components of the generator costs, respectively. `d
 nodal demand. `pmax`, `gmax` are the maximum transmission and generation power. 
 `A` is the incidence matrix, `B` is a generator-to-node mapping. `P` and `C` are the maximum
 charge/discharge power for batteries and the maximum SOC, respectively. `S` maps storage to associated nodes.
+`F` is the PFDF matrix.
 
 Note:
 -----
-- Nodal storage variables are constrained to start at a value given by INIT_COND. 
-- There is currently no final condition on the storage. 
+- Nodal storage variables are constrained to start/end at a value given by INIT_COND/FINAL_COND.
 """
 function DynamicPowerManagementProblem(
     fq, fl, d, pmax, gmax, A, B, F, S, P, C; 
@@ -93,6 +93,7 @@ function DynamicPowerManagementProblem(
     ch = [Variable(ns) for _ in 1:T]
     dis = [Variable(ns) for _ in 1:T]
 
+    # each timestep is a static PowerManagementProblem with batteries
     subproblems = vcat(
         [PowerManagementProblem(
             fq[t], fl[t], d[t], pmax[t], gmax[t], A, B, F; 
@@ -195,10 +196,9 @@ Compute the dimensions of the KKT operator associated with storage constraints.
 storage_kkt_dims(ns, l) = 3ns + 7ns + 2l # 3ns for stationarity, 7ns+2l for complementary slackness
 
 """
-    kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, P, C, η_c, η_d, ρ; τ=TAU)
+    kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, F, SP, C, η_c, η_d, ρ; τ=TAU)
 
-Compute the KKT operator applied to `x`, with parameters given by `fq`,
-`fl`, `d`, `pmax`, `gmax`, `A`, `B`, `P`, `C`, and `τ`.
+Compute the KKT operator to a DynamicPowerManagementProblem characterized by parameters in argument.
 """
 function kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, F, S, P, C, η_c, η_d, ρ; τ=TAU)
 
@@ -220,8 +220,6 @@ function kkt_dyn(x, fq, fl, d, pmax, gmax, A, B, F, S, P, C, η_c, η_d, ρ; τ=
         x = [g[t]; p[t]; λpl[t]; λpu[t]; λgl[t]; λgu[t]; ν[t]; νE[t]]
 
         # handle edge cases
-        # ?? TODO: figure out if there is an edge case for ch and dis? 
-        # are they actually variables in n x T or n x (T-1)
         t == 1 ? s_prev = INIT_COND.*C : s_prev = s[t-1]
         t == T ? s_crt = FINAL_COND.*C : s_crt = s[t]
         t < T ? νs_next = νs[t + 1] : νs_next = zeros(ns)
@@ -269,12 +267,13 @@ kkt_dyn(x, net::DynamicPowerNetwork, d) = kkt_dyn(
 )
 
 """
-Compute the terms in the kkt matrix that are only related to the storage
+    kkt_storage(
+        s, s_prev, ch, dis, 
+        λsu, λsl, λchu, λchl, λdisu, λdisl, λrampl, λrampu, ν, νE, νs_t, νs_next, 
+        F, S, P, C, η_c, η_d, ρ, gt, gt_prev
+    )
 
-Notes:
-------
-- Dimensions should be 10n, as there are 3 variables of size n + 7 constraints of size n
-- The variables that are not in the diagonal block for the Jacobian are νs_next and ν
+Compute the terms in the kkt matrix that are only related to the storage.
 """
 function kkt_storage(
     s, s_prev, ch, dis, 
@@ -297,6 +296,11 @@ function kkt_storage(
     ]
 end
 
+"""
+    kkt_ramp(n, m, l, λrampl_next, λrampu_next, λrampl, λrampu)
+
+Compute the terms in the KKT matrix that are only related to ramping rates.
+"""
 function kkt_ramp(n, m, l, λrampl_next, λrampu_next, λrampl, λrampu)
     # gt_prev - ρ - gt <= 0,  # λrampl
     # gt - gt_prev - ρ <= 0,  # λrampu
@@ -387,16 +391,6 @@ end
 
 Flattens the variables from a `PowerManagementProblem`, i.e.
 all variables over all timesteps are condensed into one array.
-
-Details:
---------
-The variables are laid out in the following order: 
-- First variables from the static problem, i.e.
-[g, p, λpl, λpu, λgl, λgu, ν] at timestep t. Variables 
-from susbsequent timesteps are concatenated. 
-- Then variables from the dynamic problem, i.e.
-[s, λsl, λsu, λdsu, λdsl]. Variables from susbsequent
-timesteps are concatenated.
 """
 function flatten_variables_dyn(P::PowerManagementProblem)
 
@@ -426,10 +420,10 @@ function flatten_variables_dyn(P::PowerManagementProblem)
 end
 
 """
-    unflatten_variables_dyn(x, n, m, l, T)
+    unflatten_variables_dyn(x, n, m, l, ns, T)
 
 Extract the primal and dual variables from `x`, an array containing them all. 
-`n`, `m`, `l`, `T` are the dimensions of the problem. 
+`n`, `m`, `l`, `ns`, `T` are the dimensions of the problem. 
 """
 function unflatten_variables_dyn(x, n, m, l, ns, T)
 

@@ -134,10 +134,12 @@ Load a synthetic network file. Returns a `Network` object `θ`, a demand
 vector `d`, and the original data dictionary `data`.
 """
 function load_synthetic_network(case_name; line_outage=nothing)
+    PowerModels.Memento.config!("error")
+    
     # Load network data
-    network_data = parse_file(joinpath(@__DIR__, "../data", case_name));
-    net = make_basic_network(network_data)
-    make_per_unit!(net)
+    network_data = PowerModels.parse_file(joinpath(@__DIR__, "../data", case_name));
+    net = PowerModels.make_basic_network(network_data)
+    PowerModels.make_per_unit!(net)
 
     # Parse network data
     base_mva = net["baseMVA"]
@@ -155,7 +157,7 @@ function load_synthetic_network(case_name; line_outage=nothing)
     end
 
     # Topology
-    A = SparseMatrixCSC(calc_basic_incidence_matrix(net)')
+    A = SparseMatrixCSC(PowerModels.calc_basic_incidence_matrix(net)')
     B = _make_B(gen, n, l)
     F = make_pfdf_matrix(A, β)
 
@@ -175,7 +177,7 @@ function load_synthetic_network(case_name; line_outage=nothing)
     # Demand
     d = _make_d(load, n)
 
-    return θ, d, net
+    return θ, d, net, β
 end
 
 """

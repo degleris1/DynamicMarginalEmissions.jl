@@ -1,4 +1,4 @@
-module CarbonNetworks
+module DynamicMarginalEmissions
 
 # Module Imports
 using CSV
@@ -12,8 +12,7 @@ using SparseArrays
 using Zygote
 
 using Base.Iterators: product
-using PowerModels: parse_file, make_basic_network, make_per_unit!,
-    calc_basic_incidence_matrix
+import PowerModels
 
 
 # Exports
@@ -28,7 +27,6 @@ export flatten_variables_dyn, unflatten_variables_dyn
 export kkt_dyn, sensitivity_demand_dyn, kkt_dims_dyn, storage_kkt_dims
 
 export sensitivity_price, sensitivity_demand
-export loss_and_grad, stochastic_loss_and_grad
 export compute_mefs
 export plot_sensitivity_check
 export make_dynamic, generate_random_data
@@ -40,16 +38,21 @@ export generate_network
 
 export INIT_COND, FINAL_COND
 
+export evaluate, dispatch_and_compute_emissions_rates
+export EMISSIONS_FACTORS
+
 # Files
 include("model.jl")
 include("dyn_model.jl")
 
-include("parse_data.jl")
 include("sensitivity.jl")
 include("dyn_sensitivity.jl")
-include("descent.jl")
 
+include("parse_data.jl")
 include("utils.jl")
+include("simple_api.jl")
+
+include("parameters.jl")
 
 ECOS_OPT = () -> ECOS.Optimizer()
 OPT = ECOS_OPT
