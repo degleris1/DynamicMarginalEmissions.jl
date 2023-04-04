@@ -1,6 +1,5 @@
 # Code for computing sensitivities with respect to various parameters
 
-
 """
     get_problem_dims(net::PowerNetwork)
 
@@ -30,18 +29,16 @@ function get_problem_dims(net::DynamicPowerNetwork)
 end
 
 
-
-
 # ===
 # SENSITIVITIES
 # ===
 
 """
-    sensitivity_demand(P::PowerManagementProblem, ∇C, fq, fl, d, pmax, gmax, A, B)
+    sensitivity_demand(P::PowerManagementProblem, ∇C, fq, fl, d, pmax, gmax, A, B, F)
 
 Compute `∇_d C( x_opt(d) )`, where `x_opt(d)` is the optimal solution (primal
 and dual variables) of the power management problem `P` with parameters 
-`(fq, fl, d, pmax, gmax, A, B)` and `∇C` is the gradient `∇_x C(x)`.
+`(fq, fl, d, pmax, gmax, A, B, F)` and `∇C` is the gradient `∇_x C(x)`.
 """
 function sensitivity_demand(P::PowerManagementProblem, ∇C, fq, fl, d, pmax, gmax, A, B, F)
     x = flatten_variables(P)
