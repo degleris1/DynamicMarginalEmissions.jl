@@ -18,7 +18,7 @@ The LMEs are **dynamic** :zap: because they not only calculate how changes in de
 ## Installation
 
 First install [Julia](https://julialang.org/downloads/). 
-Clone this repo by running
+Clone this repo by running the following commands:
 
 ```
 git clone https://github.com/degleris1/DynamicMarginalEmissions.jl.git
